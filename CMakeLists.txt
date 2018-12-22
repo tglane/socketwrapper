@@ -1,6 +1,13 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.5.1)
 project(socketwrapper)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 11)
 
-add_executable(socketwrapper main.cpp)
+set(SOURCES
+    main.cpp
+    BaseSocket.cpp
+    Exceptions/SocketCreationException.cpp
+    Exceptions/SocketCloseException.cpp
+)
+
+add_executable(socketwrapper ${SOURCES})
