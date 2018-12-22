@@ -7,7 +7,7 @@
 namespace socketwrapper
 {
 
-const char* SocketCloseException::what() const
+const char* SocketCloseException::what()
 {
     return "Error closing socket";
 }

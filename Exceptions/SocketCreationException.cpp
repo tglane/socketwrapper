@@ -7,7 +7,7 @@
 namespace socketwrapper
 {
 
-const char* SocketCreationException::what() const
+const char* SocketCreationException::what()
 {
     return "Error creation Socket";
 }
