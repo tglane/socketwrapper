@@ -38,6 +38,11 @@ void UDPSocket::recvfrom(void* buffer_to, size_t nbytes)
 void UDPSocket::sendto(const void* buffer_from, size_t nbytes)
 {
 
+    if((::sendto(m_sockfd, buffer_from, nbytes, 0, )) == -1)
+    {
+        //Error sending data
+    }
+
 }
 
 }
