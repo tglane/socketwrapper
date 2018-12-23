@@ -9,36 +9,8 @@ namespace socketwrapper
 
 BaseSocket::BaseSocket()
 {
-    //m_sock_addr = std::make_shared<addrinfo>(new struct addrinfo);
-    m_sock_addr = new addrinfo;
-    m_sock_addr->ai_family = AF_UNSPEC;
-    m_sock_addr->ai_socktype = 0;
 
     //Unable to create a socket now
-}
-
-BaseSocket::BaseSocket(int family, int socktype, int flags)
-{
-    //m_sock_addr = std::make_shared<addrinfo>(new struct addrinfo);
-    m_sock_addr = new addrinfo;
-    m_sock_addr->ai_family = family;
-    m_sock_addr->ai_socktype = socktype;
-    m_sock_addr->ai_flags = flags;
-
-    if(family == AF_UNSPEC)
-    {
-        //Unable to create a socket now
-        return;
-    }
-
-    m_sockfd = socket(m_sock_addr->ai_family, m_sock_addr->ai_socktype, 0);
-    if(m_sockfd == -1)
-    {
-        throw SocketCreationException();
-    }
-
-    m_created = true;
-    m_closed = false;
 }
 
 BaseSocket::~BaseSocket()
@@ -47,35 +19,23 @@ BaseSocket::~BaseSocket()
     {
         close();
     }
-    delete m_sock_addr;
 }
 
 void BaseSocket::bind(int port)
 {
     if(m_bound)
     {
-        throw "Already bound";
+        throw SocketBoundException();
     }
 
-    addrinfo* result;
-    getaddrinfo(NULL, port, &m_sock_addr, &result);
+    m_sockaddr_in->sin_port = htons((in_port_t) port);
+    m_sockaddr_in->sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if((bind(m_sockfd, )))
-}
-
-void BaseSocket::connect(std::string adress, int port)
-{
-
-}
-
-void BaseSocket::listen(int queue)
-{
-
-}
-
-std::shared_ptr<BaseSocket> BaseSocket::accept()
-{
-
+    if((::bind(m_sockfd, (sockaddr*) m_sockaddr_in.get(), sizeof(struct sockaddr_in))) < 0)
+    {
+        std::cout << "Fehler bei bind" << std::endl;
+        throw SocketBindException();
+    }
 }
 
 void BaseSocket::close()

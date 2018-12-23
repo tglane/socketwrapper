@@ -1,6 +1,9 @@
 #include <iostream>
+#include "BaseSocket.hpp"
 
-int main() {
-    std::cout << "Hello, World!" << std::endl;
-    return 0;
+int main(int argc, char** argv)
+{
+    socketwrapper::BaseSocket b(AF_INET, SOCK_STREAM);
+
+    b.bind(4711);
 }

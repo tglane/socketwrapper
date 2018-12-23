@@ -15,6 +15,8 @@
 
 #include "Exceptions/SocketCreationException.hpp"
 #include "Exceptions/SocketCloseException.hpp"
+#include "Exceptions/SocketBoundException.hpp"
+#include "Exceptions/SocketBindException.hpp"
 
 namespace socketwrapper {
 
@@ -28,8 +30,6 @@ public:
 
     BaseSocket();
 
-    BaseSocket(int family, int socktype, int flags);
-
     ~BaseSocket();
 
     //Block copying
@@ -37,53 +37,24 @@ public:
     BaseSocket& operator=(const BaseSocket& other) = delete;
 
     /**
-     *
+     * Binds the internal Socket to your local adress and the given port
      * @param port
      */
     void bind(int port);
 
     /**
-     *
-     * @param adress
-     * @param port
+     * Closes the internal socket
      */
-    void connect(std::string adress, int port);
-
-    /**
-     *
-     * @param queue
-     */
-    void listen(int queue);
-
-    /**
-     *
-     * @return
-     */
-    std::shared_ptr<BaseSocket> accept();
-
-    //send
-
-    //receive
-
     void close();
 
-private:
+protected:
 
-    /**
-     * Custom deleter for shared_ptr<addrinfo>
-     */
-    struct addrinfo_delete
-    {
-        void operator()(addrinfo* ptr) const
-        {
-            freeaddrinfo(ptr);
-        }
-    };
-
-    //std::shared_ptr<addrinfo> m_sock_addr;
-    addrinfo* m_sock_addr;
+    std::shared_ptr<sockaddr_in> m_sockaddr_in;
 
     int m_sockfd;
+
+    int m_socktype;
+    int m_family;
 
     bool m_connected = false;
     bool m_bound = false;
