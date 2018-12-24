@@ -12,6 +12,7 @@
 #include <netinet/in.h> //for struct sockaddr_in
 #include <netdb.h> //for struct addrinfo
 #include <unistd.h> //for close
+#include <arpa/inet.h>
 
 #include "Exceptions/SocketCreationException.hpp"
 #include "Exceptions/SocketCloseException.hpp"

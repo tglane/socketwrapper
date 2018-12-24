@@ -36,6 +36,8 @@ void BaseSocket::bind(int port)
         std::cout << "Fehler bei bind" << std::endl;
         throw SocketBindException();
     }
+
+    m_bound = true;
 }
 
 void BaseSocket::close()

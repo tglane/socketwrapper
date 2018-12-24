@@ -16,9 +16,9 @@ public:
 
     UDPSocket(int family);
 
-    void recvfrom(void* buffer_to, size_t nbytes);
+    void recvfrom(void* buffer_to);
 
-    void sendto(const void* buffer_from, size_t nbytes);
+    void sendto(const void* buffer_from, size_t nbytes, int port, in_addr_t addr);
 
 };
 
