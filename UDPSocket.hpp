@@ -10,11 +10,16 @@
 namespace socketwrapper
 {
 
+/**
+ * Simple udp socket class wrapping the c sockets into a c++ class
+ * Only for udp sockets
+ */
 class UDPSocket : public BaseSocket
 {
 public:
 
     UDPSocket(int family);
+
 
     void recvfrom(void* buffer_to);
 
