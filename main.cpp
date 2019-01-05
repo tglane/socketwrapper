@@ -5,54 +5,51 @@
 #include "UDPSocket.hpp"
 #include "TCPSocket.hpp"
 
+using sock_u = std::shared_ptr<socketwrapper::UDPSocket>;
+using sock_t = std::shared_ptr<socketwrapper::TCPSocket>;
+
 int main(int argc, char** argv)
 {
     if(argc == 2 && strncmp(argv[1], "ru", 2) == 0)
     {
-        socketwrapper::UDPSocket receiver(AF_INET);
-        receiver.bind(4711);
+        sock_u receiver(new socketwrapper::UDPSocket(AF_INET));
+        receiver->bind(4711);
 
         char recv[100];
-        receiver.recvfrom(recv);
+        receiver->recvfrom(recv);
         std::cout << recv << std::endl;
 
-        receiver.recvfrom(recv);
-        std::cout << recv << std::endl;
-
-        receiver.close();
+        receiver->close();
     }
 
     if(argc == 2 && strncmp(argv[1], "su", 2) == 0)
     {
-        socketwrapper::UDPSocket sender(AF_INET);
+        sock_u sender(new socketwrapper::UDPSocket(AF_INET));
 
         char s[] = {'h', 'a', 'l', 'l', 'o'};
 
-        sender.sendto(s, sizeof(s), 4711, INADDR_ANY);
+        sender->sendto(s, sizeof(s), 4711, INADDR_ANY);
 
-        sender.sendto(s, sizeof(s), 4711, INADDR_ANY);
-
-        sender.close();
+        sender->close();
     }
 
     if(argc == 2 && strncmp(argv[1], "rt", 2) == 0)
     {
-        socketwrapper::TCPSocket receiver(AF_INET);
+        socketwrapper::TCPSocket serviceSocket(AF_INET);
 
-        receiver.bind(4711);
-        std::cout << "n b" << std::endl;
-        receiver.listen();
-        std::cout << "n l" << std::endl;
-        receiver.accept();
-        std::cout << "n a" << std::endl;
+        serviceSocket.bind(4711);
+        serviceSocket.listen();
+        serviceSocket.accept();
 
-        char r[100];
-        std::cout << "moin" << std::endl;
-        receiver.read(r, sizeof(r));
+        char recv[100];
+        serviceSocket.read(recv, sizeof(recv));
+        std::cout << recv << std::endl;
 
-        std::cout << r << std::endl;
 
-        receiver.close();
+        serviceSocket.read(recv, sizeof(recv));
+        std::cout << recv << std::endl;
+
+        serviceSocket.close();
     }
 
 
@@ -64,6 +61,8 @@ int main(int argc, char** argv)
         sender.connect(4711, INADDR_ANY);
 
         char s[] = {'h', 'a', 'l', 'l', 'o'};
+        sender.write(s, sizeof(s));
+
         sender.write(s, sizeof(s));
 
         sender.close();

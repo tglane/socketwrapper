@@ -42,12 +42,13 @@ void BaseSocket::bind(int port)
 
 void BaseSocket::close()
 {
-    if(::close(m_sockfd) == -1)
+    if(!m_closed)
     {
-        throw SocketCloseException();
-    } else
-    {
-        m_closed = true;
+        if (::close(m_sockfd) == -1) {
+            throw SocketCloseException();
+        } else {
+            m_closed = true;
+        }
     }
 }
 
