@@ -9,8 +9,7 @@ namespace socketwrapper
 
 UDPSocket::UDPSocket(int family)
 {
-    m_sockaddr_in = std::shared_ptr<sockaddr_in>(new sockaddr_in);
-    m_sockaddr_in->sin_family = (sa_family_t) family;
+    m_sockaddr_in.sin_family = (sa_family_t) family;
     m_socktype = SOCK_DGRAM;
     m_family = family;
 
@@ -20,14 +19,16 @@ UDPSocket::UDPSocket(int family)
         return;
     }
 
-    m_sockfd = socket(m_sockaddr_in->sin_family, m_socktype, 0);
+    m_sockfd = socket(m_sockaddr_in.sin_family, m_socktype, 0);
     if(m_sockfd == -1)
     {
         throw SocketCreationException();
     }
-
-    m_created = true;
-    m_closed = false;
+    else
+    {
+        m_created = true;
+        m_closed = false;
+    }
 }
 
 void UDPSocket::recvfrom(void* buffer_to)

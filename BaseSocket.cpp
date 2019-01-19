@@ -28,16 +28,18 @@ void BaseSocket::bind(int port)
         throw SocketBoundException();
     }
 
-    m_sockaddr_in->sin_port = htons((in_port_t) port);
-    m_sockaddr_in->sin_addr.s_addr = htonl(INADDR_ANY);
+    m_sockaddr_in.sin_port = htons((in_port_t) port);
+    m_sockaddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if((::bind(m_sockfd, (sockaddr*) m_sockaddr_in.get(), sizeof(struct sockaddr_in))) < 0)
+    if((::bind(m_sockfd, (sockaddr*) &m_sockaddr_in, sizeof(struct sockaddr_in))) != 0)
     {
         std::cout << "Fehler bei bind" << std::endl;
         throw SocketBindException();
     }
-
-    m_bound = true;
+    else
+    {
+        m_bound = true;
+    }
 }
 
 void BaseSocket::close()

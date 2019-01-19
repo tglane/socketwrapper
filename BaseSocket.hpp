@@ -50,7 +50,7 @@ public:
 
 protected:
 
-    std::shared_ptr<sockaddr_in> m_sockaddr_in;
+    sockaddr_in m_sockaddr_in;
 
     int m_sockfd;
 

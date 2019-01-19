@@ -21,8 +21,6 @@ public:
 
     TCPSocket(int family);
 
-    TCPSocket(int socket_fd, sockaddr_in own_addr, bool connected, bool bound);
-
     /**
      * Sets the internal socket in listening mode
      * @param queuesize max number of clients waiting for establishing a connection
@@ -46,25 +44,28 @@ public:
     /**
      * Reads the content sended by a client and stores it into a buffer
      * @param buff buffer to store the given content in
-     * @param nbytes number of received bytes
      */
-    void read(void* buff, size_t nbytes);
+    void read(void* buff);
 
     /**
      * Sends the content of a buffer to connected client
      * @param buff buffer with the content to send
-     * @param nbytes number of bytes to send
      */
-    void write(const void* buff, size_t nbytes);
+    void write(const void* buff);
+
+    void printThings() {std::cout << m_accepted << m_sockfd << std::endl;}
 
 protected:
 
+    TCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound);
+
     /// Stores the address of a connected client
     /// Only set if the socket is in "server mode" and a client is connected
-    std::shared_ptr<sockaddr_in> m_client_addr;
+    sockaddr_in m_client_addr;
 
     bool m_connected = false;
     bool m_listening = false;
+    bool m_accepted = false;
 
 };
 
