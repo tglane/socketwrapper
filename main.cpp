@@ -8,6 +8,10 @@
 using sock_u = std::shared_ptr<socketwrapper::UDPSocket>;
 using sock_t = std::shared_ptr<socketwrapper::TCPSocket>;
 
+/**
+ * Mainfile to test the implementation of this socketwrapper
+ * not used by the CMakeLists.txt - it only creates a sharad library with TCP and UDP Socket
+ */
 int main(int argc, char** argv)
 {
     if(argc == 2 && strncmp(argv[1], "ru", 2) == 0)
