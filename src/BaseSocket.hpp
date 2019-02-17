@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <memory>
+#include <cstring>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h> //for struct sockaddr_in
@@ -14,10 +15,10 @@
 #include <unistd.h> //for close(), ...
 #include <arpa/inet.h> //for inet_addr()
 
-#include "Exceptions/SocketCreationException.hpp"
-#include "Exceptions/SocketCloseException.hpp"
-#include "Exceptions/SocketBoundException.hpp"
-#include "Exceptions/SocketBindException.hpp"
+#include "../Exceptions/SocketCreationException.hpp"
+#include "../Exceptions/SocketCloseException.hpp"
+#include "../Exceptions/SocketBoundException.hpp"
+#include "../Exceptions/SocketBindException.hpp"
 
 namespace socketwrapper {
 
@@ -28,7 +29,6 @@ namespace socketwrapper {
 class BaseSocket {
 
 public:
-
     BaseSocket();
 
     ~BaseSocket();
@@ -49,6 +49,8 @@ public:
     void close();
 
 protected:
+
+
 
     sockaddr_in m_sockaddr_in;
 

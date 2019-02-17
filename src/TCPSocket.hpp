@@ -19,6 +19,8 @@ class TCPSocket : public BaseSocket
 
 public:
 
+    using Ptr = std::shared_ptr<TCPSocket>;
+
     TCPSocket(int family);
 
     /**
@@ -45,13 +47,13 @@ public:
      * Reads the content sended by a client and stores it into a buffer
      * @param buff buffer to store the given content in
      */
-    void read(void* buff);
+    char* read();
 
     /**
      * Sends the content of a buffer to connected client
      * @param buff buffer with the content to send
      */
-    void write(const void* buff);
+    void write(const char* buffer);
 
     void printThings() {std::cout << m_accepted << m_sockfd << std::endl;}
 

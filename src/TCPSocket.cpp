@@ -3,6 +3,7 @@
 //
 
 #include "TCPSocket.hpp"
+#include <iostream>
 
 namespace socketwrapper
 {
@@ -25,6 +26,15 @@ TCPSocket::TCPSocket(int family)
     }
     else
     {
+        int reuse = 1;
+        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
+            perror("setsockopt(SO_REUSEADDR) failed");
+        #ifdef SO_REUSEPORT
+
+        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
+            throw "Error setsockopt";
+        }
+        #endif
         m_created = true;
         m_closed = false;
     }
@@ -87,27 +97,46 @@ std::shared_ptr<TCPSocket> TCPSocket::accept()
     return connSock;
 }
 
-void TCPSocket::read(void *buff)
+char* TCPSocket::read()
 {
-    if(m_connected || m_accepted)
-    {
-        ::read(m_sockfd, buff, sizeof(buff));
-    }
-    else
-    {
-        throw "Socket not connected or accepted - can't read";
+    if(m_connected || m_accepted) {
+        char *buffer;
+        int bytes, bufflen;
+
+        /* Read size of incoming data */
+        if((bytes = recv(m_sockfd, (char *) &bufflen, sizeof(bufflen), 0)) < 0) {
+            throw "Error sending size of incoming data";
+        }
+        bufflen = ntohl(bufflen);
+        buffer = new char[bufflen + 1];
+
+        /* Read the data */
+        if((bytes = ::read(m_sockfd, buffer, bufflen)) < 0) {
+            throw "Error transmitting data";
+        }
+        buffer[bufflen] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        return buffer;
     }
 }
 
-void TCPSocket::write(const void *buff)
+void TCPSocket::write(const char *buffer)
 {
     if(m_connected || m_accepted)
     {
-        ::write(m_sockfd, buff, sizeof(buff));
-    }
-    else
-    {
-        throw "Socket not connected or accepted - can't write";
+        int bytes;
+        int len = htonl(std::strlen(buffer));
+
+        /* Send the size of the actual data */
+        if((bytes = ::write(m_sockfd, (char*) &len, sizeof(len))) < 0)
+        {
+            throw "Error sending the datasize";
+        }
+
+        /* Send the actual data */
+        if((bytes = send(m_sockfd, buffer, std::strlen(buffer), 0)) < 0)
+        {
+            throw "Error sending the data";
+        }
     }
 }
 

@@ -1,9 +1,9 @@
 #include <iostream>
 #include <string>
 #include <string.h>
-#include "BaseSocket.hpp"
-#include "UDPSocket.hpp"
-#include "TCPSocket.hpp"
+#include "src/BaseSocket.hpp"
+#include "src/UDPSocket.hpp"
+#include "src/TCPSocket.hpp"
 
 using sock_u = std::shared_ptr<socketwrapper::UDPSocket>;
 using sock_t = std::shared_ptr<socketwrapper::TCPSocket>;
@@ -22,6 +22,10 @@ int main(int argc, char** argv)
         char recv[100];
         receiver->recvfrom(recv);
         std::cout << recv << std::endl;
+        receiver->recvfrom(recv);
+        std::cout << recv << std::endl;
+        receiver->recvfrom(recv);
+        std::cout << recv << std::endl;
 
         receiver->close();
     }
@@ -30,9 +34,13 @@ int main(int argc, char** argv)
     {
         sock_u sender(new socketwrapper::UDPSocket(AF_INET));
 
-        char s[] = {'h', 'a', 'l', 'l', 'o'};
+        //char s[] = {'h', 'a', 'l', 'l', 'o'};
+        //char s[] = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Bye-bye baby bye-bye</title><body><h1>Goodbye, world!</h1></body></html>\r\n";
+        char s[] = "HAllo wie geht es dir du arschgeige?";
 
-        sender->sendto(s, sizeof(s), 4711, INADDR_ANY);
+        sender->sendto(s, 4711, INADDR_ANY);
+        sender->sendto(s, 4711, INADDR_ANY);
+        sender->sendto(s, 4711, INADDR_ANY);
 
         sender->close();
     }
@@ -42,11 +50,12 @@ int main(int argc, char** argv)
         socketwrapper::TCPSocket socket(AF_INET);
         socket.bind(4711);
         socket.listen(5);
-        sock_t conn = socket.accept();
+        socketwrapper::TCPSocket::Ptr conn = socket.accept();
 
-        char buff[100];
-        conn->read(&buff);
-        std::cout << buff << std::endl;
+        char* buff = conn->read();
+        std::string s(buff);
+        std::cout << s << std::endl;
+        conn->write("ok");
     }
 
 
@@ -55,8 +64,12 @@ int main(int argc, char** argv)
     {
         socketwrapper::TCPSocket socket(AF_INET);
         socket.connect(4711, INADDR_ANY);
-        char buff[] = {'h', 'a', 'l', 'l', 'o'};
-        socket.write(&buff);
+        char buff[] = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Bye-bye baby bye-bye</title><body><h1>Goodbye, world!</h1></body></html>\r\n";
+        socket.write(buff);
+
+	    char* buffer = socket.read();
+        std::string s(buffer);
+        std::cout << s << std::endl;
     }
 
 }
