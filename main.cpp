@@ -19,13 +19,9 @@ int main(int argc, char** argv)
         sock_u receiver(new socketwrapper::UDPSocket(AF_INET));
         receiver->bind(4711);
 
-        char recv[100];
-        receiver->recvfrom(recv);
-        std::cout << recv << std::endl;
-        receiver->recvfrom(recv);
-        std::cout << recv << std::endl;
-        receiver->recvfrom(recv);
-        std::cout << recv << std::endl;
+        char* recv = receiver->recvfrom();
+        std::string s(recv);
+        std::cout << s << std::endl;
 
         receiver->close();
     }
@@ -56,6 +52,8 @@ int main(int argc, char** argv)
         std::string s(buff);
         std::cout << s << std::endl;
         conn->write("ok");
+        conn->close();
+        socket.close();
     }
 
 
@@ -70,6 +68,7 @@ int main(int argc, char** argv)
 	    char* buffer = socket.read();
         std::string s(buffer);
         std::cout << s << std::endl;
+        socket.close();
     }
 
 }

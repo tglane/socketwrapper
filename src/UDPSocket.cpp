@@ -42,6 +42,7 @@ UDPSocket::UDPSocket(int family)
 
 char* UDPSocket::recvfrom()
 {
+    char* buffer_to;
     if(m_created && m_bound)
     {
         struct sockaddr_in from;
@@ -54,6 +55,7 @@ char* UDPSocket::recvfrom()
             throw "Error receiving data";
         }
     }
+    return buffer_to;
 }
 
 void UDPSocket::sendto(const char* buffer_from, int port, in_addr_t addr)
