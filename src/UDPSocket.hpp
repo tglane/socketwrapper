@@ -30,7 +30,7 @@ public:
      * Reads the content sended by a client using the underlying socket
      * @param buffer_to write the received data
      */
-    char* recvfrom();
+    char* recvfrom(int bufflen);
 
     /**
      * Sends the data from a buffer a client using the underlying socket

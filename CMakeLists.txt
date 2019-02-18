@@ -21,7 +21,7 @@ set(LIBRARY_HEADERS
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES_LIBRARY})
 
-install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
+#[[install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
 
 set(SOURCES_TEST
 	main.cpp
@@ -34,4 +34,4 @@ set(SOURCES_TEST
 	Exceptions/SocketBindException.cpp
 	)
 
-add_executable(socketwrapper_test ${SOURCES_TEST})
+add_executable(socketwrapper_test ${SOURCES_TEST})]]

@@ -27,11 +27,11 @@ UDPSocket::UDPSocket(int family)
     else
     {
         int reuse = 1;
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
             perror("setsockopt(SO_REUSEADDR) failed");
         #ifdef SO_REUSEPORT
 
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
             throw "Error setsockopt";
         }
         #endif
@@ -40,21 +40,25 @@ UDPSocket::UDPSocket(int family)
     }
 }
 
-char* UDPSocket::recvfrom()
+char* UDPSocket::recvfrom(int bufflen)
 {
     char* buffer_to;
+    int bytes;
+
+    buffer_to = new char[bufflen + 1];
     if(m_created && m_bound)
     {
         struct sockaddr_in from;
         socklen_t flen = sizeof(from);
 
-        if((::recvfrom(m_sockfd, buffer_to, sizeof(buffer_to), 0, (struct sockaddr*) &from, &flen))  < 0)
+        if((bytes = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen))  < 0)
         {
             //Error receivin data
             std::cout << "Error receiving data" << std::endl;
             throw "Error receiving data";
         }
     }
+    buffer_to[bufflen] = '\0';
     return buffer_to;
 }
 
@@ -66,7 +70,7 @@ void UDPSocket::sendto(const char* buffer_from, int port, in_addr_t addr)
         dest.sin_port = htons((in_port_t) port);
         dest.sin_addr.s_addr = addr;
 
-        if ((::sendto(m_sockfd, buffer_from, sizeof(buffer_from), 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
+        if ((::sendto(m_sockfd, buffer_from, std::strlen(buffer_from), 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
             //Error sending data
             std::cout << "Error sending data" << std::endl;
             throw "Error sending data";

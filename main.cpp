@@ -19,7 +19,7 @@ int main(int argc, char** argv)
         sock_u receiver(new socketwrapper::UDPSocket(AF_INET));
         receiver->bind(4711);
 
-        char* recv = receiver->recvfrom();
+        char* recv = receiver->recvfrom(1024);
         std::string s(recv);
         std::cout << s << std::endl;
 
@@ -31,13 +31,10 @@ int main(int argc, char** argv)
         sock_u sender(new socketwrapper::UDPSocket(AF_INET));
 
         //char s[] = {'h', 'a', 'l', 'l', 'o'};
-        //char s[] = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Bye-bye baby bye-bye</title><body><h1>Goodbye, world!</h1></body></html>\r\n";
-        char s[] = "HAllo wie geht es dir du arschgeige?";
+        char s[] = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<!DOCTYPE html><html><head><title>Bye-bye baby bye-bye</title><body><h1>Goodbye, world!</h1></body></html>\r\n";
+        //char s[] = "HAllo wie geht es dir du arschgeige?";
 
         sender->sendto(s, 4711, INADDR_ANY);
-        sender->sendto(s, 4711, INADDR_ANY);
-        sender->sendto(s, 4711, INADDR_ANY);
-
         sender->close();
     }
 
