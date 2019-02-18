@@ -2,7 +2,7 @@
 // Created by timog on 22.12.18.
 //
 
-#include "SocketCloseException.hpp"
+#include "../include/SocketCloseException.hpp"
 
 namespace socketwrapper
 {

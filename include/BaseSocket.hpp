@@ -15,10 +15,10 @@
 #include <unistd.h> //for close(), ...
 #include <arpa/inet.h> //for inet_addr()
 
-#include "../Exceptions/SocketCreationException.hpp"
-#include "../Exceptions/SocketCloseException.hpp"
-#include "../Exceptions/SocketBoundException.hpp"
-#include "../Exceptions/SocketBindException.hpp"
+#include "SocketCreationException.hpp"
+#include "SocketCloseException.hpp"
+#include "SocketBoundException.hpp"
+#include "SocketBindException.hpp"
 
 namespace socketwrapper {
 

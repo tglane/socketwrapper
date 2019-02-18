@@ -9,29 +9,17 @@ set(SOURCES_LIBRARY
         src/TCPSocket.cpp
         Exceptions/SocketCreationException.cpp
         Exceptions/SocketCloseException.cpp
-        Exceptions/SocketBoundException.cpp
+        Exceptions/SocketBoundException.cppd
         Exceptions/SocketBindException.cpp
         )
 
-set(LIBRARY_HEADERS
-        src/BaseSocket.hpp
-        src/UDPSocket.hpp
-        src/TCPSocket.hpp
-        )
+file(GLOB SOURCES src/*.cpp Exceptions/*.cpp)
 
-add_library(${PROJECT_NAME} STATIC ${SOURCES_LIBRARY})
+include_directories(include)
 
-#[[install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
-set(SOURCES_TEST
-	main.cpp
-	src/BaseSocket.cpp
-	src/UDPSocket.cpp
-	src/TCPSocket.cpp
-	Exceptions/SocketCreationException.cpp
-	Exceptions/SocketCloseException.cpp
-	Exceptions/SocketBoundException.cpp
-	Exceptions/SocketBindException.cpp
-	)
+install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
 
-add_executable(socketwrapper_test ${SOURCES_TEST})]]
+file(GLOB HEADERS include/*.hpp)
+install(FILES ${HEADERS} DESTINATION include/${PROJECT_NAME})

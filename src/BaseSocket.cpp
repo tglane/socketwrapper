@@ -2,7 +2,7 @@
 // Created by timog on 22.12.18.
 //
 
-#include "BaseSocket.hpp"
+#include "../include/BaseSocket.hpp"
 
 namespace socketwrapper
 {

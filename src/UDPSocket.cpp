@@ -2,7 +2,7 @@
 // Created by timog on 23.12.18.
 //
 
-#include "UDPSocket.hpp"
+#include "../include/UDPSocket.hpp"
 
 namespace socketwrapper
 {

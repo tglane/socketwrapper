@@ -1,9 +1,9 @@
 #include <iostream>
 #include <string>
 #include <string.h>
-#include "src/BaseSocket.hpp"
-#include "src/UDPSocket.hpp"
-#include "src/TCPSocket.hpp"
+#include "include/BaseSocket.hpp"
+#include "include/UDPSocket.hpp"
+#include "include/TCPSocket.hpp"
 
 using sock_u = std::shared_ptr<socketwrapper::UDPSocket>;
 using sock_t = std::shared_ptr<socketwrapper::TCPSocket>;
