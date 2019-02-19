@@ -45,15 +45,31 @@ public:
 
     /**
      * Reads the content sended by a client and stores it into a buffer
+     * --- can read all sizes but uses two read operations
+     * @brief reads the size of the data in a first read op and reads the actual data in a second op
      * @param buff buffer to store the given content in
      */
     char* read();
 
     /**
      * Sends the content of a buffer to connected client
+     * --- can send all sizes but uses two send operations
+     * @brief writes the size of the transmitting data in a first op and writes the actual data in a second op
      * @param buff buffer with the content to send
      */
     void write(const char* buffer);
+
+    /**
+     * @brief reads data up to 1024 bytes in one operation
+     * @return buffer to store the transmitted information
+     */
+    char* readOnce();
+
+    /**
+     * @brief transmits up to 1024 bytes stored in a given buffer array
+     * @param buffer with the data to transmitt
+     */
+    void writeOnce(const char* buffer);
 
     void printThings() {std::cout << m_accepted << m_sockfd << std::endl;}
 

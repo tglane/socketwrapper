@@ -140,4 +140,36 @@ void TCPSocket::write(const char *buffer)
     }
 }
 
+char* TCPSocket::readOnce()
+{
+    if(m_connected || m_accepted) {
+        char *buffer;
+        int bytes, bufflen;
+        bufflen = 1024;
+        buffer = new char[bufflen + 1];
+
+        /* Read the data */
+        if((bytes = ::read(m_sockfd, buffer, bufflen)) < 0) {
+            throw "Error transmitting data";
+        }
+        buffer[bufflen] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        return buffer;
+    }
+}
+
+void TCPSocket::writeOnce(const char *buffer)
+{
+    if(m_connected || m_accepted)
+    {
+        int bytes;
+        int len = htonl(std::strlen(buffer));
+
+        /* Send the actual data */
+        if((bytes = send(m_sockfd, buffer, std::strlen(buffer), 0)) < 0)
+        {
+            throw "Error sending the data";
+        }
+    }
+}
+
 }
