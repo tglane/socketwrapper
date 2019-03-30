@@ -97,79 +97,55 @@ std::shared_ptr<TCPSocket> TCPSocket::accept()
     return connSock;
 }
 
-char* TCPSocket::read()
+char* TCPSocket::read(unsigned int size)
 {
+    char *buffer;
+    buffer = new char[size + 1];
     if(m_connected || m_accepted) {
-        char *buffer;
-        int bytes, bufflen;
-
-        /* Read size of incoming data */
-        if((bytes = recv(m_sockfd, (char *) &bufflen, sizeof(bufflen), 0)) < 0) {
-            throw "Error sending size of incoming data";
-        }
-        bufflen = ntohl(bufflen);
-        buffer = new char[bufflen + 1];
-
         /* Read the data */
-        if((bytes = ::read(m_sockfd, buffer, bufflen)) < 0) {
+        if(::read(m_sockfd, buffer, size) < 0)
+        {
             throw "Error transmitting data";
         }
-        buffer[bufflen] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
-        return buffer;
+
+        buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
     }
+    return buffer;
 }
 
 void TCPSocket::write(const char *buffer)
 {
     if(m_connected || m_accepted)
     {
-        int bytes;
-        int len = htonl(std::strlen(buffer));
-
-        /* Send the size of the actual data */
-        if((bytes = ::write(m_sockfd, (char*) &len, sizeof(len))) < 0)
-        {
-            throw "Error sending the datasize";
-        }
-
         /* Send the actual data */
-        if((bytes = send(m_sockfd, buffer, std::strlen(buffer), 0)) < 0)
+        if(send(m_sockfd, buffer, std::strlen(buffer), 0) < 0)
         {
             throw "Error sending the data";
         }
     }
 }
 
-char* TCPSocket::readOnce()
+char* TCPSocket::readAll()
 {
-    if(m_connected || m_accepted) {
-        char *buffer;
-        int bytes, bufflen;
-        bufflen = 1024;
-        buffer = new char[bufflen + 1];
-
-        /* Read the data */
-        if((bytes = ::read(m_sockfd, buffer, bufflen)) < 0) {
-            throw "Error transmitting data";
-        }
-        buffer[bufflen] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
-        return buffer;
-    }
-}
-
-void TCPSocket::writeOnce(const char *buffer)
-{
+    unsigned int available = bytes_available();
+    char* buffer;
+    buffer = new char[available + 1];
     if(m_connected || m_accepted)
     {
-        int bytes;
-        int len = htonl(std::strlen(buffer));
-
-        /* Send the actual data */
-        if((bytes = send(m_sockfd, buffer, std::strlen(buffer), 0)) < 0)
+        if(::read(m_sockfd, buffer, available) < 0)
         {
-            throw "Error sending the data";
+            throw "Error reading data";
         }
+        buffer[available] = '\0'; //Null-terminating the string
     }
+    return buffer;
+}
+
+unsigned int TCPSocket::bytes_available()
+{
+    unsigned int bytes;
+    ioctl(m_sockfd, FIONREAD, &bytes);
+    return bytes;
 }
 
 }

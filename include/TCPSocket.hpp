@@ -5,6 +5,8 @@
 #ifndef SOCKETWRAPPER_TCPSOCKET_HPP
 #define SOCKETWRAPPER_TCPSOCKET_HPP
 
+#include <sys/ioctl.h>
+
 #include "BaseSocket.hpp"
 
 namespace socketwrapper
@@ -49,7 +51,7 @@ public:
      * @brief reads the size of the data in a first read op and reads the actual data in a second op
      * @param buff buffer to store the given content in
      */
-    char* read();
+    char* read(unsigned int size);
 
     /**
      * Sends the content of a buffer to connected client
@@ -59,26 +61,18 @@ public:
      */
     void write(const char* buffer);
 
-    /**
-     * @brief reads data up to 1024 bytes in one operation
-     * @return buffer to store the transmitted information
-     */
-    char* readOnce();
+    char* readAll();
 
-    /**
-     * @brief transmits up to 1024 bytes stored in a given buffer array
-     * @param buffer with the data to transmitt
-     */
-    void writeOnce(const char* buffer);
-
-    void printThings() {std::cout << m_accepted << m_sockfd << std::endl;}
+    unsigned int bytes_available();
 
 protected:
 
     TCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound);
 
-    /// Stores the address of a connected client
-    /// Only set if the socket is in "server mode" and a client is connected
+    /**
+     * Stores the address of a connected client
+     * Only set if the socket is in "server mode" and a client is connected
+     */
     sockaddr_in m_client_addr;
 
     bool m_connected = false;
