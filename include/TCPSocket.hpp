@@ -63,7 +63,7 @@ public:
 
     char* readAll();
 
-    unsigned int bytes_available();
+    int bytes_available();
 
 protected:
 

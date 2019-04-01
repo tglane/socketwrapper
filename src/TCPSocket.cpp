@@ -127,8 +127,8 @@ void TCPSocket::write(const char *buffer)
 
 char* TCPSocket::readAll()
 {
-    unsigned int available = bytes_available();
     char* buffer;
+    int available = bytes_available();
     buffer = new char[available + 1];
     if(m_connected || m_accepted)
     {
@@ -141,9 +141,9 @@ char* TCPSocket::readAll()
     return buffer;
 }
 
-unsigned int TCPSocket::bytes_available()
+int TCPSocket::bytes_available()
 {
-    unsigned int bytes;
+    int bytes;
     ioctl(m_sockfd, FIONREAD, &bytes);
     return bytes;
 }
