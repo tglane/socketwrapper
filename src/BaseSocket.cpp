@@ -21,7 +21,7 @@ BaseSocket::~BaseSocket()
     }
 }
 
-void BaseSocket::bind(int port)
+void BaseSocket::bind(string address, int port)
 {
     if(m_bound)
     {
@@ -29,7 +29,7 @@ void BaseSocket::bind(int port)
     }
 
     m_sockaddr_in.sin_port = htons((in_port_t) port);
-    m_sockaddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+    m_sockaddr_in.sin_addr.s_addr = htonl(inet_addr(address.c_str()));
 
     if((::bind(m_sockfd, (sockaddr*) &m_sockaddr_in, sizeof(struct sockaddr_in))) != 0)
     {

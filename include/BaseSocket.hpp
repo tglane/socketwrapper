@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <cstring>
+#include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h> //for struct sockaddr_in
@@ -19,6 +20,8 @@
 #include "SocketCloseException.hpp"
 #include "SocketBoundException.hpp"
 #include "SocketBindException.hpp"
+
+using std::string;
 
 namespace socketwrapper {
 
@@ -41,7 +44,7 @@ public:
      * Binds the internal Socket to your local adress and the given port
      * @param port to bind the socket on this port of the host machine
      */
-    void bind(int port);
+    void bind(string address, int port);
 
     /**
      * Closes the internal socket m_sockfd
