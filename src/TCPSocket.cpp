@@ -32,7 +32,7 @@ TCPSocket::TCPSocket(int family)
         #ifdef SO_REUSEPORT
 
         if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
-            throw "Error setsockopt";
+            throw SetSockOptException();
         }
         #endif
         m_created = true;
@@ -57,7 +57,7 @@ void TCPSocket::listen(int queuesize)
     if((::listen(m_sockfd, queuesize)) != 0)
     {
         std::cout << "Error setting socket in listening mode" << std::endl;
-        throw "Error setting socket in listening mode";
+        throw SocketListenException();
     }
     else
     {
@@ -74,8 +74,7 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
 
     if((::connect(m_sockfd, (sockaddr*) &server, sizeof(server))) != 0)
     {
-        std::cout << "Error connecting" << std::endl;
-        throw "Error connecting";
+        throw SocketConnectingException();
     }
     else
     {
@@ -89,8 +88,7 @@ std::shared_ptr<TCPSocket> TCPSocket::accept()
     int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
     if(conn_fd < 0)
     {
-        std::cout << "Error accepting connection";
-        throw "Error accepting connection";
+        throw SocketAcceptingException();
     }
 
     std::shared_ptr<TCPSocket> connSock(new TCPSocket(conn_fd, m_sockaddr_in, true, false));
@@ -105,7 +103,7 @@ char* TCPSocket::read(unsigned int size)
         /* Read the data */
         if(::read(m_sockfd, buffer, size) < 0)
         {
-            throw "Error transmitting data";
+            throw SocketReadException();
         }
 
         buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
@@ -120,7 +118,7 @@ void TCPSocket::write(const char *buffer)
         /* Send the actual data */
         if(send(m_sockfd, buffer, std::strlen(buffer), 0) < 0)
         {
-            throw "Error sending the data";
+            throw SocketWriteException();
         }
     }
 }
@@ -134,7 +132,7 @@ char* TCPSocket::readAll()
     {
         if(::read(m_sockfd, buffer, available) < 0)
         {
-            throw "Error reading data";
+            throw SocketReadException();
         }
         buffer[available] = '\0'; //Null-terminating the string
     }

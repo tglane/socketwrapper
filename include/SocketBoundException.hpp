@@ -13,7 +13,7 @@ class SocketBoundException : BaseException {
 
 public:
 
-    const char *what();
+    const char *what() { return "Socket already bound"; }
 
 };
 

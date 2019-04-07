@@ -32,7 +32,7 @@ UDPSocket::UDPSocket(int family)
         #ifdef SO_REUSEPORT
 
         if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
-            throw "Error setsockopt";
+            throw SetSockOptException();
         }
         #endif
         m_created = true;
@@ -53,9 +53,7 @@ char* UDPSocket::recvfrom(int bufflen)
 
         if((bytes = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen))  < 0)
         {
-            //Error receivin data
-            std::cout << "Error receiving data" << std::endl;
-            throw "Error receiving data";
+            throw SocketReadException();
         }
     }
     buffer_to[bufflen] = '\0';
@@ -72,8 +70,7 @@ void UDPSocket::sendto(const char* buffer_from, int port, in_addr_t addr)
 
         if ((::sendto(m_sockfd, buffer_from, std::strlen(buffer_from), 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
             //Error sending data
-            std::cout << "Error sending data" << std::endl;
-            throw "Error sending data";
+            throw SocketWriteException();
         }
     }
 }

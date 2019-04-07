@@ -20,6 +20,12 @@
 #include "SocketCloseException.hpp"
 #include "SocketBoundException.hpp"
 #include "SocketBindException.hpp"
+#include "SocketListenException.hpp"
+#include "SocketConnectingException.hpp"
+#include "SocketAcceptingException.hpp"
+#include "SocketReadException.hpp"
+#include "SocketWriteException.hpp"
+#include "SetSockOptException.hpp"
 
 using std::string;
 
@@ -52,8 +58,6 @@ public:
     void close();
 
 protected:
-
-
 
     sockaddr_in m_sockaddr_in;
 

@@ -7,13 +7,9 @@ set(SOURCES_LIBRARY
         src/BaseSocket.cpp
         src/UDPSocket.cpp
         src/TCPSocket.cpp
-        Exceptions/SocketCreationException.cpp
-        Exceptions/SocketCloseException.cpp
-        Exceptions/SocketBoundException.cppd
-        Exceptions/SocketBindException.cpp
         )
 
-file(GLOB SOURCES src/*.cpp Exceptions/*.cpp)
+file(GLOB SOURCES src/*.cpp)
 
 include_directories(include)
 

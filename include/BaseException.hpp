@@ -5,12 +5,14 @@
 #ifndef SOCKETWRAPPER_BASEEXCEPTION_HPP
 #define SOCKETWRAPPER_BASEEXCEPTION_HPP
 
+#include <exception>
+
 namespace socketwrapper {
 
 /**
  * Abstract base exception class
  */
-class BaseException {
+class BaseException : public std::exception {
 
 public:
 

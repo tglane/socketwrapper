@@ -9,10 +9,11 @@
 
 namespace socketwrapper {
 
-class SocketBindException {
+class SocketBindException : public BaseException {
 
 public:
-    const char* what();
+
+    const char* what() override { return "Error binding socket"; }
 
 };
 

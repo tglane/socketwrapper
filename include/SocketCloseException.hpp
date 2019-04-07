@@ -18,7 +18,7 @@ class SocketCloseException : BaseException
 
 public:
 
-    const char* what();
+    const char* what() { return "Error closing socket"; }
 
 };
 
