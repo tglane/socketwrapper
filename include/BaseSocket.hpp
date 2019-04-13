@@ -40,7 +40,7 @@ class BaseSocket {
 public:
     BaseSocket();
 
-    ~BaseSocket();
+    virtual ~BaseSocket();
 
     //Block copying
     BaseSocket(const BaseSocket& other) = delete;

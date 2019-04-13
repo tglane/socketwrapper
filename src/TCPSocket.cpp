@@ -3,7 +3,6 @@
 //
 
 #include "../include/TCPSocket.hpp"
-#include <iostream>
 
 namespace socketwrapper
 {
@@ -29,12 +28,12 @@ TCPSocket::TCPSocket(int family)
         int reuse = 1;
         if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
             perror("setsockopt(SO_REUSEADDR) failed");
-        #ifdef SO_REUSEPORT
+#ifdef SO_REUSEPORT
 
         if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
             throw SetSockOptException();
         }
-        #endif
+#endif
         m_created = true;
         m_closed = false;
     }

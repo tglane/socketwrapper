@@ -7,13 +7,22 @@ set(SOURCES_LIBRARY
         src/BaseSocket.cpp
         src/UDPSocket.cpp
         src/TCPSocket.cpp
+        src/SSLTCPSocket.cpp
         )
+
+find_package(OpenSSL REQUIRED)
+if(OPENSSL_FOUND)
+    link_directories(${OPENSSL_LIBRARIES})
+    include_directories(${OPENSSL_INCLUDE_DIR})
+endif(OPENSSL_FOUND)
 
 file(GLOB SOURCES src/*.cpp)
 
 include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
+
+target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
 

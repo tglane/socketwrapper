@@ -23,7 +23,7 @@ public:
 
     using Ptr = std::shared_ptr<TCPSocket>;
 
-    TCPSocket(int family);
+    explicit TCPSocket(int family);
 
     /**
      * Sets the internal socket in listening mode
@@ -36,7 +36,7 @@ public:
      * @param port_to port of the server to connect to
      * @param addr_to ip address of the server to connect to
      */
-    void connect(int port_to, in_addr_t addr_to);
+    virtual void connect(int port_to, in_addr_t addr_to);
 
     /**
      * Waits for a client to connect to the socket
@@ -51,7 +51,7 @@ public:
      * @brief reads the size of the data in a first read op and reads the actual data in a second op
      * @param buff buffer to store the given content in
      */
-    char* read(unsigned int size);
+    virtual char* read(unsigned int size);
 
     /**
      * Sends the content of a buffer to connected client
@@ -59,10 +59,18 @@ public:
      * @brief writes the size of the transmitting data in a first op and writes the actual data in a second op
      * @param buff buffer with the content to send
      */
-    void write(const char* buffer);
+    virtual void write(const char* buffer);
 
-    char* readAll();
+    /**
+     * @brief Reads all bytes available at the socket
+     * @return read bytes
+     */
+    virtual char* readAll();
 
+    /**
+     * @brief Returns the number of bytes available to read
+     * @return number of bytes
+     */
     int bytes_available();
 
 protected:
