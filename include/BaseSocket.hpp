@@ -57,6 +57,8 @@ public:
      */
     void close();
 
+    int getSocketDescriptor()  { return m_sockfd; }
+
 protected:
 
     sockaddr_in m_sockaddr_in;

@@ -42,6 +42,7 @@ SSLTCPSocket::SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, b
     {
         /* Create and configure ssl context ctx */
         m_context = SSL_CTX_new(TLS_server_method());
+        SSL_CTX_set_ecdh_auto(m_context, 1);
         SSL_CTX_use_certificate_file(m_context, cert, SSL_FILETYPE_PEM);
         SSL_CTX_use_PrivateKey_file(m_context, key, SSL_FILETYPE_PEM);
 
@@ -86,6 +87,7 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
     {
         /* Create and configure ssl context ctx */
         m_context = SSL_CTX_new(TLS_client_method());
+        SSL_CTX_set_ecdh_auto(m_context, 1);
         SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM);
         SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM);
 
@@ -169,6 +171,8 @@ char* SSLTCPSocket::readAll()
 
     if(m_connected || m_accepted)
     {
+        SSL_set_read_ahead(m_ssl, 1);
+
         bool read_blocked = false;
         do {
             int ret = SSL_read(m_ssl, buffer, strlen(buffer));
@@ -195,6 +199,8 @@ char* SSLTCPSocket::readAll()
 
         buffer[available] = '\0'; //Null-terminating the string
     }
+    SSL_set_read_ahead(m_ssl, 1);
+
     return buffer;
 }
 
