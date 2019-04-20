@@ -165,6 +165,7 @@ void SSLTCPSocket::write(const char *buffer)
 
 char* SSLTCPSocket::readAll()
 {
+    string buffer_string;
     char* buffer;
     int available = bytes_available();
     buffer = new char[available + 1];
@@ -180,7 +181,7 @@ char* SSLTCPSocket::readAll()
             switch(SSL_get_error(m_ssl, ret))
             {
                 case SSL_ERROR_NONE:
-                    fwrite(buffer, 1, ret, stdout);
+                    buffer_string += buffer;
                     break;
                 case SSL_ERROR_WANT_READ:
                     read_blocked = true;
@@ -196,12 +197,18 @@ char* SSLTCPSocket::readAll()
                     break;
             }
         } while(SSL_pending(m_ssl) && !read_blocked);
-
-        buffer[available] = '\0'; //Null-terminating the string
     }
     SSL_set_read_ahead(m_ssl, 1);
+    delete[] buffer;
 
-    return buffer;
+    char* ret;
+    ret = new char[buffer_string.size()+1];
+    for(int i = 0; i < buffer_string.size(); i++)
+    {
+        ret[i] = buffer_string[i];
+    }
+    ret[buffer_string.size()+1] = '\0';
+    return ret;
 }
 
 }
