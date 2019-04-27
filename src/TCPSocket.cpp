@@ -100,12 +100,14 @@ char* TCPSocket::read(unsigned int size)
     buffer = new char[size + 1];
     if(m_connected || m_accepted) {
         /* Read the data */
-        if(::read(m_sockfd, buffer, size) < 0)
+        int ret = ::read(m_sockfd, buffer, size);
+        if(ret < 0)
         {
             throw SocketReadException();
         }
-
-        buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        else if(ret > 0) {
+            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        }
     }
     return buffer;
 }
@@ -129,11 +131,14 @@ char* TCPSocket::readAll()
     buffer = new char[available + 1];
     if(m_connected || m_accepted)
     {
-        if(::read(m_sockfd, buffer, available) < 0)
+        int ret = ::read(m_sockfd, buffer, available);
+        if(ret < 0)
         {
             throw SocketReadException();
         }
-        buffer[available] = '\0'; //Null-terminating the string
+        else if(ret > 0) {
+            buffer[available] = '\0'; //Null-terminating the string
+        }
     }
     return buffer;
 }

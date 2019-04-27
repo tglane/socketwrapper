@@ -43,20 +43,21 @@ UDPSocket::UDPSocket(int family)
 char* UDPSocket::recvfrom(int bufflen)
 {
     char* buffer_to;
-    int bytes;
-
     buffer_to = new char[bufflen + 1];
+
     if(m_created && m_bound)
     {
         struct sockaddr_in from;
         socklen_t flen = sizeof(from);
-
-        if((bytes = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen))  < 0)
+        int ret = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen);
+        if(ret < 0)
         {
             throw SocketReadException();
         }
+        else if(ret > 0) {
+            buffer_to[bufflen] = '\0';
+        }
     }
-    buffer_to[bufflen] = '\0';
     return buffer_to;
 }
 
