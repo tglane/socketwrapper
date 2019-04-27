@@ -120,14 +120,14 @@ std::shared_ptr<SSLTCPSocket> SSLTCPSocket::accept()
     return connSock;
 }
 
-//TODO implement ssl shutdown on return value of 6
 char* SSLTCPSocket::read(unsigned int size)
 {
     char *buffer;
     buffer = new char[size + 1];
     if(m_connected || m_accepted) {
         /* Read the data */
-        if(int ret = SSL_read(m_ssl, buffer, size) < 0)
+        int ret = SSL_read(m_ssl, buffer, size);
+        if(ret < 0)
         {
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
@@ -136,10 +136,12 @@ char* SSLTCPSocket::read(unsigned int size)
                 m_accepted = false;
             }
             ERR_print_errors_fp(stderr);
-            throw SocketWriteException();
+            throw SocketReadException();
         }
-
-        buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        else if(ret > 0)
+        {
+            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+        }
     }
     return buffer;
 }
@@ -166,48 +168,16 @@ void SSLTCPSocket::write(const char *buffer)
 char* SSLTCPSocket::readAll()
 {
     string buffer_string;
-    char* buffer;
-    int available = bytes_available();
-    buffer = new char[available + 1];
+    string tmp;
+    do {
+        tmp.clear();
+        tmp = read(1);
+        buffer_string += tmp;
+    } while(!tmp.empty() && tmp[0] != '\n');
 
-    if(m_connected || m_accepted)
-    {
-        SSL_set_read_ahead(m_ssl, 1);
-
-        bool read_blocked = false;
-        do {
-            int ret = SSL_read(m_ssl, buffer, strlen(buffer));
-
-            switch(SSL_get_error(m_ssl, ret))
-            {
-                case SSL_ERROR_NONE:
-                    buffer_string += buffer;
-                    break;
-                case SSL_ERROR_WANT_READ:
-                    read_blocked = true;
-                    break;
-                case 6:
-                    SSL_shutdown(m_ssl);
-                    m_connected = false;
-                    m_accepted = false;
-                    read_blocked = true;
-                    break;
-                default:
-                    read_blocked = true;
-                    break;
-            }
-        } while(SSL_pending(m_ssl) && !read_blocked);
-    }
-    SSL_set_read_ahead(m_ssl, 1);
-    delete[] buffer;
-
-    char* ret;
-    ret = new char[buffer_string.size()+1];
-    for(int i = 0; i < buffer_string.size(); i++)
-    {
-        ret[i] = buffer_string[i];
-    }
-    ret[buffer_string.size()+1] = '\0';
+    char* ret = new char[buffer_string.size()+1];
+    std::strcpy(ret, buffer_string.c_str());
+    std::cout << ret << std::endl;
     return ret;
 }
 
