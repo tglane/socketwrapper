@@ -177,7 +177,6 @@ char* SSLTCPSocket::readAll()
 
     char* ret = new char[buffer_string.size()+1];
     std::strcpy(ret, buffer_string.c_str());
-    std::cout << ret << std::endl;
     return ret;
 }
 
