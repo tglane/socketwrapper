@@ -17,7 +17,7 @@ class SocketCreationException : public BaseException {
 
 public:
 
-    const char* what() { "Error creating socket"; }
+    const char* what() { return "Error creating socket"; }
 
 };
 

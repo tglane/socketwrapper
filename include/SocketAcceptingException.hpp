@@ -11,7 +11,7 @@ namespace socketwrapper
 class SocketAcceptingException : public BaseException {
 
 public:
-    const char* what() { "Error accepting connection"; }
+    const char* what() { return "Error accepting connection"; }
 
 };
 
