@@ -10,7 +10,7 @@ namespace socketwrapper
 bool SSLTCPSocket::ssl_initialized = false;
 
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
-    : TCPSocket(family), m_cert(cert), m_key(key)
+    : TCPSocket{family}, m_cert{cert}, m_key{key}, m_context{}, m_ssl{}
 {
     if(!ssl_initialized)
     {
@@ -27,12 +27,8 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
 }
 
 SSLTCPSocket::SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound, int family, const char* cert, const char* key)
-     : TCPSocket(family)
+     : TCPSocket{family, socket_fd, own_addr, bound, accepted}
 {
-    m_sockfd = socket_fd;
-    m_sockaddr_in = own_addr;
-    m_accepted = accepted;
-    m_bound = bound;
     m_created = true;
     m_closed = false;
     m_listening = false;
@@ -74,7 +70,7 @@ SSLTCPSocket::~SSLTCPSocket()
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    sockaddr_in server;
+    sockaddr_in server = {};
     server.sin_family = AF_INET;
     server.sin_port = htons((in_port_t) port_to);
     server.sin_addr.s_addr = htonl(addr_to);
@@ -107,7 +103,14 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
     }
 }
 
-std::shared_ptr<SSLTCPSocket> SSLTCPSocket::accept()
+void SSLTCPSocket::connect(int port_to, const string &addr_to)
+{
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    SSLTCPSocket::connect(port_to, inAddr);
+}
+
+std::shared_ptr<SSLTCPSocket> SSLTCPSocket::acceptShared()
 {
     socklen_t len = sizeof(m_client_addr);
     int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
@@ -117,6 +120,19 @@ std::shared_ptr<SSLTCPSocket> SSLTCPSocket::accept()
     }
 
     std::shared_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(conn_fd, m_sockaddr_in, true, false, m_family, m_cert.c_str(), m_key.c_str()));
+    return connSock;
+}
+
+std::unique_ptr<SSLTCPSocket> SSLTCPSocket::acceptUnique()
+{
+    socklen_t len = sizeof(m_client_addr);
+    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
+    if(conn_fd < 0)
+    {
+        throw SocketAcceptingException();
+    }
+
+    std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(conn_fd, m_sockaddr_in, true, false, m_family, m_cert.c_str(), m_key.c_str()));
     return connSock;
 }
 

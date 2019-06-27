@@ -30,16 +30,21 @@ public:
      * Reads the content sended by a client using the underlying socket
      * @param buffer_to write the received data
      */
-    char* recvfrom(int bufflen);
+    char* receiveFrom(int bufflen);
+
+    vector<char> receiveVector(int bufflen);
 
     /**
      * Sends the data from a buffer a client using the underlying socket
      * @param buffer_from buffer with data to send
-     * @param nbytes
      * @param port of the client
      * @param addr of the client
      */
-    void sendto(const char* buffer_from, int port, in_addr_t addr);
+    void sendTo(const char* buffer_from, int port, in_addr_t addr);
+
+    void sendTo(const char* buffer_from, int port, const string& addr);
+
+    void sendTo(const vector<char>& buffer_from, int port, const string& addr);
 
 };
 

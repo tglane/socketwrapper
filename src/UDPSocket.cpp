@@ -8,10 +8,9 @@ namespace socketwrapper
 {
 
 UDPSocket::UDPSocket(int family)
+    : BaseSocket{family, SOCK_DGRAM}
 {
-    m_sockaddr_in.sin_family = (sa_family_t) family;
-    m_socktype = SOCK_DGRAM;
-    m_family = family;
+    m_sockaddr_in.sin_family = {(sa_family_t) family};
 
     if(family == AF_UNSPEC)
     {
@@ -40,14 +39,14 @@ UDPSocket::UDPSocket(int family)
     }
 }
 
-char* UDPSocket::recvfrom(int bufflen)
+char* UDPSocket::receiveFrom(int bufflen)
 {
     char* buffer_to;
     buffer_to = new char[bufflen + 1];
 
     if(m_created && m_bound)
     {
-        struct sockaddr_in from;
+        struct sockaddr_in from = {};
         socklen_t flen = sizeof(from);
         int ret = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen);
         if(ret < 0)
@@ -61,10 +60,23 @@ char* UDPSocket::recvfrom(int bufflen)
     return buffer_to;
 }
 
-void UDPSocket::sendto(const char* buffer_from, int port, in_addr_t addr)
+vector<char> UDPSocket::receiveVector(int bufflen)
+{
+    //char* buffer = new char[bufflen + 1];
+    char* buffer;
+
+    buffer = UDPSocket::receiveFrom(bufflen);
+
+    vector<char> return_buffer{buffer, buffer + bufflen + 1};
+
+    delete[] buffer;
+    return return_buffer;
+}
+
+void UDPSocket::sendTo(const char* buffer_from, int port, in_addr_t addr)
 {
     if(m_created) {
-        struct sockaddr_in dest;
+        struct sockaddr_in dest = {};
         dest.sin_family = (sa_family_t) m_family;
         dest.sin_port = htons((in_port_t) port);
         dest.sin_addr.s_addr = addr;
@@ -74,6 +86,20 @@ void UDPSocket::sendto(const char* buffer_from, int port, in_addr_t addr)
             throw SocketWriteException();
         }
     }
+}
+
+void UDPSocket::sendTo(const char *buffer_from, int port, const string& addr)
+{
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr.c_str(), &inAddr);
+    UDPSocket::sendTo(buffer_from, port, inAddr);
+}
+
+void UDPSocket::sendTo(const vector<char>& buffer_from, int port, const string &addr)
+{
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr.c_str(), &inAddr);
+    UDPSocket::sendTo(buffer_from.data(), port, inAddr);
 }
 
 }

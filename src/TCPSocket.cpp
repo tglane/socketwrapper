@@ -8,10 +8,9 @@ namespace socketwrapper
 {
 
 TCPSocket::TCPSocket(int family)
+    : BaseSocket(family, SOCK_STREAM), m_client_addr{}
 {
     m_sockaddr_in.sin_family = (sa_family_t) family;
-    m_socktype = SOCK_STREAM;
-    m_family = family;
 
     if(family == AF_UNSPEC)
     {
@@ -39,16 +38,11 @@ TCPSocket::TCPSocket(int family)
     }
 }
 
-TCPSocket::TCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound)
+TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, bool bound, bool accepted)
+    : BaseSocket{family, SOCK_STREAM, socket_fd, own_addr, bound}, m_client_addr{}, m_accepted{accepted}, m_listening{false}, m_connected{false}
 {
-    m_sockfd = socket_fd;
-    m_sockaddr_in = own_addr;
-    m_accepted = accepted;
-    m_bound = bound;
     m_created = true;
     m_closed = false;
-    m_listening = false;
-    m_connected = false;
 }
 
 void TCPSocket::listen(int queuesize)
@@ -66,7 +60,7 @@ void TCPSocket::listen(int queuesize)
 
 void TCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    sockaddr_in server;
+    sockaddr_in server = {};
     server.sin_family = AF_INET;
     server.sin_port = htons((in_port_t) port_to);
     server.sin_addr.s_addr = htonl(addr_to);
@@ -81,7 +75,14 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
     }
 }
 
-std::shared_ptr<TCPSocket> TCPSocket::accept()
+void TCPSocket::connect(int port_to, const string &addr_to)
+{
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    TCPSocket::connect(port_to, inAddr);
+}
+
+std::shared_ptr<TCPSocket> TCPSocket::acceptShared()
 {
     socklen_t len = sizeof(m_client_addr);
     int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
@@ -90,7 +91,20 @@ std::shared_ptr<TCPSocket> TCPSocket::accept()
         throw SocketAcceptingException();
     }
 
-    std::shared_ptr<TCPSocket> connSock(new TCPSocket(conn_fd, m_sockaddr_in, true, false));
+    std::shared_ptr<TCPSocket>connSock{new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true)};
+    return connSock;
+}
+
+std::unique_ptr<TCPSocket> TCPSocket::acceptUnique()
+{
+    socklen_t len = sizeof(m_client_addr);
+    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
+    if(conn_fd < 0)
+    {
+        throw SocketAcceptingException();
+    }
+
+    std::unique_ptr<TCPSocket> connSock{new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true)};
     return connSock;
 }
 
@@ -127,7 +141,7 @@ void TCPSocket::write(const char *buffer)
 char* TCPSocket::readAll()
 {
     char* buffer;
-    int available = bytes_available();
+    int available = bytesAvailable();
     buffer = new char[available + 1];
     if(m_connected || m_accepted)
     {
@@ -143,7 +157,7 @@ char* TCPSocket::readAll()
     return buffer;
 }
 
-int TCPSocket::bytes_available()
+int TCPSocket::bytesAvailable()
 {
     int bytes;
     ioctl(m_sockfd, FIONREAD, &bytes);

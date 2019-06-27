@@ -9,6 +9,7 @@
 #include <memory>
 #include <cstring>
 #include <string>
+#include <vector>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h> //for struct sockaddr_in
@@ -28,6 +29,7 @@
 #include "SetSockOptException.hpp"
 
 using std::string;
+using std::vector;
 
 namespace socketwrapper {
 
@@ -38,7 +40,6 @@ namespace socketwrapper {
 class BaseSocket {
 
 public:
-    BaseSocket();
 
     virtual ~BaseSocket();
 
@@ -50,7 +51,7 @@ public:
      * Binds the internal Socket to your local adress and the given port
      * @param port to bind the socket on this port of the host machine
      */
-    void bind(string address, int port);
+    void bind(const string& address, int port);
 
     /**
      * Closes the internal socket m_sockfd
@@ -60,6 +61,12 @@ public:
     int getSocketDescriptor()  { return m_sockfd; }
 
 protected:
+
+    BaseSocket(int family, int sock_type);
+
+    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, bool bound);
+
+    BaseSocket() = default;
 
     sockaddr_in m_sockaddr_in;
 

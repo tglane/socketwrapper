@@ -32,12 +32,14 @@ public:
      * @param addr_to
      */
     void connect(int port_to, in_addr_t addr_to) override;
+    void connect(int port_to, const string& addr_to) override;
 
     /**
      * @brief Waits for a client to connect returns a new socket for the connection
      * Returned socket waits for tls/ssl-handshake initiation from client
      */
-    std::shared_ptr<SSLTCPSocket> accept();
+    std::shared_ptr<SSLTCPSocket> acceptShared();
+    std::unique_ptr<SSLTCPSocket> acceptUnique();
 
     /**
      * @brief Reads "size" bytes from an existing ssl/tsl connection and returns it as char*

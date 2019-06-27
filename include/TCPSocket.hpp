@@ -37,13 +37,15 @@ public:
      * @param addr_to ip address of the server to connect to
      */
     virtual void connect(int port_to, in_addr_t addr_to);
+    virtual void connect(int port_to, const string& addr_to);
 
     /**
      * Waits for a client to connect to the socket
      * Usable only after call of listen() and m_listeing and m_bound true
      * @return shared_ptr<TCPSocket> to handle the established connection
      */
-    std::shared_ptr<TCPSocket> accept();
+    std::shared_ptr<TCPSocket> acceptShared();
+    std::unique_ptr<TCPSocket> acceptUnique();
 
     /**
      * Reads the content sended by a client and stores it into a buffer
@@ -71,11 +73,11 @@ public:
      * @brief Returns the number of bytes available to read
      * @return number of bytes
      */
-    int bytes_available();
+    int bytesAvailable();
 
 protected:
 
-    TCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound);
+    TCPSocket(int family, int socket_fd, sockaddr_in own_addr, bool bound, bool accepted);
 
     /**
      * Stores the address of a connected client

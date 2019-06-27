@@ -7,11 +7,15 @@
 namespace socketwrapper
 {
 
-BaseSocket::BaseSocket()
+BaseSocket::BaseSocket(int family, int sock_type)
+    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}
 {
-
     //Unable to create a socket now
 }
+
+BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, bool bound)
+    : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_bound(bound)
+{}
 
 BaseSocket::~BaseSocket()
 {
@@ -21,7 +25,7 @@ BaseSocket::~BaseSocket()
     }
 }
 
-void BaseSocket::bind(string address, int port)
+void BaseSocket::bind(const string& address, int port)
 {
     if(m_bound)
     {
