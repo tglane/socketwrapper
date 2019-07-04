@@ -37,6 +37,7 @@ public:
      * @param addr_to ip address of the server to connect to
      */
     virtual void connect(int port_to, in_addr_t addr_to);
+
     virtual void connect(int port_to, const string& addr_to);
 
     /**
@@ -45,6 +46,7 @@ public:
      * @return shared_ptr<TCPSocket> to handle the established connection
      */
     std::shared_ptr<TCPSocket> acceptShared();
+
     std::unique_ptr<TCPSocket> acceptUnique();
 
     /**
@@ -55,6 +57,8 @@ public:
      */
     virtual char* read(unsigned int size);
 
+    virtual vector<char> readVector(unsigned int size);
+
     /**
      * Sends the content of a buffer to connected client
      * --- can send all sizes but uses two send operations
@@ -63,11 +67,15 @@ public:
      */
     virtual void write(const char* buffer);
 
+    virtual void write(vector<char> buffer);
+
     /**
      * @brief Reads all bytes available at the socket
      * @return read bytes
      */
     virtual char* readAll();
+
+    virtual vector<char> readAllVector();
 
     /**
      * @brief Returns the number of bytes available to read

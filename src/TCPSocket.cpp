@@ -28,7 +28,6 @@ TCPSocket::TCPSocket(int family)
         if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
             perror("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
-
         if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
             throw SetSockOptException();
         }
@@ -91,7 +90,7 @@ std::shared_ptr<TCPSocket> TCPSocket::acceptShared()
         throw SocketAcceptingException();
     }
 
-    std::shared_ptr<TCPSocket>connSock{new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true)};
+    std::shared_ptr<TCPSocket>connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true));
     return connSock;
 }
 
@@ -104,7 +103,7 @@ std::unique_ptr<TCPSocket> TCPSocket::acceptUnique()
         throw SocketAcceptingException();
     }
 
-    std::unique_ptr<TCPSocket> connSock{new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true)};
+    std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true));
     return connSock;
 }
 
@@ -126,6 +125,15 @@ char* TCPSocket::read(unsigned int size)
     return buffer;
 }
 
+vector<char> TCPSocket::readVector(unsigned int size)
+{
+    char* buffer = this->read(size);
+    vector<char> buffer_vector {buffer, buffer + size + 1};
+    delete[] buffer;
+
+    return buffer_vector;
+}
+
 void TCPSocket::write(const char *buffer)
 {
     if(m_connected || m_accepted)
@@ -136,6 +144,11 @@ void TCPSocket::write(const char *buffer)
             throw SocketWriteException();
         }
     }
+}
+
+void TCPSocket::write(vector<char> buffer)
+{
+    this->write(buffer.data());
 }
 
 char* TCPSocket::readAll()
@@ -155,6 +168,29 @@ char* TCPSocket::readAll()
         }
     }
     return buffer;
+}
+
+vector<char> TCPSocket::readAllVector()
+{
+    char* buffer;
+    int available = bytesAvailable();
+    buffer = new char[available + 1];
+
+    if(m_connected || m_accepted)
+    {
+        int ret = ::read(m_sockfd, buffer, available);
+        if(ret < 0)
+        {
+            throw SocketReadException();
+        }
+        else if(ret > 0) {
+            buffer[available] = '\0'; //Null-terminating the string
+        }
+    }
+
+    vector<char> buffer_return {buffer, buffer + available +1};
+    delete[] buffer;
+    return buffer_return;
 }
 
 int TCPSocket::bytesAvailable()

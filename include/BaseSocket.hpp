@@ -51,6 +51,8 @@ public:
      * Binds the internal Socket to your local adress and the given port
      * @param port to bind the socket on this port of the host machine
      */
+    void bind(const in_addr_t& address, int port);
+
     void bind(const string& address, int port);
 
     /**

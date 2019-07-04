@@ -62,10 +62,9 @@ char* UDPSocket::receiveFrom(int bufflen)
 
 vector<char> UDPSocket::receiveVector(int bufflen)
 {
-    //char* buffer = new char[bufflen + 1];
     char* buffer;
 
-    buffer = UDPSocket::receiveFrom(bufflen);
+    buffer = this->receiveFrom(bufflen);
 
     vector<char> return_buffer{buffer, buffer + bufflen + 1};
 
@@ -92,14 +91,14 @@ void UDPSocket::sendTo(const char *buffer_from, int port, const string& addr)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    UDPSocket::sendTo(buffer_from, port, inAddr);
+    this->sendTo(buffer_from, port, inAddr);
 }
 
 void UDPSocket::sendTo(const vector<char>& buffer_from, int port, const string &addr)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    UDPSocket::sendTo(buffer_from.data(), port, inAddr);
+    this->sendTo(buffer_from.data(), port, inAddr);
 }
 
 }

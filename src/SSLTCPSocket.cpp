@@ -162,6 +162,14 @@ char* SSLTCPSocket::read(unsigned int size)
     return buffer;
 }
 
+vector<char> SSLTCPSocket::readVector(unsigned int size)
+{
+    char* buffer = this->read(size);
+    vector<char> return_buffer {buffer, buffer + size +1};
+    delete[] buffer;
+    return return_buffer;
+}
+
 void SSLTCPSocket::write(const char *buffer)
 {
     if(m_connected || m_accepted)
@@ -181,6 +189,11 @@ void SSLTCPSocket::write(const char *buffer)
     }
 }
 
+void SSLTCPSocket::write(const vector<char> buffer)
+{
+    this->write(buffer.data());
+}
+
 char* SSLTCPSocket::readAll()
 {
     string buffer_string;
@@ -193,6 +206,20 @@ char* SSLTCPSocket::readAll()
 
     char* ret = new char[buffer_string.size()+1];
     std::strcpy(ret, buffer_string.c_str());
+    return ret;
+}
+
+vector<char> SSLTCPSocket::readAllVector()
+{
+    string buffer_string;
+    string tmp;
+    do {
+        tmp.clear();
+        tmp = read(1);
+        buffer_string += tmp;
+    } while(!tmp.empty() && tmp[0] != '\n');
+
+    vector<char> ret {buffer_string.begin(), buffer_string.end()};
     return ret;
 }
 

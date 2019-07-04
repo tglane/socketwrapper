@@ -39,6 +39,7 @@ public:
      * Returned socket waits for tls/ssl-handshake initiation from client
      */
     std::shared_ptr<SSLTCPSocket> acceptShared();
+
     std::unique_ptr<SSLTCPSocket> acceptUnique();
 
     /**
@@ -48,13 +49,19 @@ public:
      */
     char* read(unsigned int size) override;
 
+    vector<char> readVector(unsigned int size);
+
     /**
      * @brief Writes content of param buffer in a existing ssl/tsl connection
      * @param buffer
      */
     void write(const char* buffer) override;
 
-    char* readAll() override ;
+    void write(const vector<char> buffer) override;
+
+    char* readAll() override;
+
+    vector<char> readAllVector() override;
 
 protected:
 
