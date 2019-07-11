@@ -146,7 +146,7 @@ void TCPSocket::write(const char *buffer)
     }
 }
 
-void TCPSocket::write(vector<char> buffer)
+void TCPSocket::write(const vector<char>& buffer)
 {
     this->write(buffer.data());
 }

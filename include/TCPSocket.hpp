@@ -67,7 +67,7 @@ public:
      */
     virtual void write(const char* buffer);
 
-    virtual void write(vector<char> buffer);
+    virtual void write(const vector<char>& buffer);
 
     /**
      * @brief Reads all bytes available at the socket

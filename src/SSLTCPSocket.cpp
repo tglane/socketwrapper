@@ -165,7 +165,7 @@ char* SSLTCPSocket::read(unsigned int size)
 vector<char> SSLTCPSocket::readVector(unsigned int size)
 {
     char* buffer = this->read(size);
-    vector<char> return_buffer {buffer, buffer + size +1};
+    vector<char> return_buffer(buffer, buffer + size +1);
     delete[] buffer;
     return return_buffer;
 }
@@ -189,7 +189,7 @@ void SSLTCPSocket::write(const char *buffer)
     }
 }
 
-void SSLTCPSocket::write(const vector<char> buffer)
+void SSLTCPSocket::write(const vector<char>& buffer)
 {
     this->write(buffer.data());
 }
@@ -200,7 +200,7 @@ char* SSLTCPSocket::readAll()
     string tmp;
     do {
         tmp.clear();
-        tmp = read(1);
+        tmp = this->read(1);
         buffer_string += tmp;
     } while(!tmp.empty() && tmp[0] != '\n');
 
@@ -215,11 +215,12 @@ vector<char> SSLTCPSocket::readAllVector()
     string tmp;
     do {
         tmp.clear();
-        tmp = read(1);
+        tmp = this->read(1);
         buffer_string += tmp;
     } while(!tmp.empty() && tmp[0] != '\n');
+    std::cout << buffer_string << std::endl;
 
-    vector<char> ret {buffer_string.begin(), buffer_string.end()};
+    vector<char> ret(buffer_string.begin(), buffer_string.end());
     return ret;
 }
 

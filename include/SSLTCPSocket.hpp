@@ -49,7 +49,7 @@ public:
      */
     char* read(unsigned int size) override;
 
-    vector<char> readVector(unsigned int size);
+    vector<char> readVector(unsigned int size) override;
 
     /**
      * @brief Writes content of param buffer in a existing ssl/tsl connection
@@ -57,7 +57,7 @@ public:
      */
     void write(const char* buffer) override;
 
-    void write(const vector<char> buffer) override;
+    void write(const vector<char>& buffer) override;
 
     char* readAll() override;
 
