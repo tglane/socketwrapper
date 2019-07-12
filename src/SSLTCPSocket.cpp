@@ -70,7 +70,7 @@ SSLTCPSocket::~SSLTCPSocket()
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    sockaddr_in server = {};
+    sockaddr_in server {};
     server.sin_family = AF_INET;
     server.sin_port = htons((in_port_t) port_to);
     server.sin_addr.s_addr = htonl(addr_to);
@@ -105,7 +105,7 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 
 void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
-    in_addr_t inAddr{};
+    in_addr_t inAddr;
     inet_pton(m_family, addr_to.c_str(), &inAddr);
     SSLTCPSocket::connect(port_to, inAddr);
 }
