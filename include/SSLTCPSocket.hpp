@@ -26,6 +26,8 @@ public:
 
     ~SSLTCPSocket() override;
 
+    virtual void close() override;
+
     /**
      * @brief Connects to a server and initiates the tls/ssl-handshake
      * @param port_to
@@ -38,16 +40,14 @@ public:
      * @brief Waits for a client to connect returns a new socket for the connection
      * Returned socket waits for tls/ssl-handshake initiation from client
      */
-    std::shared_ptr<SSLTCPSocket> acceptShared();
-
-    std::unique_ptr<SSLTCPSocket> acceptUnique();
+    std::unique_ptr<SSLTCPSocket> accept();
 
     /**
      * @brief Reads "size" bytes from an existing ssl/tsl connection and returns it as char*
      * @param size
      * @return
      */
-    char* read(unsigned int size) override;
+    std::unique_ptr<char[]> read(unsigned int size) override;
 
     vector<char> readVector(unsigned int size) override;
 
@@ -59,9 +59,9 @@ public:
 
     void write(const vector<char>& buffer) override;
 
-    char* readAll() override;
+    std::unique_ptr<char[]> read_all() override;
 
-    vector<char> readAllVector() override;
+    vector<char> read_all_vector() override;
 
 protected:
 

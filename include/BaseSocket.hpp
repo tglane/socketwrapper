@@ -6,6 +6,7 @@
 #define SOCKETWRAPPER_BASESOCKET_HPP
 
 #include <iostream>
+
 #include <memory>
 #include <cstring>
 #include <string>
@@ -58,7 +59,7 @@ public:
     /**
      * Closes the internal socket m_sockfd
      */
-    void close();
+    virtual void close();
 
     int getSocketDescriptor()  { return m_sockfd; }
 

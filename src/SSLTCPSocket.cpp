@@ -10,7 +10,7 @@ namespace socketwrapper
 bool SSLTCPSocket::ssl_initialized = false;
 
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
-    : TCPSocket{family}, m_cert{cert}, m_key{key}, m_context{}, m_ssl{}
+    : TCPSocket{family}, m_cert{cert}, m_key{key}
 {
     if(!ssl_initialized)
     {
@@ -56,16 +56,33 @@ SSLTCPSocket::SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, b
 
 SSLTCPSocket::~SSLTCPSocket()
 {
-    if(m_ssl)
+    if(!m_closed)
     {
-        SSL_free(m_ssl);
+        this->close();
     }
-    if(m_context)
+}
+
+void SSLTCPSocket::close()
+{
+    if(!m_closed)
     {
-        SSL_CTX_free(m_context);
+        if(m_ssl)
+        {
+            SSL_free(m_ssl);
+        }
+        if(m_context)
+        {
+            SSL_CTX_free(m_context);
+        }
+        EVP_cleanup();
+        ssl_initialized = false;
+
+        if (::close(m_sockfd) == -1) {
+            throw SocketCloseException();
+        } else {
+            m_closed = true;
+        }
     }
-    EVP_cleanup();
-    ssl_initialized = false;
 }
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
@@ -110,20 +127,7 @@ void SSLTCPSocket::connect(int port_to, const string &addr_to)
     SSLTCPSocket::connect(port_to, inAddr);
 }
 
-std::shared_ptr<SSLTCPSocket> SSLTCPSocket::acceptShared()
-{
-    socklen_t len = sizeof(m_client_addr);
-    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
-    if(conn_fd < 0)
-    {
-        throw SocketAcceptingException();
-    }
-
-    std::shared_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(conn_fd, m_sockaddr_in, true, false, m_family, m_cert.c_str(), m_key.c_str()));
-    return connSock;
-}
-
-std::unique_ptr<SSLTCPSocket> SSLTCPSocket::acceptUnique()
+std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 {
     socklen_t len = sizeof(m_client_addr);
     int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
@@ -136,13 +140,12 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::acceptUnique()
     return connSock;
 }
 
-char* SSLTCPSocket::read(unsigned int size)
+std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
 {
-    char *buffer;
-    buffer = new char[size + 1];
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
     if(m_connected || m_accepted) {
         /* Read the data */
-        int ret = SSL_read(m_ssl, buffer, size);
+        int ret = SSL_read(m_ssl, buffer.get(), size);
         if(ret < 0)
         {
             ret = SSL_get_error(m_ssl, ret);
@@ -164,9 +167,9 @@ char* SSLTCPSocket::read(unsigned int size)
 
 vector<char> SSLTCPSocket::readVector(unsigned int size)
 {
-    char* buffer = this->read(size);
-    vector<char> return_buffer(buffer, buffer + size +1);
-    delete[] buffer;
+    std::unique_ptr<char[]> buffer = this->read(size);
+    vector<char> return_buffer(buffer.get(), buffer.get() + size +1);
+
     return return_buffer;
 }
 
@@ -194,33 +197,40 @@ void SSLTCPSocket::write(const vector<char>& buffer)
     this->write(buffer.data());
 }
 
-char* SSLTCPSocket::readAll()
+std::unique_ptr<char[]> SSLTCPSocket::read_all()
 {
-    string buffer_string;
-    string tmp;
-    do {
-        tmp.clear();
-        tmp = this->read(1);
-        buffer_string += tmp;
-    } while(!tmp.empty() && tmp[0] != '\n');
+    std::unique_ptr<char[]> ret;
+    if(m_connected || m_accepted) {
+        string buffer_string;
+        string tmp;
+        do {
+            tmp.clear();
+            tmp = this->read(1).get();
+            buffer_string += tmp;
+        } while (!tmp.empty() && tmp[0] != '\n');
 
-    char* ret = new char[buffer_string.size()+1];
-    std::strcpy(ret, buffer_string.c_str());
+        ret = std::make_unique<char[]>(buffer_string.size() + 1);
+        std::strcpy(ret.get(), buffer_string.c_str());
+
+    }
     return ret;
 }
 
-vector<char> SSLTCPSocket::readAllVector()
+vector<char> SSLTCPSocket::read_all_vector()
 {
-    string buffer_string;
-    string tmp;
-    do {
-        tmp.clear();
-        tmp = this->read(1);
-        buffer_string += tmp;
-    } while(!tmp.empty() && tmp[0] != '\n');
-    std::cout << buffer_string << std::endl;
+    vector<char> ret;
+    if(m_connected || m_accepted) {
+        string buffer_string;
+        string tmp;
+        do {
+            tmp.clear();
+            tmp = this->read(1).get();
+            buffer_string += tmp;
+        } while (!tmp.empty() && tmp[0] != '\n');
+        std::cout << buffer_string << std::endl;
 
-    vector<char> ret(buffer_string.begin(), buffer_string.end());
+        ret = vector<char>(buffer_string.begin(), buffer_string.end());
+    }
     return ret;
 }
 

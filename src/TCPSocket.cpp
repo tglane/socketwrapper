@@ -81,20 +81,7 @@ void TCPSocket::connect(int port_to, const string &addr_to)
     TCPSocket::connect(port_to, inAddr);
 }
 
-std::shared_ptr<TCPSocket> TCPSocket::acceptShared()
-{
-    socklen_t len = sizeof(m_client_addr);
-    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
-    if(conn_fd < 0)
-    {
-        throw SocketAcceptingException();
-    }
-
-    std::shared_ptr<TCPSocket>connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true));
-    return connSock;
-}
-
-std::unique_ptr<TCPSocket> TCPSocket::acceptUnique()
+std::unique_ptr<TCPSocket> TCPSocket::accept()
 {
     socklen_t len = sizeof(m_client_addr);
     int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
@@ -107,13 +94,12 @@ std::unique_ptr<TCPSocket> TCPSocket::acceptUnique()
     return connSock;
 }
 
-char* TCPSocket::read(unsigned int size)
+std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
 {
-    char *buffer;
-    buffer = new char[size + 1];
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
     if(m_connected || m_accepted) {
         /* Read the data */
-        int ret = ::read(m_sockfd, buffer, size);
+        int ret = ::read(m_sockfd, buffer.get(), size);
         if(ret < 0)
         {
             throw SocketReadException();
@@ -127,9 +113,8 @@ char* TCPSocket::read(unsigned int size)
 
 vector<char> TCPSocket::readVector(unsigned int size)
 {
-    char* buffer = this->read(size);
-    vector<char> buffer_vector {buffer, buffer + size + 1};
-    delete[] buffer;
+    std::unique_ptr<char[]> buffer = this->read(size);
+    vector<char> buffer_vector(buffer.get(), buffer.get() + size + 1);
 
     return buffer_vector;
 }
@@ -151,14 +136,13 @@ void TCPSocket::write(const vector<char>& buffer)
     this->write(buffer.data());
 }
 
-char* TCPSocket::readAll()
+std::unique_ptr<char[]> TCPSocket::read_all()
 {
-    char* buffer;
-    int available = bytesAvailable();
-    buffer = new char[available + 1];
+    int available = bytes_available();
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
     if(m_connected || m_accepted)
     {
-        int ret = ::read(m_sockfd, buffer, available);
+        int ret = ::read(m_sockfd, buffer.get(), available);
         if(ret < 0)
         {
             throw SocketReadException();
@@ -170,15 +154,14 @@ char* TCPSocket::readAll()
     return buffer;
 }
 
-vector<char> TCPSocket::readAllVector()
+vector<char> TCPSocket::read_all_vector()
 {
-    char* buffer;
-    int available = bytesAvailable();
-    buffer = new char[available + 1];
+    int available = bytes_available();
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
 
     if(m_connected || m_accepted)
     {
-        int ret = ::read(m_sockfd, buffer, available);
+        int ret = ::read(m_sockfd, buffer.get(), available);
         if(ret < 0)
         {
             throw SocketReadException();
@@ -188,12 +171,11 @@ vector<char> TCPSocket::readAllVector()
         }
     }
 
-    vector<char> buffer_return {buffer, buffer + available +1};
-    delete[] buffer;
+    vector<char> buffer_return(buffer.get(), buffer.get() + available +1);
     return buffer_return;
 }
 
-int TCPSocket::bytesAvailable()
+int TCPSocket::bytes_available()
 {
     int bytes;
     ioctl(m_sockfd, FIONREAD, &bytes);

@@ -39,16 +39,15 @@ UDPSocket::UDPSocket(int family)
     }
 }
 
-char* UDPSocket::receiveFrom(int bufflen)
+std::unique_ptr<char[]> UDPSocket::receive_from(int bufflen)
 {
-    char* buffer_to;
-    buffer_to = new char[bufflen + 1];
+    std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(bufflen + 1);
 
     if(m_created && m_bound)
     {
         struct sockaddr_in from = {};
         socklen_t flen = sizeof(from);
-        int ret = ::recvfrom(m_sockfd, buffer_to, (size_t) bufflen, 0, (struct sockaddr*) &from, &flen);
+        int ret = ::recvfrom(m_sockfd, buffer_to.get(), (size_t) bufflen, 0, (struct sockaddr*) &from, &flen);
         if(ret < 0)
         {
             throw SocketReadException();
@@ -60,19 +59,15 @@ char* UDPSocket::receiveFrom(int bufflen)
     return buffer_to;
 }
 
-vector<char> UDPSocket::receiveVector(int bufflen)
+vector<char> UDPSocket::receive_vector(int bufflen)
 {
-    char* buffer;
+    std::unique_ptr<char[]> buffer = this->receive_from(bufflen);
+    vector<char> return_buffer(buffer.get(), buffer.get() + bufflen + 1);
 
-    buffer = this->receiveFrom(bufflen);
-
-    vector<char> return_buffer{buffer, buffer + bufflen + 1};
-
-    delete[] buffer;
     return return_buffer;
 }
 
-void UDPSocket::sendTo(const char* buffer_from, int port, in_addr_t addr)
+void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
 {
     if(m_created) {
         struct sockaddr_in dest = {};
@@ -87,18 +82,18 @@ void UDPSocket::sendTo(const char* buffer_from, int port, in_addr_t addr)
     }
 }
 
-void UDPSocket::sendTo(const char *buffer_from, int port, const string& addr)
+void UDPSocket::send_to(const char *buffer_from, int port, const string& addr)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    this->sendTo(buffer_from, port, inAddr);
+    this->send_to(buffer_from, port, inAddr);
 }
 
-void UDPSocket::sendTo(const vector<char>& buffer_from, int port, const string &addr)
+void UDPSocket::send_to(const vector<char>& buffer_from, int port, const string &addr)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    this->sendTo(buffer_from.data(), port, inAddr);
+    this->send_to(buffer_from.data(), port, inAddr);
 }
 
 }

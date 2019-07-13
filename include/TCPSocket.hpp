@@ -43,11 +43,9 @@ public:
     /**
      * Waits for a client to connect to the socket
      * Usable only after call of listen() and m_listeing and m_bound true
-     * @return shared_ptr<TCPSocket> to handle the established connection
+     * @return std::unique_ptr<TCPSocket> to handle the established connection
      */
-    std::shared_ptr<TCPSocket> acceptShared();
-
-    std::unique_ptr<TCPSocket> acceptUnique();
+    std::unique_ptr<TCPSocket> accept();
 
     /**
      * Reads the content sended by a client and stores it into a buffer
@@ -55,7 +53,7 @@ public:
      * @brief reads the size of the data in a first read op and reads the actual data in a second op
      * @param buff buffer to store the given content in
      */
-    virtual char* read(unsigned int size);
+    virtual std::unique_ptr<char[]> read(unsigned int size);
 
     virtual vector<char> readVector(unsigned int size);
 
@@ -73,15 +71,15 @@ public:
      * @brief Reads all bytes available at the socket
      * @return read bytes
      */
-    virtual char* readAll();
+    virtual std::unique_ptr<char[]> read_all();
 
-    virtual vector<char> readAllVector();
+    virtual vector<char> read_all_vector();
 
     /**
      * @brief Returns the number of bytes available to read
      * @return number of bytes
      */
-    int bytesAvailable();
+    int bytes_available();
 
 protected:
 

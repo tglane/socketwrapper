@@ -30,9 +30,9 @@ public:
      * Reads the content sended by a client using the underlying socket
      * @param buffer_to write the received data
      */
-    char* receiveFrom(int bufflen);
+    std::unique_ptr<char[]> receive_from(int bufflen);
 
-    vector<char> receiveVector(int bufflen);
+    vector<char> receive_vector(int bufflen);
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -40,11 +40,11 @@ public:
      * @param port of the client
      * @param addr of the client
      */
-    void sendTo(const char* buffer_from, int port, in_addr_t addr);
+    void send_to(const char* buffer_from, int port, in_addr_t addr);
 
-    void sendTo(const char* buffer_from, int port, const string& addr);
+    void send_to(const char* buffer_from, int port, const string& addr);
 
-    void sendTo(const vector<char>& buffer_from, int port, const string& addr);
+    void send_to(const vector<char>& buffer_from, int port, const string& addr);
 
 };
 

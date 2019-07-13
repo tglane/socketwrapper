@@ -21,7 +21,7 @@ BaseSocket::~BaseSocket()
 {
     if(!m_closed)
     {
-        close();
+        this->close();
     }
 }
 
@@ -37,7 +37,6 @@ void BaseSocket::bind(const in_addr_t& address, int port)
 
     if((::bind(m_sockfd, (sockaddr*) &m_sockaddr_in, sizeof(struct sockaddr_in))) != 0)
     {
-        std::cout << "Fehler bei bind" << std::endl;
         throw SocketBindException();
     }
     else
