@@ -20,8 +20,6 @@ class SSLTCPSocket : public TCPSocket {
 
 public:
 
-    using Ptr = std::shared_ptr<SSLTCPSocket>;
-
     SSLTCPSocket(int family, const char* cert, const char* key);
 
     ~SSLTCPSocket() override;

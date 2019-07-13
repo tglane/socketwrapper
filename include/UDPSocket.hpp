@@ -18,8 +18,6 @@ class UDPSocket : public BaseSocket
 {
 public:
 
-    using Ptr = std::shared_ptr<UDPSocket>;
-
     /**
      * Constructor
      * @param family

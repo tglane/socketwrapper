@@ -21,8 +21,6 @@ class TCPSocket : public BaseSocket
 
 public:
 
-    using Ptr = std::shared_ptr<TCPSocket>;
-
     explicit TCPSocket(int family);
 
     /**
