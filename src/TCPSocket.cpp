@@ -8,7 +8,7 @@ namespace socketwrapper
 {
 
 TCPSocket::TCPSocket(int family)
-    : BaseSocket(family, SOCK_STREAM), m_client_addr{}
+    : BaseSocket(family, SOCK_STREAM), m_client_addr{}, m_tcp_state(tcp_state::WAITING)
 {
     m_sockaddr_in.sin_family = (sa_family_t) family;
 
@@ -25,52 +25,47 @@ TCPSocket::TCPSocket(int family)
     else
     {
         int reuse = 1;
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
+        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*) &reuse, sizeof(reuse)) < 0)
             perror("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
+        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*) &reuse, sizeof(reuse)) < 0) {
             throw SetSockOptException();
         }
 #endif
-        m_created = true;
-        m_closed = false;
+        m_socket_state = socket_state::CREATED;
     }
 }
 
-TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, bool bound, bool accepted)
-    : BaseSocket{family, SOCK_STREAM, socket_fd, own_addr, bound}, m_client_addr{}, m_accepted{accepted}, m_listening{false}, m_connected{false}
-{
-    m_created = true;
-    m_closed = false;
-}
+TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state)
+    : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
+{}
 
-void TCPSocket::listen(int queuesize)
-{
-    if((::listen(m_sockfd, queuesize)) != 0)
+void TCPSocket::listen(int queuesize) {
+    if (m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
     {
-        std::cout << "Error setting socket in listening mode" << std::endl;
-        throw SocketListenException();
-    }
-    else
-    {
-        m_listening = true;
+        if ((::listen(m_sockfd, queuesize)) != 0) {
+            std::cout << "Error setting socket in listening mode" << std::endl;
+            throw SocketListenException();
+        } else {
+            m_tcp_state = tcp_state::LISTENING;
+        }
     }
 }
 
 void TCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    sockaddr_in server = {};
-    server.sin_family = AF_INET;
-    server.sin_port = htons((in_port_t) port_to);
-    server.sin_addr.s_addr = htonl(addr_to);
+    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
+    {
+        sockaddr_in server = {};
+        server.sin_family = AF_INET;
+        server.sin_port = htons((in_port_t) port_to);
+        server.sin_addr.s_addr = htonl(addr_to);
 
-    if((::connect(m_sockfd, (sockaddr*) &server, sizeof(server))) != 0)
-    {
-        throw SocketConnectingException();
-    }
-    else
-    {
-        m_connected = true;
+        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) {
+            throw SocketConnectingException();
+        } else {
+            m_tcp_state = tcp_state::CONNECTED;
+        }
     }
 }
 
@@ -83,21 +78,29 @@ void TCPSocket::connect(int port_to, const string &addr_to)
 
 std::unique_ptr<TCPSocket> TCPSocket::accept()
 {
-    socklen_t len = sizeof(m_client_addr);
-    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
-    if(conn_fd < 0)
+    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
     {
-        throw SocketAcceptingException();
-    }
 
-    std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, false, true));
-    return connSock;
+        socklen_t len = sizeof(m_client_addr);
+        int conn_fd = ::accept(m_sockfd, (sockaddr *) &m_client_addr, &len);
+        if (conn_fd < 0) {
+            throw SocketAcceptingException();
+        }
+
+        std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED));
+        return connSock;
+    }
+    else
+    {
+        return std::make_unique<TCPSocket>(m_family);
+    }
 }
 
 std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-    if(m_connected || m_accepted) {
+
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         /* Read the data */
         int ret = ::read(m_sockfd, buffer.get(), size);
         if(ret < 0)
@@ -111,7 +114,7 @@ std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
     return buffer;
 }
 
-vector<char> TCPSocket::readVector(unsigned int size)
+vector<char> TCPSocket::read_vector(unsigned int size)
 {
     std::unique_ptr<char[]> buffer = this->read(size);
     vector<char> buffer_vector(buffer.get(), buffer.get() + size + 1);
@@ -121,7 +124,7 @@ vector<char> TCPSocket::readVector(unsigned int size)
 
 void TCPSocket::write(const char *buffer)
 {
-    if(m_connected || m_accepted)
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         /* Send the actual data */
         if(send(m_sockfd, buffer, std::strlen(buffer), 0) < 0)
@@ -140,7 +143,8 @@ std::unique_ptr<char[]> TCPSocket::read_all()
 {
     int available = bytes_available();
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
-    if(m_connected || m_accepted)
+
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         int ret = ::read(m_sockfd, buffer.get(), available);
         if(ret < 0)
@@ -159,7 +163,7 @@ vector<char> TCPSocket::read_all_vector()
     int available = bytes_available();
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
 
-    if(m_connected || m_accepted)
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         int ret = ::read(m_sockfd, buffer.get(), available);
         if(ret < 0)
@@ -177,9 +181,25 @@ vector<char> TCPSocket::read_all_vector()
 
 int TCPSocket::bytes_available()
 {
-    int bytes;
-    ioctl(m_sockfd, FIONREAD, &bytes);
-    return bytes;
+    if(m_socket_state != socket_state::CLOSED)
+    {
+        int bytes;
+        ioctl(m_sockfd, FIONREAD, &bytes);
+        return bytes;
+    }
+}
+
+void TCPSocket::close()
+{
+    if(m_socket_state != socket_state::CLOSED)
+    {
+        if (::close(m_sockfd) == -1) {
+            throw SocketCloseException();
+        } else {
+            m_socket_state = socket_state::CLOSED;
+            m_tcp_state = tcp_state::WAITING;
+        }
+    }
 }
 
 }

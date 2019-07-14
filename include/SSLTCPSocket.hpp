@@ -24,7 +24,7 @@ public:
 
     ~SSLTCPSocket() override;
 
-    virtual void close() override;
+    void close() override;
 
     /**
      * @brief Connects to a server and initiates the tls/ssl-handshake
@@ -47,7 +47,7 @@ public:
      */
     std::unique_ptr<char[]> read(unsigned int size) override;
 
-    vector<char> readVector(unsigned int size) override;
+    vector<char> read_vector(unsigned int size) override;
 
     /**
      * @brief Writes content of param buffer in a existing ssl/tsl connection
@@ -63,7 +63,7 @@ public:
 
 protected:
 
-    SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound, int family, const char* cert, const char* key);
+    SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, const char* cert, const char* key);
 
     SSL_CTX* m_context; /// SSL context used for the ssl connection
     SSL* m_ssl; /// SSL Object
@@ -72,7 +72,7 @@ protected:
     string m_key;
 
     static bool ssl_initialized; /// flag indicates whether ssl is already initialized or not
-
+    static int ssl_socket_count;
 };
 
 }

@@ -67,7 +67,7 @@ protected:
 
     BaseSocket(int family, int sock_type);
 
-    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, bool bound);
+    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state);
 
     BaseSocket() = default;
 
@@ -78,9 +78,12 @@ protected:
     int m_socktype;
     int m_family;
 
-    bool m_bound = false;
-    bool m_closed = true;
-    bool m_created = false;
+    //bool m_bound = false;
+    //bool m_closed = true;
+    //bool m_created = false;
+
+    int m_socket_state;
+    enum socket_state {CLOSED, CREATED, BOUND};
 
 };
 

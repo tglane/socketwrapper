@@ -8,26 +8,23 @@ namespace socketwrapper
 {
 
 BaseSocket::BaseSocket(int family, int sock_type)
-    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}
+    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}, m_socket_state(socket_state::CLOSED)
 {
     //Unable to create a socket now
 }
 
-BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, bool bound)
-    : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_bound(bound)
+BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state)
+    : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_socket_state(state)
 {}
 
 BaseSocket::~BaseSocket()
 {
-    if(!m_closed)
-    {
-        this->close();
-    }
+    this->close();
 }
 
 void BaseSocket::bind(const in_addr_t& address, int port)
 {
-    if(m_bound)
+    if(m_socket_state == socket_state::BOUND)
     {
         throw SocketBoundException();
     }
@@ -41,7 +38,7 @@ void BaseSocket::bind(const in_addr_t& address, int port)
     }
     else
     {
-        m_bound = true;
+        m_socket_state = socket_state::BOUND;
     }
 }
 
@@ -52,12 +49,12 @@ void BaseSocket::bind(const string &address, int port)
 
 void BaseSocket::close()
 {
-    if(!m_closed)
+    if(m_socket_state != socket_state::CLOSED)
     {
         if (::close(m_sockfd) == -1) {
             throw SocketCloseException();
         } else {
-            m_closed = true;
+            m_socket_state = socket_state::CLOSED;
         }
     }
 }

@@ -8,10 +8,14 @@ namespace socketwrapper
 {
 
 bool SSLTCPSocket::ssl_initialized = false;
+int SSLTCPSocket::ssl_socket_count = 0;
 
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
-    : TCPSocket{family}, m_cert{cert}, m_key{key}
+    : TCPSocket(family), m_cert(cert), m_key(key)
 {
+    m_context = nullptr;
+    m_ssl = nullptr;
+
     if(!ssl_initialized)
     {
         /* initialize SSL */
@@ -21,20 +25,16 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
         ERR_load_BIO_strings();
         ERR_load_SSL_strings();
         ssl_initialized = true;
+        ssl_socket_count++;
     }
 
     //TODO Add error handling
 }
 
-SSLTCPSocket::SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, bool bound, int family, const char* cert, const char* key)
-     : TCPSocket{family, socket_fd, own_addr, bound, accepted}
+SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, const char* cert, const char* key)
+     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_cert{cert}, m_key{key}
 {
-    m_created = true;
-    m_closed = false;
-    m_listening = false;
-    m_connected = false;
-
-    if(m_accepted)
+    if(m_tcp_state == tcp_state::ACCEPTED)
     {
         /* Create and configure ssl context ctx */
         m_context = SSL_CTX_new(TLS_server_method());
@@ -52,20 +52,22 @@ SSLTCPSocket::SSLTCPSocket(int socket_fd, sockaddr_in own_addr, bool accepted, b
             throw SocketAcceptingException();
         }
     }
-}
-
-SSLTCPSocket::~SSLTCPSocket()
-{
-    if(!m_closed)
+    else
     {
         this->close();
     }
 }
 
+SSLTCPSocket::~SSLTCPSocket()
+{
+    this->close();
+}
+
 void SSLTCPSocket::close()
 {
-    if(!m_closed)
+    if(m_socket_state != socket_state::CLOSED)
     {
+        ssl_socket_count--;
         if(m_ssl)
         {
             SSL_free(m_ssl);
@@ -80,42 +82,41 @@ void SSLTCPSocket::close()
         if (::close(m_sockfd) == -1) {
             throw SocketCloseException();
         } else {
-            m_closed = true;
+            m_socket_state = socket_state::CLOSED;
+            m_tcp_state = tcp_state::WAITING;
         }
     }
 }
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    sockaddr_in server {};
-    server.sin_family = AF_INET;
-    server.sin_port = htons((in_port_t) port_to);
-    server.sin_addr.s_addr = htonl(addr_to);
-
-    if((::connect(m_sockfd, (sockaddr*) &server, sizeof(server))) != 0)
+    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
     {
-        throw SocketConnectingException();
-    }
-    else
-    {
-        /* Create and configure ssl context ctx */
-        m_context = SSL_CTX_new(TLS_client_method());
-        SSL_CTX_set_ecdh_auto(m_context, 1);
-        SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM);
-        SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM);
 
-        m_ssl = SSL_new(m_context);
-        SSL_set_fd(m_ssl, m_sockfd);
+        sockaddr_in server{};
+        server.sin_family = AF_INET;
+        server.sin_port = htons((in_port_t) port_to);
+        server.sin_addr.s_addr = htonl(addr_to);
 
-        if(int ret = SSL_connect(m_ssl) != 1)
-        {
-            ret = SSL_get_error(m_ssl, ret);
-            ERR_print_errors_fp(stderr);
+        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) {
             throw SocketConnectingException();
-        }
-        else
-        {
-            m_connected = true;
+        } else {
+            /* Create and configure ssl context ctx */
+            m_context = SSL_CTX_new(TLS_client_method());
+            SSL_CTX_set_ecdh_auto(m_context, 1);
+            SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM);
+            SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM);
+
+            m_ssl = SSL_new(m_context);
+            SSL_set_fd(m_ssl, m_sockfd);
+
+            if (int ret = SSL_connect(m_ssl) != 1) {
+                ret = SSL_get_error(m_ssl, ret);
+                ERR_print_errors_fp(stderr);
+                throw SocketConnectingException();
+            } else {
+                m_tcp_state = tcp_state::CONNECTED;
+            }
         }
     }
 }
@@ -124,26 +125,34 @@ void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
     in_addr_t inAddr;
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    SSLTCPSocket::connect(port_to, inAddr);
+    this->connect(port_to, inAddr);
 }
 
 std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 {
-    socklen_t len = sizeof(m_client_addr);
-    int conn_fd = ::accept(m_sockfd, (sockaddr*) &m_client_addr, &len);
-    if(conn_fd < 0)
+    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
     {
-        throw SocketAcceptingException();
+
+        socklen_t len = sizeof(m_client_addr);
+        int conn_fd = ::accept(m_sockfd, (sockaddr *) &m_client_addr, &len);
+        if (conn_fd < 0) {
+            throw SocketAcceptingException();
+        }
+
+        std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED, m_cert.c_str(), m_key.c_str()));
+        return connSock;
+    }
+    else
+    {
+        return std::make_unique<SSLTCPSocket>(m_family, m_cert.c_str(), m_key.c_str());
     }
 
-    std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(conn_fd, m_sockaddr_in, true, false, m_family, m_cert.c_str(), m_key.c_str()));
-    return connSock;
 }
 
 std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-    if(m_connected || m_accepted) {
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         /* Read the data */
         int ret = SSL_read(m_ssl, buffer.get(), size);
         if(ret < 0)
@@ -151,8 +160,7 @@ std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                m_connected = false;
-                m_accepted = false;
+                this->close(); //?
             }
             ERR_print_errors_fp(stderr);
             throw SocketReadException();
@@ -165,7 +173,7 @@ std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
     return buffer;
 }
 
-vector<char> SSLTCPSocket::readVector(unsigned int size)
+vector<char> SSLTCPSocket::read_vector(unsigned int size)
 {
     std::unique_ptr<char[]> buffer = this->read(size);
     vector<char> return_buffer(buffer.get(), buffer.get() + size +1);
@@ -175,7 +183,7 @@ vector<char> SSLTCPSocket::readVector(unsigned int size)
 
 void SSLTCPSocket::write(const char *buffer)
 {
-    if(m_connected || m_accepted)
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         /* Send the actual data */
         if(int ret = SSL_write(m_ssl, buffer, strlen(buffer)) <= 0)
@@ -183,8 +191,7 @@ void SSLTCPSocket::write(const char *buffer)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                m_connected = false;
-                m_accepted = false;
+                this->close(); //?
             }
             ERR_print_errors_fp(stderr);
             throw SocketWriteException();
@@ -200,7 +207,7 @@ void SSLTCPSocket::write(const vector<char>& buffer)
 std::unique_ptr<char[]> SSLTCPSocket::read_all()
 {
     std::unique_ptr<char[]> ret;
-    if(m_connected || m_accepted) {
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         string buffer_string;
         string tmp;
         do {
@@ -219,15 +226,15 @@ std::unique_ptr<char[]> SSLTCPSocket::read_all()
 vector<char> SSLTCPSocket::read_all_vector()
 {
     vector<char> ret;
-    if(m_connected || m_accepted) {
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         string buffer_string;
         string tmp;
         do {
             tmp.clear();
             tmp = this->read(1).get();
             buffer_string += tmp;
+            std::cout << tmp << std::endl;
         } while (!tmp.empty() && tmp[0] != '\n');
-        std::cout << buffer_string << std::endl;
 
         ret = vector<char>(buffer_string.begin(), buffer_string.end());
     }

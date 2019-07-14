@@ -53,7 +53,7 @@ public:
      */
     virtual std::unique_ptr<char[]> read(unsigned int size);
 
-    virtual vector<char> readVector(unsigned int size);
+    virtual vector<char> read_vector(unsigned int size);
 
     /**
      * Sends the content of a buffer to connected client
@@ -79,9 +79,11 @@ public:
      */
     int bytes_available();
 
+    virtual void close() override ;
+
 protected:
 
-    TCPSocket(int family, int socket_fd, sockaddr_in own_addr, bool bound, bool accepted);
+    TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state);
 
     /**
      * Stores the address of a connected client
@@ -89,9 +91,12 @@ protected:
      */
     sockaddr_in m_client_addr;
 
-    bool m_connected = false;
-    bool m_listening = false;
-    bool m_accepted = false;
+    //bool m_connected = false;
+    //bool m_listening = false;
+    //bool m_accepted = false;
+
+    int m_tcp_state;
+    enum tcp_state {WAITING, CONNECTED, LISTENING, ACCEPTED};
 
 };
 

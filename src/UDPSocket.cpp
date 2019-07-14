@@ -28,14 +28,12 @@ UDPSocket::UDPSocket(int family)
         int reuse = 1;
         if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
             perror("setsockopt(SO_REUSEADDR) failed");
-        #ifdef SO_REUSEPORT
-
+#ifdef SO_REUSEPORT
         if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
             throw SetSockOptException();
         }
-        #endif
-        m_created = true;
-        m_closed = false;
+#endif
+        m_socket_state = socket_state::CREATED;
     }
 }
 
@@ -43,7 +41,7 @@ std::unique_ptr<char[]> UDPSocket::receive_from(int bufflen)
 {
     std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(bufflen + 1);
 
-    if(m_created && m_bound)
+    if(m_socket_state != socket_state::CLOSED)
     {
         struct sockaddr_in from = {};
         socklen_t flen = sizeof(from);
@@ -69,7 +67,7 @@ vector<char> UDPSocket::receive_vector(int bufflen)
 
 void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
 {
-    if(m_created) {
+    if(m_socket_state != socket_state::CLOSED) {
         struct sockaddr_in dest = {};
         dest.sin_family = (sa_family_t) m_family;
         dest.sin_port = htons((in_port_t) port);
