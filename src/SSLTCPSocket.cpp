@@ -165,12 +165,15 @@ std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                this->close(); //?
+                this->close();
             }
-            ERR_print_errors_fp(stderr);
-            throw SocketReadException();
+            else
+            {
+                ERR_print_errors_fp(stderr);
+                throw SocketReadException();
+            }
         }
-        else if(ret >= 0)
+        else if(ret > 0)
         {
             buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
         }
@@ -196,10 +199,13 @@ void SSLTCPSocket::write(const char *buffer)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                this->close(); //?
+                this->close();
             }
-            ERR_print_errors_fp(stderr);
-            throw SocketWriteException();
+            else
+            {
+                ERR_print_errors_fp(stderr);
+                throw SocketWriteException();
+            }
         }
     }
     else
@@ -227,7 +233,6 @@ std::unique_ptr<char[]> SSLTCPSocket::read_all()
             }
             catch(SocketReadException &e) { throw e; }
             buffer_string += tmp;
-            if(tmp.empty()) {std::cout << "tmp == new line" << std::endl;}
         } while (!tmp.empty() && tmp[0] != '\n');
 
         ret = std::make_unique<char[]>(buffer_string.size() + 1);
