@@ -68,6 +68,7 @@ void SSLTCPSocket::close()
     {
         if(m_ssl)
         {
+            SSL_shutdown(m_ssl);
             SSL_free(m_ssl);
         }
         if(m_context)
@@ -75,7 +76,7 @@ void SSLTCPSocket::close()
             SSL_CTX_free(m_context);
         }
         EVP_cleanup();
-        //ssl_initialized = false;
+        ssl_initialized = false;
 
         if (::close(m_sockfd) == -1) {
             throw SocketCloseException();
@@ -128,7 +129,7 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
     in_addr inAddr{};
-    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    inet_pton(m_family, addr_to.c_str(), &inAddr.s_addr);
     this->connect(port_to, inAddr.s_addr);
 }
 
@@ -220,13 +221,17 @@ std::unique_ptr<char[]> SSLTCPSocket::read_all()
         string tmp;
         do {
             tmp.clear();
-            tmp = this->read(1).get();
+            try
+            {
+                tmp = this->read(1).get();
+            }
+            catch(SocketReadException &e) { throw e; }
             buffer_string += tmp;
+            if(tmp.empty()) {std::cout << "tmp == new line" << std::endl;}
         } while (!tmp.empty() && tmp[0] != '\n');
 
         ret = std::make_unique<char[]>(buffer_string.size() + 1);
         std::strcpy(ret.get(), buffer_string.c_str());
-
     }
     return ret;
 }
@@ -239,9 +244,12 @@ vector<char> SSLTCPSocket::read_all_vector()
         string tmp;
         do {
             tmp.clear();
-            tmp = this->read(1).get();
+            try
+            {
+                tmp = this->read(1).get();
+            }
+            catch(SocketReadException &e) { throw e; }
             buffer_string += tmp;
-            std::cout << tmp << std::endl;
         } while (!tmp.empty() && tmp[0] != '\n');
 
         ret = vector<char>(buffer_string.begin(), buffer_string.end());
