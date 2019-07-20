@@ -13,7 +13,7 @@ namespace socketwrapper
 {
 
 /**
- * Simple tcp socket class wrapping the c socket to a c++ class
+ * @brief Simple tcp socket class wrapping the c socket to a c++ class
  * Only for tcp sockets
  */
 class TCPSocket : public BaseSocket
@@ -24,42 +24,43 @@ public:
     explicit TCPSocket(int family);
 
     /**
-     * Sets the internal socket in listening mode
-     * @param queuesize max number of clients waiting for establishing a connection
+     * @brief Sets the internal socket in listening mode
+     * @param int queuesize max number of clients waiting for establishing a connection
+     * @throws SocketListenException
      */
     void listen(int queuesize = 5);
 
     /**
-     * Establishes a connection to a server
-     * @param port_to port of the server to connect to
-     * @param addr_to ip address of the server to connect to
+     * @brief Establishes a connection to a server
+     * @param int port_to port of the server to connect to
+     * @param int addr_to ip address of the server to connect to
+     * @throws SocketConnectingException
      */
     virtual void connect(int port_to, in_addr_t addr_to);
 
     virtual void connect(int port_to, const string& addr_to);
 
     /**
-     * Waits for a client to connect to the socket
-     * Usable only after call of listen() and m_listeing and m_bound true
+     * @briefWaits for a client to connect to the socket
+     *  Usable only after call of listen() and m_listeing and m_bound true
      * @return std::unique_ptr<TCPSocket> to handle the established connection
+     * @throws SocketAcceptingException
      */
     std::unique_ptr<TCPSocket> accept();
 
     /**
-     * Reads the content sended by a client and stores it into a buffer
-     * --- can read all sizes but uses two read operations
-     * @brief reads the size of the data in a first read op and reads the actual data in a second op
+     * @brief Reads the content sended by a client and stores it into a buffer
      * @param buff buffer to store the given content in
+     * @throws SocketReadException
      */
     virtual std::unique_ptr<char[]> read(unsigned int size);
 
     virtual vector<char> read_vector(unsigned int size);
 
     /**
-     * Sends the content of a buffer to connected client
-     * --- can send all sizes but uses two send operations
-     * @brief writes the size of the transmitting data in a first op and writes the actual data in a second op
+     * @brief Sends the content of a buffer to connected client
      * @param buff buffer with the content to send
+     * @throws SocketWriteException
      */
     virtual void write(const char* buffer);
 
@@ -67,7 +68,8 @@ public:
 
     /**
      * @brief Reads all bytes available at the socket
-     * @return read bytes
+     * @return buffer containing all read bytes
+     * @throws SocketReadException
      */
     virtual std::unique_ptr<char[]> read_all();
 
@@ -75,11 +77,16 @@ public:
 
     /**
      * @brief Returns the number of bytes available to read
-     * @return number of bytes
+     * @return int
+     * @throws ReadBytesAvailableException
      */
     int bytes_available();
 
-    virtual void close() override ;
+    /**
+     * @brief Closes the internal socket filedescriptor m_sockfd and resets the state
+     * @throws SocketCloseException
+     */
+    void close() override ;
 
 protected:
 
@@ -90,10 +97,6 @@ protected:
      * Only set if the socket is in "server mode" and a client is connected
      */
     sockaddr_in m_client_addr;
-
-    //bool m_connected = false;
-    //bool m_listening = false;
-    //bool m_accepted = false;
 
     int m_tcp_state;
     enum tcp_state {WAITING, CONNECTED, LISTENING, ACCEPTED};

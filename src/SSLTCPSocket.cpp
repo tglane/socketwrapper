@@ -8,7 +8,6 @@ namespace socketwrapper
 {
 
 bool SSLTCPSocket::ssl_initialized = false;
-int SSLTCPSocket::ssl_socket_count = 0;
 
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     : TCPSocket(family), m_cert(cert), m_key(key)
@@ -25,7 +24,6 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
         ERR_load_BIO_strings();
         ERR_load_SSL_strings();
         ssl_initialized = true;
-        ssl_socket_count++;
     }
 
     //TODO Add error handling
@@ -36,15 +34,15 @@ SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int 
 {
     if(m_tcp_state == tcp_state::ACCEPTED)
     {
-        /* Create and configure ssl context ctx */
-        m_context = SSL_CTX_new(TLS_server_method());
-        SSL_CTX_set_ecdh_auto(m_context, 1);
-        SSL_CTX_use_certificate_file(m_context, cert, SSL_FILETYPE_PEM);
-        SSL_CTX_use_PrivateKey_file(m_context, key, SSL_FILETYPE_PEM);
+        try
+        {
+            this->configure_ssl(true);
+        }
+        catch(SSLContextCreationException &e)
+        {
+            throw e;
+        }
 
-        m_ssl = SSL_new(m_context);
-        SSL_set_fd(m_ssl, m_sockfd);
-        /* Wait for client to initiate tsl handshake */
         if(int ret = SSL_accept(m_ssl) != 1)
         {
             ret = SSL_get_error(m_ssl, ret);
@@ -55,6 +53,7 @@ SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int 
     else
     {
         this->close();
+        throw SocketAcceptingException();
     }
 }
 
@@ -67,7 +66,6 @@ void SSLTCPSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
-        ssl_socket_count--;
         if(m_ssl)
         {
             SSL_free(m_ssl);
@@ -77,7 +75,7 @@ void SSLTCPSocket::close()
             SSL_CTX_free(m_context);
         }
         EVP_cleanup();
-        ssl_initialized = false;
+        //ssl_initialized = false;
 
         if (::close(m_sockfd) == -1) {
             throw SocketCloseException();
@@ -90,7 +88,7 @@ void SSLTCPSocket::close()
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
+    if(m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
     {
 
         sockaddr_in server{};
@@ -98,23 +96,29 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
         server.sin_port = htons((in_port_t) port_to);
         server.sin_addr.s_addr = htonl(addr_to);
 
-        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) {
+        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0)
+        {
             throw SocketConnectingException();
-        } else {
-            /* Create and configure ssl context ctx */
-            m_context = SSL_CTX_new(TLS_client_method());
-            SSL_CTX_set_ecdh_auto(m_context, 1);
-            SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM);
-            SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM);
+        }
+        else
+        {
+            try
+            {
+                this->configure_ssl(false);
+            }
+            catch(SSLContextCreationException &e)
+            {
+                throw e;
+            }
 
-            m_ssl = SSL_new(m_context);
-            SSL_set_fd(m_ssl, m_sockfd);
-
-            if (int ret = SSL_connect(m_ssl) != 1) {
+            if (int ret = SSL_connect(m_ssl) != 1)
+            {
                 ret = SSL_get_error(m_ssl, ret);
                 ERR_print_errors_fp(stderr);
                 throw SocketConnectingException();
-            } else {
+            }
+            else
+            {
                 m_tcp_state = tcp_state::CONNECTED;
             }
         }
@@ -123,9 +127,9 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 
 void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
-    in_addr_t inAddr;
+    in_addr inAddr{};
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    this->connect(port_to, inAddr);
+    this->connect(port_to, inAddr.s_addr);
 }
 
 std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
@@ -165,7 +169,7 @@ std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
             ERR_print_errors_fp(stderr);
             throw SocketReadException();
         }
-        else if(ret > 0)
+        else if(ret >= 0)
         {
             buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
         }
@@ -196,6 +200,10 @@ void SSLTCPSocket::write(const char *buffer)
             ERR_print_errors_fp(stderr);
             throw SocketWriteException();
         }
+    }
+    else
+    {
+        throw SocketWriteException();
     }
 }
 
@@ -239,6 +247,36 @@ vector<char> SSLTCPSocket::read_all_vector()
         ret = vector<char>(buffer_string.begin(), buffer_string.end());
     }
     return ret;
+}
+
+void SSLTCPSocket::configure_ssl(bool server)
+{
+    /* Create and configure ssl context ctx */
+    if(server)
+    {
+        m_context = SSL_CTX_new(TLS_server_method());
+    }
+    else
+    {
+        m_context = SSL_CTX_new(TLS_client_method());
+    }
+    if(!m_context)
+    {
+        throw SSLContextCreationException();
+    }
+
+    SSL_CTX_set_ecdh_auto(m_context, 1);
+    if(SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM) <= 0)
+    {
+        throw SSLContextCreationException();
+    }
+    if(SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM) <= 0)
+    {
+        throw SSLContextCreationException();
+    }
+
+    m_ssl = SSL_new(m_context);
+    SSL_set_fd(m_ssl, m_sockfd);
 }
 
 }

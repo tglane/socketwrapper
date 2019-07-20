@@ -9,39 +9,15 @@ namespace socketwrapper
 
 TCPSocket::TCPSocket(int family)
     : BaseSocket(family, SOCK_STREAM), m_client_addr{}, m_tcp_state(tcp_state::WAITING)
-{
-    m_sockaddr_in.sin_family = (sa_family_t) family;
-
-    if(family == AF_UNSPEC)
-    {
-        //Unable to create a socket now
-        return;
-    }
-
-    if((m_sockfd = ::socket(family, SOCK_STREAM, 0)) == -1)
-    {
-        throw SocketCreationException();
-    }
-    else
-    {
-        int reuse = 1;
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*) &reuse, sizeof(reuse)) < 0)
-            perror("setsockopt(SO_REUSEADDR) failed");
-#ifdef SO_REUSEPORT
-        if (setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*) &reuse, sizeof(reuse)) < 0) {
-            throw SetSockOptException();
-        }
-#endif
-        m_socket_state = socket_state::CREATED;
-    }
-}
+{}
 
 TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state)
     : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
 {}
 
-void TCPSocket::listen(int queuesize) {
-    if (m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
+void TCPSocket::listen(int queuesize)
+{
+    if (m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
     {
         if ((::listen(m_sockfd, queuesize)) != 0) {
             std::cout << "Error setting socket in listening mode" << std::endl;
@@ -50,11 +26,15 @@ void TCPSocket::listen(int queuesize) {
             m_tcp_state = tcp_state::LISTENING;
         }
     }
+    else
+    {
+        throw SocketListenException();
+    }
 }
 
 void TCPSocket::connect(int port_to, in_addr_t addr_to)
 {
-    if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::WAITING)
+    if(m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
     {
         sockaddr_in server = {};
         server.sin_family = AF_INET;
@@ -67,13 +47,17 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
             m_tcp_state = tcp_state::CONNECTED;
         }
     }
+    else
+    {
+        throw SocketConnectingException();
+    }
 }
 
 void TCPSocket::connect(int port_to, const string &addr_to)
 {
-    in_addr_t inAddr{};
+    in_addr inAddr{};
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    TCPSocket::connect(port_to, inAddr);
+    TCPSocket::connect(port_to, inAddr.s_addr);
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept()
@@ -92,7 +76,7 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
     }
     else
     {
-        return std::make_unique<TCPSocket>(m_family);
+        throw SocketAcceptingException();
     }
 }
 
@@ -131,6 +115,10 @@ void TCPSocket::write(const char *buffer)
         {
             throw SocketWriteException();
         }
+    }
+    else
+    {
+        throw SocketWriteException();
     }
 }
 
@@ -186,6 +174,10 @@ int TCPSocket::bytes_available()
         int bytes;
         ioctl(m_sockfd, FIONREAD, &bytes);
         return bytes;
+    }
+    else
+    {
+        throw ReadBytesAvailableException();
     }
 }
 

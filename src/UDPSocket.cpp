@@ -9,39 +9,13 @@ namespace socketwrapper
 
 UDPSocket::UDPSocket(int family)
     : BaseSocket{family, SOCK_DGRAM}
-{
-    m_sockaddr_in.sin_family = {(sa_family_t) family};
-
-    if(family == AF_UNSPEC)
-    {
-        //Unable to create a socket now
-        return;
-    }
-
-    m_sockfd = socket(m_sockaddr_in.sin_family, m_socktype, 0);
-    if(m_sockfd == -1)
-    {
-        throw SocketCreationException();
-    }
-    else
-    {
-        int reuse = 1;
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
-            perror("setsockopt(SO_REUSEADDR) failed");
-#ifdef SO_REUSEPORT
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
-            throw SetSockOptException();
-        }
-#endif
-        m_socket_state = socket_state::CREATED;
-    }
-}
+{}
 
 std::unique_ptr<char[]> UDPSocket::receive_from(int bufflen)
 {
     std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(bufflen + 1);
 
-    if(m_socket_state != socket_state::CLOSED)
+    if(m_socket_state != socket_state::SHUT)
     {
         struct sockaddr_in from = {};
         socklen_t flen = sizeof(from);
@@ -67,7 +41,7 @@ vector<char> UDPSocket::receive_vector(int bufflen)
 
 void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
 {
-    if(m_socket_state != socket_state::CLOSED) {
+    if(m_socket_state != socket_state::SHUT) {
         struct sockaddr_in dest = {};
         dest.sin_family = (sa_family_t) m_family;
         dest.sin_port = htons((in_port_t) port);
@@ -82,9 +56,9 @@ void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
 
 void UDPSocket::send_to(const char *buffer_from, int port, const string& addr)
 {
-    in_addr_t inAddr{};
+    in_addr inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    this->send_to(buffer_from, port, inAddr);
+    this->send_to(buffer_from, port, inAddr.s_addr);
 }
 
 void UDPSocket::send_to(const vector<char>& buffer_from, int port, const string &addr)

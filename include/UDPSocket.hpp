@@ -11,7 +11,7 @@ namespace socketwrapper
 {
 
 /**
- * Simple udp socket class wrapping the c sockets into a c++ class
+ * @brief Simple udp socket class wrapping the c sockets into a c++ class
  * Only for udp sockets
  */
 class UDPSocket : public BaseSocket
@@ -20,13 +20,15 @@ public:
 
     /**
      * Constructor
-     * @param family
+     * @param int family
      */
-    UDPSocket(int family);
+    explicit UDPSocket(int family);
 
     /**
-     * Reads the content sended by a client using the underlying socket
-     * @param buffer_to write the received data
+     * @brief Reads the content sended by a client using the underlying socket and returns a buffer containing
+     *  the received message
+     * @param int max number of bytes to read
+     * @throws SocketReadException
      */
     std::unique_ptr<char[]> receive_from(int bufflen);
 
@@ -35,8 +37,9 @@ public:
     /**
      * Sends the data from a buffer a client using the underlying socket
      * @param buffer_from buffer with data to send
-     * @param port of the client
+     * @param int port of the client
      * @param addr of the client
+     * @throws SocketWriteException
      */
     void send_to(const char* buffer_from, int port, in_addr_t addr);
 

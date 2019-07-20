@@ -8,9 +8,9 @@ namespace socketwrapper
 {
 
 BaseSocket::BaseSocket(int family, int sock_type)
-    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}, m_socket_state(socket_state::CLOSED)
+    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}, m_socket_state(socket_state::SHUT)
 {
-    //Unable to create a socket now
+    this->create_new_file_descriptor();
 }
 
 BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state)
@@ -20,6 +20,37 @@ BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own
 BaseSocket::~BaseSocket()
 {
     this->close();
+}
+
+bool BaseSocket::create_new_file_descriptor()
+{
+    m_sockaddr_in.sin_family = {(sa_family_t) m_family};
+
+    if(m_family == AF_UNSPEC)
+    {
+        //Unable to create a socket now
+        return false;
+    }
+
+    m_sockfd = socket(m_sockaddr_in.sin_family, m_socktype, 0);
+    if(m_sockfd == -1)
+    {
+        throw SocketCreationException();
+    }
+    else
+    {
+        int reuse = 1;
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
+            throw SetSockOptException();
+        }
+#ifdef SO_REUSEPORT
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
+            throw SetSockOptException();
+        }
+#endif
+        m_socket_state = socket_state::CREATED;
+        return true;
+    }
 }
 
 void BaseSocket::bind(const in_addr_t& address, int port)

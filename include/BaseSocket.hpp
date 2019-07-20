@@ -18,16 +18,7 @@
 #include <unistd.h> //for close(), ...
 #include <arpa/inet.h> //for inet_addr()
 
-#include "SocketCreationException.hpp"
-#include "SocketCloseException.hpp"
-#include "SocketBoundException.hpp"
-#include "SocketBindException.hpp"
-#include "SocketListenException.hpp"
-#include "SocketConnectingException.hpp"
-#include "SocketAcceptingException.hpp"
-#include "SocketReadException.hpp"
-#include "SocketWriteException.hpp"
-#include "SetSockOptException.hpp"
+#include "BaseException.hpp"
 
 using std::string;
 using std::vector;
@@ -35,12 +26,14 @@ using std::vector;
 namespace socketwrapper {
 
 /**
- * Simple socket wrapper base class
- * Wraps the c socket functions into a c++ socket class
+ * @brief Simple socket wrapper base class that wraps the c socket functions into a c++ socket class
  */
-class BaseSocket {
+class BaseSocket
+{
 
 public:
+
+    BaseSocket() = delete;
 
     virtual ~BaseSocket();
 
@@ -51,17 +44,23 @@ public:
     /**
      * Binds the internal Socket to your local adress and the given port
      * @param port to bind the socket on this port of the host machine
+     * @throws SocketBoundException SocketBindException
      */
     void bind(const in_addr_t& address, int port);
 
     void bind(const string& address, int port);
 
     /**
-     * Closes the internal socket m_sockfd
+     * @brief Closes the internal socket filedescriptor m_sockfd
+     * @throws SocketCloseException
      */
     virtual void close();
 
-    int getSocketDescriptor()  { return m_sockfd; }
+    /**
+     * @brief Returns the underlying socket descriptor to use it without the wrapping class
+     * @return int
+     */
+    int get_socket_descriptor()  { return m_sockfd; }
 
 protected:
 
@@ -69,7 +68,14 @@ protected:
 
     BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state);
 
-    BaseSocket() = default;
+    /**
+     * Sets the internal socket file descriptor
+     * @param int family
+     * @param int sock_type
+     * @return bool
+     * @throws SocketCreationException SetSockOptException
+     */
+    bool create_new_file_descriptor();
 
     sockaddr_in m_sockaddr_in;
 
@@ -78,12 +84,8 @@ protected:
     int m_socktype;
     int m_family;
 
-    //bool m_bound = false;
-    //bool m_closed = true;
-    //bool m_created = false;
-
     int m_socket_state;
-    enum socket_state {CLOSED, CREATED, BOUND};
+    enum socket_state {SHUT, CLOSED, CREATED, BOUND};
 
 };
 
