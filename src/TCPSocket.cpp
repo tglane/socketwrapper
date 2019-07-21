@@ -95,11 +95,12 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
 
 std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
 {
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-
+    //std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
+    char buffer[size +1];
+    int ret {};
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         /* Read the data */
-        int ret = ::read(m_sockfd, buffer.get(), size);
+        ret = ::read(m_sockfd, &buffer, size);
         if(ret < 0)
         {
             throw SocketReadException();
@@ -108,11 +109,14 @@ std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
             buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
         }
     }
-    return buffer;
+    auto ret_buffer = std::make_unique<char[]>(ret);
+    std::copy(buffer, buffer + ret, ret_buffer.get());
+    return ret_buffer;
 }
 
 vector<char> TCPSocket::read_vector(unsigned int size)
 {
+    //TODO implement without heap allocation
     std::unique_ptr<char[]> buffer = this->read(size);
     vector<char> buffer_vector(buffer.get(), buffer.get() + size + 1);
 

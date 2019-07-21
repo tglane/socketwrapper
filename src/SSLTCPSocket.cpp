@@ -192,6 +192,7 @@ std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
 
 vector<char> SSLTCPSocket::read_vector(unsigned int size)
 {
+    //TODO implement without heap allocation
     std::unique_ptr<char[]> buffer = this->read(size);
     vector<char> return_buffer(buffer.get(), buffer.get() + size +1);
 
