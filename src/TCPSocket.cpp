@@ -15,6 +15,19 @@ TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state,
     : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
 {}
 
+void TCPSocket::close()
+{
+    if(m_socket_state != socket_state::CLOSED)
+    {
+        if (::close(m_sockfd) == -1) {
+            throw SocketCloseException();
+        } else {
+            m_socket_state = socket_state::CLOSED;
+            m_tcp_state = tcp_state::WAITING;
+        }
+    }
+}
+
 void TCPSocket::listen(int queuesize)
 {
     if (m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
@@ -178,19 +191,6 @@ int TCPSocket::bytes_available()
     else
     {
         throw ReadBytesAvailableException();
-    }
-}
-
-void TCPSocket::close()
-{
-    if(m_socket_state != socket_state::CLOSED)
-    {
-        if (::close(m_sockfd) == -1) {
-            throw SocketCloseException();
-        } else {
-            m_socket_state = socket_state::CLOSED;
-            m_tcp_state = tcp_state::WAITING;
-        }
     }
 }
 

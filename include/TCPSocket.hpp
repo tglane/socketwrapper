@@ -24,6 +24,12 @@ public:
     explicit TCPSocket(int family);
 
     /**
+     * @brief Closes the internal socket filedescriptor m_sockfd and resets the state
+     * @throws SocketCloseException
+     */
+    void close() override ;
+
+    /**
      * @brief Sets the internal socket in listening mode
      * @param int queuesize max number of clients waiting for establishing a connection
      * @throws SocketListenException
@@ -81,12 +87,6 @@ public:
      * @throws ReadBytesAvailableException
      */
     int bytes_available();
-
-    /**
-     * @brief Closes the internal socket filedescriptor m_sockfd and resets the state
-     * @throws SocketCloseException
-     */
-    void close() override ;
 
 protected:
 
