@@ -156,7 +156,6 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 
 std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
 {
-    //std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
     char buffer[size + 1];
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         /* Read the data */
@@ -231,24 +230,6 @@ void SSLTCPSocket::write(const vector<char>& buffer)
 
 std::unique_ptr<char[]> SSLTCPSocket::read_all()
 {
-    /*std::unique_ptr<char[]> ret;
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
-        string buffer_string;
-        string tmp;
-        do {
-            tmp.clear();
-            try
-            {
-                tmp = this->read(1).get();
-            }
-            catch(SocketReadException &e) { throw e; }
-            buffer_string += tmp;
-        } while (!tmp.empty() && tmp[0] != '\n');
-
-        ret = std::make_unique<char[]>(buffer_string.size() + 1);
-        std::strcpy(ret.get(), buffer_string.c_str());
-    }
-    return ret;*/
     try
     {
         return this->read(16 * 1024);
@@ -261,23 +242,6 @@ std::unique_ptr<char[]> SSLTCPSocket::read_all()
 
 vector<char> SSLTCPSocket::read_all_vector()
 {
-    /*vector<char> ret;
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
-        string buffer_string;
-        string tmp;
-        do {
-            tmp.clear();
-            try
-            {
-                tmp = this->read(1).get();
-            }
-            catch(SocketReadException &e) { throw e; }
-            buffer_string += tmp;
-        } while (!tmp.empty() && tmp[0] != '\n');
-
-        ret = vector<char>(buffer_string.begin(), buffer_string.end());
-    }
-    return ret;*/
     try
     {
         return this->read_vector(16 * 1024);
