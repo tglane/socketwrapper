@@ -68,9 +68,9 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
 
 void TCPSocket::connect(int port_to, const string &addr_to)
 {
-    in_addr inAddr{};
+    in_addr_t inAddr{};
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    TCPSocket::connect(port_to, inAddr.s_addr);
+    TCPSocket::connect(port_to, inAddr);
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept()

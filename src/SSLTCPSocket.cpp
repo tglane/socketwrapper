@@ -128,9 +128,9 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 
 void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
-    in_addr inAddr{};
-    inet_pton(m_family, addr_to.c_str(), &inAddr.s_addr);
-    this->connect(port_to, inAddr.s_addr);
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    this->connect(port_to, inAddr);
 }
 
 std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()

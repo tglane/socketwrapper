@@ -56,9 +56,9 @@ void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
 
 void UDPSocket::send_to(const char *buffer_from, int port, const string& addr)
 {
-    in_addr inAddr{};
+    in_addr_t inAddr{};
     inet_pton(m_family, addr.c_str(), &inAddr);
-    this->send_to(buffer_from, port, inAddr.s_addr);
+    this->send_to(buffer_from, port, inAddr);
 }
 
 void UDPSocket::send_to(const vector<char>& buffer_from, int port, const string &addr)
