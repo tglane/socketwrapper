@@ -130,7 +130,8 @@ void SSLTCPSocket::connect(int port_to, const string &addr_to)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    this->connect(port_to, inAddr);
+
+    this->connect(port_to, ntohl(inAddr));
 }
 
 std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()

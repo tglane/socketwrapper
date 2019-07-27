@@ -70,7 +70,8 @@ void TCPSocket::connect(int port_to, const string &addr_to)
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr_to.c_str(), &inAddr);
-    TCPSocket::connect(port_to, inAddr);
+
+    TCPSocket::connect(port_to, ntohl(inAddr));
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept()

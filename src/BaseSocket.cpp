@@ -75,7 +75,10 @@ void BaseSocket::bind(const in_addr_t& address, int port)
 
 void BaseSocket::bind(const string &address, int port)
 {
-    BaseSocket::bind(htonl(inet_addr(address.c_str())) ,port);
+    in_addr_t inAddr{};
+    inet_pton(m_family, address.c_str(), &inAddr);
+
+    BaseSocket::bind(inAddr ,port);
 }
 
 void BaseSocket::close()
