@@ -5,8 +5,6 @@
 #ifndef SOCKETWRAPPER_BASESOCKET_HPP
 #define SOCKETWRAPPER_BASESOCKET_HPP
 
-#include <iostream>
-
 #include <memory>
 #include <cstring>
 #include <string>
