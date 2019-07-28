@@ -33,7 +33,6 @@ void TCPSocket::listen(int queuesize)
     if (m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
     {
         if ((::listen(m_sockfd, queuesize)) != 0) {
-            std::cout << "Error setting socket in listening mode" << std::endl;
             throw SocketListenException();
         } else {
             m_tcp_state = tcp_state::LISTENING;
