@@ -17,25 +17,14 @@ if(OPENSSL_FOUND)
 endif(OPENSSL_FOUND)
 
 file(GLOB SOURCES src/*.cpp)
-
 include_directories(include)
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+add_library(socketwrapper_shared SHARED ${SOURCES})
+target_link_libraries(socketwrapper_shared ${OPENSSL_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+add_library(socketwrapper_static STATIC ${SOURCES})
+target_link_libraries(socketwrapper_static ${OPENSSL_LIBRARIES})
 
-install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
-
+install(TARGETS socketwrapper_shared DESTINATION lib/)
 file(GLOB HEADERS include/*.hpp)
 install(FILES ${HEADERS} DESTINATION include/${PROJECT_NAME})
-
-#set(exe_src
-#        src/BaseSocket.cpp
-#        src/UDPSocket.cpp
-#        src/TCPSocket.cpp
-#        src/SSLTCPSocket.cpp
-#        main.cpp
-#        )
-
-#add_executable(wrapper_test ${exe_src})
-#target_link_libraries(wrapper_test ${OPENSSL_LIBRARIES})
