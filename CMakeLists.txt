@@ -19,12 +19,12 @@ endif(OPENSSL_FOUND)
 file(GLOB SOURCES src/*.cpp)
 include_directories(include)
 
-add_library(socketwrapper_shared SHARED ${SOURCES})
-target_link_libraries(socketwrapper_shared ${OPENSSL_LIBRARIES})
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
+target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 
 add_library(socketwrapper_static STATIC ${SOURCES})
 target_link_libraries(socketwrapper_static ${OPENSSL_LIBRARIES})
 
-install(TARGETS socketwrapper_shared DESTINATION lib/)
+install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
 file(GLOB HEADERS include/*.hpp)
 install(FILES ${HEADERS} DESTINATION include/${PROJECT_NAME})
