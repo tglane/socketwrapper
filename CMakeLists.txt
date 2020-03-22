@@ -28,3 +28,14 @@ target_link_libraries(socketwrapper_static ${OPENSSL_LIBRARIES})
 install(TARGETS socketwrapper_shared DESTINATION lib/)
 file(GLOB HEADERS include/*.hpp)
 install(FILES ${HEADERS} DESTINATION include/${PROJECT_NAME})
+
+set(exe_src
+        src/BaseSocket.cpp
+        src/UDPSocket.cpp
+        src/TCPSocket.cpp
+        src/SSLTCPSocket.cpp
+        main.cpp
+        )
+
+add_executable(wrapper_test ${exe_src})
+target_link_libraries(wrapper_test ${OPENSSL_LIBRARIES})

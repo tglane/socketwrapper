@@ -34,43 +34,33 @@ bool BaseSocket::create_new_file_descriptor()
 
     m_sockfd = socket(m_sockaddr_in.sin_family, m_socktype, 0);
     if(m_sockfd == -1)
-    {
         throw SocketCreationException();
-    }
-    else
-    {
-        int reuse = 1;
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
-            throw SetSockOptException();
-        }
+    
+    int reuse = 1;
+    if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) 
+        throw SetSockOptException();
+
 #ifdef SO_REUSEPORT
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) {
-            throw SetSockOptException();
-        }
+    if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0) 
+        throw SetSockOptException();
 #endif
-        m_socket_state = socket_state::CREATED;
-        return true;
-    }
+
+    m_socket_state = socket_state::CREATED;
+    return true;
 }
 
 void BaseSocket::bind(const in_addr_t& address, int port)
 {
     if(m_socket_state == socket_state::BOUND)
-    {
         throw SocketBoundException();
-    }
 
     m_sockaddr_in.sin_port = htons((in_port_t) port);
     m_sockaddr_in.sin_addr.s_addr = address;
 
     if((::bind(m_sockfd, (sockaddr*) &m_sockaddr_in, sizeof(struct sockaddr_in))) != 0)
-    {
         throw SocketBindException();
-    }
     else
-    {
         m_socket_state = socket_state::BOUND;
-    }
 }
 
 void BaseSocket::bind(const string &address, int port)
@@ -85,12 +75,12 @@ void BaseSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
-        if (::close(m_sockfd) == -1) {
+        if (::close(m_sockfd) == -1) 
             throw SocketCloseException();
-        } else {
+        else
             m_socket_state = socket_state::CLOSED;
-        }
     }
 }
 
 }
+

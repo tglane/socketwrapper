@@ -19,9 +19,10 @@ void TCPSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
-        if (::close(m_sockfd) == -1) {
+        if (::close(m_sockfd) == -1) 
             throw SocketCloseException();
-        } else {
+        else
+        {
             m_socket_state = socket_state::CLOSED;
             m_tcp_state = tcp_state::WAITING;
         }
@@ -32,11 +33,10 @@ void TCPSocket::listen(int queuesize)
 {
     if (m_socket_state != socket_state::SHUT && m_tcp_state == tcp_state::WAITING)
     {
-        if ((::listen(m_sockfd, queuesize)) != 0) {
+        if ((::listen(m_sockfd, queuesize)) != 0)
             throw SocketListenException();
-        } else {
+        else
             m_tcp_state = tcp_state::LISTENING;
-        }
     }
     else
     {
@@ -53,11 +53,10 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
         server.sin_port = htons((in_port_t) port_to);
         server.sin_addr.s_addr = htonl(addr_to);
 
-        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) {
+        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) 
             throw SocketConnectingException();
-        } else {
+        else
             m_tcp_state = tcp_state::CONNECTED;
-        }
     }
     else
     {
@@ -78,11 +77,10 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
     if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
     {
 
-        socklen_t len = sizeof(m_client_addr);
+       socklen_t len = sizeof(m_client_addr);
         int conn_fd = ::accept(m_sockfd, (sockaddr *) &m_client_addr, &len);
-        if (conn_fd < 0) {
+        if (conn_fd < 0) 
             throw SocketAcceptingException();
-        }
 
         std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED));
         return connSock;
@@ -93,50 +91,37 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
     }
 }
 
-std::unique_ptr<char[]> TCPSocket::read(unsigned int size)
+std::unique_ptr<char[]> TCPSocket::read(size_t size)
 {
-    //std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-    char buffer[size +1];
-    int ret {};
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
-        /* Read the data */
-        ret = ::read(m_sockfd, &buffer, size);
-        if(ret < 0)
-        {
-            throw SocketReadException();
-        }
-        else if(ret > 0) {
-            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
-        }
-    }
-    auto ret_buffer = std::make_unique<char[]>(ret);
-    std::copy(buffer, buffer + ret, ret_buffer.get());
-    return ret_buffer;
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
+    
+    if(this->read_raw(buffer.get(), size) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
-vector<char> TCPSocket::read_vector(unsigned int size)
+vector<char> TCPSocket::read_vector(size_t size)
 {
-    //TODO implement without heap allocation
-    std::unique_ptr<char[]> buffer = this->read(size);
-    vector<char> buffer_vector(buffer.get(), buffer.get() + size + 1);
+    vector<char> buffer;
+    buffer.reserve(size + 1);
 
-    return buffer_vector;
+    if(this->read_raw(buffer.data(), size) < 0)
+        throw SocketReadException();
+    
+    return buffer;
 }
 
-void TCPSocket::write(const char *buffer)
+void TCPSocket::write(const char* buffer)
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         /* Send the actual data */
         if(send(m_sockfd, buffer, std::strlen(buffer), 0) < 0)
-        {
             throw SocketWriteException();
-        }
     }
     else
-    {
         throw SocketWriteException();
-    }
 }
 
 void TCPSocket::write(const vector<char>& buffer)
@@ -146,45 +131,28 @@ void TCPSocket::write(const vector<char>& buffer)
 
 std::unique_ptr<char[]> TCPSocket::read_all()
 {
-    int available = bytes_available();
+    size_t available = bytes_available();
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
 
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
-    {
-        int ret = ::read(m_sockfd, buffer.get(), available);
-        if(ret < 0)
-        {
-            throw SocketReadException();
-        }
-        else if(ret > 0) {
-            buffer[available] = '\0'; //Null-terminating the string
-        }
-    }
+    if(this->read_raw(buffer.get(), available) < 0)
+        throw SocketReadException();
+
     return buffer;
 }
 
 vector<char> TCPSocket::read_all_vector()
 {
-    int available = bytes_available();
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
+    size_t available = bytes_available();
+    vector<char> buffer;
+    buffer.reserve(available + 1);
+    
+    if(this->read_raw(buffer.data(), available) < 0)
+        throw SocketReadException();
 
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
-    {
-        int ret = ::read(m_sockfd, buffer.get(), available);
-        if(ret < 0)
-        {
-            throw SocketReadException();
-        }
-        else if(ret > 0) {
-            buffer[available] = '\0'; //Null-terminating the string
-        }
-    }
-
-    vector<char> buffer_return(buffer.get(), buffer.get() + available +1);
-    return buffer_return;
+    return buffer;
 }
 
-int TCPSocket::bytes_available()
+size_t TCPSocket::bytes_available()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
@@ -196,6 +164,22 @@ int TCPSocket::bytes_available()
     {
         throw ReadBytesAvailableException();
     }
+}
+
+int TCPSocket::read_raw(char* const buffer, size_t size)
+{
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
+    {
+        if(::read(m_sockfd, buffer, size) < 0)
+            throw SocketReadException();
+        else
+        {
+            buffer[size] = '\0';
+            return 0;
+        }
+    }
+    
+    return -1;
 }
 
 }

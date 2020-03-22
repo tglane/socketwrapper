@@ -155,48 +155,25 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 
 }
 
-std::unique_ptr<char[]> SSLTCPSocket::read(unsigned int size)
+std::unique_ptr<char[]> SSLTCPSocket::read(size_t size)
 {
-    char buffer[size + 1];
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
-        /* Read the data */
-        int ret = SSL_read(m_ssl, &buffer, size);
-        if(ret < 0)
-        {
-            ret = SSL_get_error(m_ssl, ret);
-            if(ret == 6) {
-                SSL_shutdown(m_ssl);
-                this->close();
-                //TODO return or throw
-                return std::make_unique<char[]>('\n');
-            }
-            else
-            {
-                ERR_print_errors_fp(stderr);
-                throw SocketReadException();
-            }
-        }
-        else
-        {
-            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
-            auto ret_buff = std::make_unique<char[]>(ret + 1);
-            std::copy(buffer, buffer + ret, ret_buff.get());
-            return ret_buff;
-        }
-    }
-    else
-    {
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
+
+    if(this->read_raw(buffer.get(), size) < 0)
         throw SocketReadException();
-    }
+
+    return buffer;
 }
 
-vector<char> SSLTCPSocket::read_vector(unsigned int size)
+vector<char> SSLTCPSocket::read_vector(size_t size)
 {
-    //TODO implement without heap allocation
-    std::unique_ptr<char[]> buffer = this->read(size);
-    vector<char> return_buffer(buffer.get(), buffer.get() + size +1);
+    vector<char> buffer;
+    buffer.reserve(size);
 
-    return return_buffer;
+    if(this->read_raw(buffer.data(), size) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
 void SSLTCPSocket::write(const char *buffer)
@@ -231,26 +208,23 @@ void SSLTCPSocket::write(const vector<char>& buffer)
 
 std::unique_ptr<char[]> SSLTCPSocket::read_all()
 {
-    try
-    {
-        return this->read(16 * 1024);
-    }
-    catch(SocketReadException &e)
-    {
-        throw e;
-    }
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(16 * 1024 + 1);
+
+    if(this->read_raw(buffer.get(), 16 * 1024) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
 vector<char> SSLTCPSocket::read_all_vector()
 {
-    try
-    {
-        return this->read_vector(16 * 1024);
-    }
-    catch(SocketReadException &e)
-    {
-        throw e;
-    }
+    vector<char> buffer;
+    buffer.reserve(16 * 1024 + 1);
+
+    if(this->read_raw(buffer.data(), 16 * 1024) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
 void SSLTCPSocket::configure_ssl(bool server)
@@ -283,4 +257,40 @@ void SSLTCPSocket::configure_ssl(bool server)
     SSL_set_fd(m_ssl, m_sockfd);
 }
 
+int SSLTCPSocket::read_raw(char* const buffer, size_t size)
+{
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
+        /* Read the data */
+        int ret = SSL_read(m_ssl, buffer, size);
+        if(ret < 0)
+        {
+            ret = SSL_get_error(m_ssl, ret);
+            if(ret == 6) {
+                SSL_shutdown(m_ssl);
+                this->close();
+                // TODO throw new ssl exception
+                buffer[size] = '\0';
+                return -1;
+            }
+            else
+            {
+                ERR_print_errors_fp(stderr);
+                throw SocketReadException();
+            }
+        }
+        else
+        {
+            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
+            return 0;
+        }
+    }
+    else
+    {
+        throw SocketReadException();
+    }
+
+    return -1;
 }
+
+}
+

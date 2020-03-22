@@ -11,32 +11,27 @@ UDPSocket::UDPSocket(int family)
     : BaseSocket{family, SOCK_DGRAM}
 {}
 
-std::unique_ptr<char[]> UDPSocket::receive_from(int bufflen)
+std::unique_ptr<char[]> UDPSocket::receive_from(size_t size)
 {
-    std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(bufflen + 1);
+    std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(size + 1);
+    struct sockaddr_in from = {};
 
-    if(m_socket_state != socket_state::SHUT)
-    {
-        struct sockaddr_in from = {};
-        socklen_t flen = sizeof(from);
-        int ret = ::recvfrom(m_sockfd, buffer_to.get(), (size_t) bufflen, 0, (struct sockaddr*) &from, &flen);
-        if(ret < 0)
-        {
-            throw SocketReadException();
-        }
-        else if(ret > 0) {
-            buffer_to[bufflen] = '\0';
-        }
-    }
+    if(this->read_raw(buffer_to.get(), size, from) < 0)
+        throw SocketReadException();
+
     return buffer_to;
 }
 
-vector<char> UDPSocket::receive_vector(int bufflen)
+vector<char> UDPSocket::receive_vector(size_t size)
 {
-    std::unique_ptr<char[]> buffer = this->receive_from(bufflen);
-    vector<char> return_buffer(buffer.get(), buffer.get() + bufflen + 1);
+    struct sockaddr_in from = {};
+    vector<char> buffer;
+    buffer.reserve(size);
 
-    return return_buffer;
+    if(this->read_raw(buffer.data(), size, from) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
 void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
@@ -68,4 +63,25 @@ void UDPSocket::send_to(const vector<char>& buffer_from, int port, const string 
     this->send_to(buffer_from.data(), port, inAddr);
 }
 
+int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from)
+{
+    if(m_socket_state != socket_state::SHUT)
+    {
+        socklen_t flen = sizeof(from);
+        int ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) &from, &flen);
+        if(ret < 0)
+        {
+            throw SocketReadException();
+        }
+        else if(ret > 0) 
+        {
+            buffer[size] = '\0';
+            return 0;
+        }
+    }
+
+    return -1;
 }
+
+}
+

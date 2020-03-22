@@ -30,9 +30,9 @@ public:
      * @param int max number of bytes to read
      * @throws SocketReadException
      */
-    std::unique_ptr<char[]> receive_from(int bufflen);
+    std::unique_ptr<char[]> receive_from(size_t size);
 
-    vector<char> receive_vector(int bufflen);
+    vector<char> receive_vector(size_t size);
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -47,8 +47,18 @@ public:
 
     void send_to(const vector<char>& buffer_from, int port, const string& addr);
 
+private:
+
+    /**
+     * @brief Read data from an underlying raw socket
+     * @param buffer to read into
+     * @param size of the data to read from socket
+     */
+    int read_raw(char* const buffer, size_t size, sockaddr_in& from);
+
 };
 
 }
 
 #endif //SOCKETWRAPPER_UDPSOCKET_HPP
+

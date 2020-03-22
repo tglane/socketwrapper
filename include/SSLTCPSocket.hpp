@@ -55,9 +55,9 @@ public:
      * @return buffer with read data
      * @throws SocketReadException
      */
-    std::unique_ptr<char[]> read(unsigned int size) override;
+    std::unique_ptr<char[]> read(size_t size) override;
 
-    vector<char> read_vector(unsigned int size) override;
+    vector<char> read_vector(size_t size) override;
 
     /**
      * @brief Writes content of param buffer in a existing ssl/tsl connection
@@ -91,6 +91,13 @@ protected:
      */
     void configure_ssl(bool server);
 
+    /**
+     * @brief Read from the raw unix socket into the given buffer
+     * @param buffer pointer to the buffer to read into
+     * @param size size to read from the socket
+     */
+    int read_raw(char* const buffer, size_t size);
+
     SSL_CTX* m_context; /// SSL context used for the ssl connection
     SSL* m_ssl; /// SSL Object
 
@@ -103,3 +110,4 @@ protected:
 }
 
 #endif //SOCKETWRAPPER_SSLTCPSOCKET_HPP
+

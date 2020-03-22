@@ -81,3 +81,4 @@ public:
 }
 
 #endif //SOCKETWRAPPER_BASEEXCEPTION_HPP
+

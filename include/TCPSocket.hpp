@@ -59,9 +59,9 @@ public:
      * @param buff buffer to store the given content in
      * @throws SocketReadException
      */
-    virtual std::unique_ptr<char[]> read(unsigned int size);
+    virtual std::unique_ptr<char[]> read(size_t size);
 
-    virtual vector<char> read_vector(unsigned int size);
+    virtual vector<char> read_vector(size_t size);
 
     /**
      * @brief Sends the content of a buffer to connected client
@@ -86,11 +86,13 @@ public:
      * @return int
      * @throws ReadBytesAvailableException
      */
-    int bytes_available();
+    size_t bytes_available();
 
 protected:
 
     TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state);
+
+    int read_raw(char* const buffer, size_t size);
 
     /**
      * Stores the address of a connected client
@@ -106,3 +108,4 @@ protected:
 }
 
 #endif //SOCKETWRAPPER_TCPSOCKET_HPP
+
