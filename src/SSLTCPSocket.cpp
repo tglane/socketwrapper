@@ -30,7 +30,7 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
 }
 
 SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, const char* cert, const char* key)
-     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_cert{cert}, m_key{key}
+     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_cert(cert), m_key(key)
 {
     if(m_tcp_state == tcp_state::ACCEPTED)
     {
@@ -57,9 +57,31 @@ SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int 
     }
 }
 
+SSLTCPSocket::SSLTCPSocket(SSLTCPSocket&& other)
+    : TCPSocket(std::move(other))
+{
+    *this = std::move(other);
+}
+
 SSLTCPSocket::~SSLTCPSocket()
 {
     this->close();
+}
+
+SSLTCPSocket& SSLTCPSocket::operator=(SSLTCPSocket&& other)
+{
+    TCPSocket::operator=(std::move(other));
+    this->m_context = other.m_context;
+    this->m_ssl = other.m_ssl;
+    this->m_cert = other.m_cert;
+    this->m_key = other.m_key;
+
+    other.m_context = nullptr;
+    other.m_ssl = nullptr;
+    other.m_cert = "";
+    other.m_key = "";
+
+    return *this;
 }
 
 void SSLTCPSocket::close()

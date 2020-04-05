@@ -24,6 +24,10 @@ public:
      */
     explicit UDPSocket(int family);
 
+    UDPSocket(UDPSocket&& other);
+
+    UDPSocket& operator=(UDPSocket&& other);
+
     /**
      * @brief Reads the content sended by a client using the underlying socket and returns a buffer containing
      *  the received message

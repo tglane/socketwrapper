@@ -23,6 +23,10 @@ public:
 
     SSLTCPSocket(int family, const char* cert, const char* key);
 
+    SSLTCPSocket(SSLTCPSocket&& other);
+
+    SSLTCPSocket& operator=(SSLTCPSocket&& other);
+
     ~SSLTCPSocket() override;
 
     /**

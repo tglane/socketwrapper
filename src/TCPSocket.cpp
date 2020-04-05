@@ -15,6 +15,24 @@ TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state,
     : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
 {}
 
+TCPSocket::TCPSocket(TCPSocket&& other)
+    : BaseSocket(std::move(other))
+{
+    *this = std::move(other);
+}
+
+TCPSocket& TCPSocket::operator=(TCPSocket&& other)
+{
+    BaseSocket::operator=(std::move(other));
+    this->m_client_addr = other.m_client_addr;
+    this->m_tcp_state = other.m_tcp_state;
+
+    other.m_client_addr = sockaddr_in();
+    other.m_tcp_state = tcp_state::WAITING;
+
+    return *this;
+}
+
 void TCPSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)

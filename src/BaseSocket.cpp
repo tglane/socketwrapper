@@ -17,9 +17,29 @@ BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own
     : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_socket_state(state)
 {}
 
+BaseSocket::BaseSocket(BaseSocket&& other)
+{
+    *this = std::move(other);
+}
+
 BaseSocket::~BaseSocket()
 {
     this->close();
+}
+
+BaseSocket& BaseSocket::operator=(BaseSocket&& other)
+{
+    this->m_sockfd = other.m_sockfd;
+    this->m_socktype = other.m_socktype;
+    this->m_family = other.m_family;
+    this->m_socket_state = other.m_socket_state;
+
+    other.m_sockfd = 0;
+    other.m_socktype = 0;
+    other.m_family = 0;
+    other.m_socket_state = socket_state::SHUT;
+
+    return *this;
 }
 
 bool BaseSocket::create_new_file_descriptor()

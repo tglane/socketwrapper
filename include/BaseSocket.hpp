@@ -66,6 +66,10 @@ protected:
 
     BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state);
 
+    BaseSocket(BaseSocket&& other);
+
+    BaseSocket& operator=(BaseSocket&& other);
+    
     /**
      * Sets the internal socket file descriptor
      * @param int family

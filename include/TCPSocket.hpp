@@ -23,6 +23,10 @@ public:
 
     explicit TCPSocket(int family);
 
+    TCPSocket(TCPSocket&& other);
+
+    TCPSocket& operator=(TCPSocket&& other);
+
     /**
      * @brief Closes the internal socket filedescriptor m_sockfd and resets the state
      * @throws SocketCloseException

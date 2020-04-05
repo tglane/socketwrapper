@@ -8,8 +8,18 @@ namespace socketwrapper
 {
 
 UDPSocket::UDPSocket(int family)
-    : BaseSocket{family, SOCK_DGRAM}
+    : BaseSocket(family, SOCK_DGRAM)
 {}
+
+UDPSocket::UDPSocket(UDPSocket&& other)
+    : BaseSocket(std::move(other))
+{}
+
+UDPSocket& UDPSocket::operator=(UDPSocket&& other)
+{
+    BaseSocket::operator=(std::move(other));
+    return *this;
+}
 
 std::unique_ptr<char[]> UDPSocket::receive_from(size_t size)
 {
