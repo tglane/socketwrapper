@@ -31,7 +31,7 @@ public:
      * @brief Closes the internal socket filedescriptor m_sockfd and resets the state
      * @throws SocketCloseException
      */
-    void close() override ;
+    void close() override;
 
     /**
      * @brief Sets the internal socket in listening mode
@@ -48,7 +48,11 @@ public:
      */
     virtual void connect(int port_to, in_addr_t addr_to);
 
-    virtual void connect(int port_to, const string& addr_to);
+    virtual void connect(int port_to, std::string_view addr_to);
+
+    virtual std::future<bool> connect_async(int port, in_addr_t addr_to, const std::function<bool(TCPSocket&)>& callback);
+
+    virtual std::future<bool> connect_async(int port, std::string_view addr_to, const std::function<bool(TCPSocket&)>& callback);
 
     /**
      * @briefWaits for a client to connect to the socket
@@ -58,45 +62,47 @@ public:
      */
     std::unique_ptr<TCPSocket> accept();
 
+    std::future<bool> accept_async(const std::function<bool(TCPSocket&)>& callback);
+
     /**
      * @brief Reads the content sended by a client and stores it into a buffer
      * @param buff buffer to store the given content in
      * @throws SocketReadException
      */
-    virtual std::unique_ptr<char[]> read(size_t size);
+    virtual std::unique_ptr<char[]> read(size_t size) const;
 
-    virtual vector<char> read_vector(size_t size);
+    virtual std::vector<char> read_vector(size_t size) const;
 
     /**
      * @brief Sends the content of a buffer to connected client
      * @param buff buffer with the content to send
      * @throws SocketWriteException
      */
-    virtual void write(const char* buffer);
+    virtual void write(const char* buffer) const;
 
-    virtual void write(const vector<char>& buffer);
+    virtual void write(const std::vector<char>& buffer) const;
 
     /**
      * @brief Reads all bytes available at the socket
      * @return buffer containing all read bytes
      * @throws SocketReadException
      */
-    virtual std::unique_ptr<char[]> read_all();
+    virtual std::unique_ptr<char[]> read_all() const;
 
-    virtual vector<char> read_all_vector();
+    virtual std::vector<char> read_all_vector() const;
 
     /**
      * @brief Returns the number of bytes available to read
      * @return int
      * @throws ReadBytesAvailableException
      */
-    size_t bytes_available();
+    size_t bytes_available() const;
 
 protected:
 
     TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state);
 
-    int read_raw(char* const buffer, size_t size);
+    int read_raw(char* const buffer, size_t size) const;
 
     /**
      * Stores the address of a connected client
@@ -105,7 +111,7 @@ protected:
     sockaddr_in m_client_addr;
 
     int m_tcp_state;
-    enum tcp_state {WAITING, CONNECTED, LISTENING, ACCEPTED};
+    enum tcp_state { WAITING, CONNECTED, LISTENING, ACCEPTED };
 
 };
 

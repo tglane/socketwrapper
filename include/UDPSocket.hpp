@@ -16,6 +16,7 @@ namespace socketwrapper
  */
 class UDPSocket : public BaseSocket
 {
+
 public:
 
     /**
@@ -34,9 +35,9 @@ public:
      * @param int max number of bytes to read
      * @throws SocketReadException
      */
-    std::unique_ptr<char[]> receive_from(size_t size);
+    std::unique_ptr<char[]> receive_from(size_t size) const;
 
-    vector<char> receive_vector(size_t size);
+    std::vector<char> receive_vector(size_t size) const;
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -45,11 +46,11 @@ public:
      * @param addr of the client
      * @throws SocketWriteException
      */
-    void send_to(const char* buffer_from, int port, in_addr_t addr);
+    void send_to(const char* buffer_from, int port, in_addr_t addr) const;
 
-    void send_to(const char* buffer_from, int port, const string& addr);
+    void send_to(const char* buffer_from, int port, std::string_view addr) const;
 
-    void send_to(const vector<char>& buffer_from, int port, const string& addr);
+    void send_to(const std::vector<char>& buffer_from, int port, std::string_view addr) const;
 
 private:
 
@@ -58,7 +59,7 @@ private:
      * @param buffer to read into
      * @param size of the data to read from socket
      */
-    int read_raw(char* const buffer, size_t size, sockaddr_in& from);
+    int read_raw(char* const buffer, size_t size, sockaddr_in& from) const;
 
 };
 

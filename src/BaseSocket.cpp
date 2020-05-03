@@ -83,10 +83,10 @@ void BaseSocket::bind(const in_addr_t& address, int port)
         m_socket_state = socket_state::BOUND;
 }
 
-void BaseSocket::bind(const string &address, int port)
+void BaseSocket::bind(std::string_view address, int port)
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, address.c_str(), &inAddr);
+    inet_pton(m_family, address.data(), &inAddr);
 
     BaseSocket::bind(inAddr ,port);
 }
@@ -100,6 +100,32 @@ void BaseSocket::close()
         else
             m_socket_state = socket_state::CLOSED;
     }
+}
+
+int BaseSocket::resolve_hostname(const char* host_name, sockaddr_in* addr_out) const
+{
+    int ret;
+    addrinfo* resultList = NULL;
+    addrinfo hints = {};
+    int result = -1;
+
+    hints.ai_family = m_family;
+    hints.ai_socktype = m_socktype;
+
+    ret = getaddrinfo(host_name, NULL, &hints, &resultList);
+
+    result = (ret == 0) ? 1 : -1;
+    if(result != -1)
+    {
+        *addr_out = *(sockaddr_in*)(resultList->ai_addr);
+        result = 0;
+    }
+    
+    if(resultList != NULL)
+    {
+        ::freeaddrinfo(resultList);
+    }
+    return result;    
 }
 
 }

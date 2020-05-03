@@ -71,7 +71,7 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
         server.sin_port = htons((in_port_t) port_to);
         server.sin_addr.s_addr = htonl(addr_to);
 
-        if ((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) 
+        if((::connect(m_sockfd, (sockaddr *) &server, sizeof(server))) != 0) 
             throw SocketConnectingException();
         else
             m_tcp_state = tcp_state::CONNECTED;
@@ -82,13 +82,37 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
     }
 }
 
-void TCPSocket::connect(int port_to, const string &addr_to)
+void TCPSocket::connect(int port_to, std::string_view addr_to)
 {
-    in_addr_t inAddr{};
-    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    in_addr_t in_addr{};
+    inet_pton(m_family, addr_to.data(), &in_addr);
 
-    TCPSocket::connect(port_to, ntohl(inAddr));
+    TCPSocket::connect(port_to, ntohl(in_addr));
 }
+
+std::future<bool> TCPSocket::connect_async(int port, in_addr_t addr_to, const std::function<bool(TCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
+        this->connect(port, addr_to);
+        return callback(*this);
+    });
+}
+
+std::future<bool> TCPSocket::connect_async(int port, std::string_view addr_to, const std::function<bool(TCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
+        in_addr_t in_addr{};
+        inet_pton(this->m_family, addr_to.data(), &in_addr);
+            
+        this->connect(port, ntohl(in_addr));
+        return callback(*this);
+    });
+}
+
+// std::future<bool> TCPSocket::connect_async_by_hostname(int port, const string& hostname, const std::function<bool(TCPSocket&)>& callback)
+// {
+//     return std::async(std::launch::async, [this, port, hostname, const 
+// }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept()
 {
@@ -97,7 +121,7 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
 
        socklen_t len = sizeof(m_client_addr);
         int conn_fd = ::accept(m_sockfd, (sockaddr *) &m_client_addr, &len);
-        if (conn_fd < 0) 
+        if(conn_fd < 0) 
             throw SocketAcceptingException();
 
         std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED));
@@ -109,7 +133,15 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
     }
 }
 
-std::unique_ptr<char[]> TCPSocket::read(size_t size)
+std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [&]() {
+        std::unique_ptr<TCPSocket> conn = this->accept();
+        return callback(*conn);
+    });
+}
+
+std::unique_ptr<char[]> TCPSocket::read(size_t size) const
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
     
@@ -119,9 +151,9 @@ std::unique_ptr<char[]> TCPSocket::read(size_t size)
     return buffer;
 }
 
-vector<char> TCPSocket::read_vector(size_t size)
+std::vector<char> TCPSocket::read_vector(size_t size) const
 {
-    vector<char> buffer;
+    std::vector<char> buffer;
     buffer.reserve(size + 1);
 
     if(this->read_raw(buffer.data(), size) < 0)
@@ -130,7 +162,7 @@ vector<char> TCPSocket::read_vector(size_t size)
     return buffer;
 }
 
-void TCPSocket::write(const char* buffer)
+void TCPSocket::write(const char* buffer) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
@@ -142,12 +174,12 @@ void TCPSocket::write(const char* buffer)
         throw SocketWriteException();
 }
 
-void TCPSocket::write(const vector<char>& buffer)
+void TCPSocket::write(const std::vector<char>& buffer) const
 {
     this->write(buffer.data());
 }
 
-std::unique_ptr<char[]> TCPSocket::read_all()
+std::unique_ptr<char[]> TCPSocket::read_all() const
 {
     size_t available = bytes_available();
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
@@ -158,10 +190,10 @@ std::unique_ptr<char[]> TCPSocket::read_all()
     return buffer;
 }
 
-vector<char> TCPSocket::read_all_vector()
+std::vector<char> TCPSocket::read_all_vector() const
 {
     size_t available = bytes_available();
-    vector<char> buffer;
+    std::vector<char> buffer;
     buffer.reserve(available + 1);
     
     if(this->read_raw(buffer.data(), available) < 0)
@@ -170,7 +202,7 @@ vector<char> TCPSocket::read_all_vector()
     return buffer;
 }
 
-size_t TCPSocket::bytes_available()
+size_t TCPSocket::bytes_available() const
 {
     if(m_socket_state != socket_state::CLOSED)
     {
@@ -184,7 +216,7 @@ size_t TCPSocket::bytes_available()
     }
 }
 
-int TCPSocket::read_raw(char* const buffer, size_t size)
+int TCPSocket::read_raw(char* const buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {

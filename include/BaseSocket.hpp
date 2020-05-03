@@ -8,7 +8,10 @@
 #include <memory>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
+#include <future>
+
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h> //for struct sockaddr_in
@@ -17,9 +20,6 @@
 #include <arpa/inet.h> //for inet_addr()
 
 #include "BaseException.hpp"
-
-using std::string;
-using std::vector;
 
 namespace socketwrapper {
 
@@ -46,7 +46,7 @@ public:
      */
     void bind(const in_addr_t& address, int port);
 
-    void bind(const string& address, int port);
+    void bind(std::string_view address, int port);
 
     /**
      * @brief Closes the internal socket filedescriptor m_sockfd
@@ -58,7 +58,7 @@ public:
      * @brief Returns the underlying socket descriptor to use it without the wrapping class
      * @return int
      */
-    int get_socket_descriptor()  { return m_sockfd; }
+    int get_socket_descriptor() const { return m_sockfd; }
 
 protected:
 
@@ -78,6 +78,8 @@ protected:
      * @throws SocketCreationException SetSockOptException
      */
     bool create_new_file_descriptor();
+
+    int resolve_hostname(const char* host_name, sockaddr_in* addr_out) const;
 
     sockaddr_in m_sockaddr_in;
 

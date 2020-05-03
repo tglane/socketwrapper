@@ -148,12 +148,31 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
     }
 }
 
-void SSLTCPSocket::connect(int port_to, const string &addr_to)
+void SSLTCPSocket::connect(int port_to, std::string_view addr_to)
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, addr_to.c_str(), &inAddr);
+    inet_pton(m_family, addr_to.data(), &inAddr);
 
     this->connect(port_to, ntohl(inAddr));
+}
+
+std::future<bool> SSLTCPSocket::connect_async(int port, in_addr_t addr_to, const std::function<bool(SSLTCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
+        this->connect(port, addr_to);
+        return callback(*this);
+    });
+}
+
+std::future<bool> SSLTCPSocket::connect_async(int port, std::string_view addr_to, const std::function<bool(SSLTCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
+        in_addr_t in_addr{};
+        inet_pton(this->m_family, addr_to.data(), &in_addr);
+
+        this->connect(port, ntohl(in_addr));
+        return callback(*this);
+    });
 }
 
 std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
@@ -177,7 +196,15 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 
 }
 
-std::unique_ptr<char[]> SSLTCPSocket::read(size_t size)
+std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSocket&)>& callback)
+{
+    return std::async(std::launch::async, [&]() -> bool {
+            std::unique_ptr<SSLTCPSocket> conn = this->accept();
+        return callback(*conn);
+    });
+}
+
+std::unique_ptr<char[]> SSLTCPSocket::read(size_t size) const
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
 
@@ -187,9 +214,9 @@ std::unique_ptr<char[]> SSLTCPSocket::read(size_t size)
     return buffer;
 }
 
-vector<char> SSLTCPSocket::read_vector(size_t size)
+std::vector<char> SSLTCPSocket::read_vector(size_t size) const
 {
-    vector<char> buffer;
+    std::vector<char> buffer;
     buffer.reserve(size);
 
     if(this->read_raw(buffer.data(), size) < 0)
@@ -198,7 +225,7 @@ vector<char> SSLTCPSocket::read_vector(size_t size)
     return buffer;
 }
 
-void SSLTCPSocket::write(const char *buffer)
+void SSLTCPSocket::write(const char *buffer) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
@@ -208,7 +235,6 @@ void SSLTCPSocket::write(const char *buffer)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                this->close();
             }
             else
             {
@@ -223,12 +249,12 @@ void SSLTCPSocket::write(const char *buffer)
     }
 }
 
-void SSLTCPSocket::write(const vector<char>& buffer)
+void SSLTCPSocket::write(const std::vector<char>& buffer) const
 {
     this->write(buffer.data());
 }
 
-std::unique_ptr<char[]> SSLTCPSocket::read_all()
+std::unique_ptr<char[]> SSLTCPSocket::read_all() const
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(16 * 1024 + 1);
 
@@ -238,9 +264,9 @@ std::unique_ptr<char[]> SSLTCPSocket::read_all()
     return buffer;
 }
 
-vector<char> SSLTCPSocket::read_all_vector()
+std::vector<char> SSLTCPSocket::read_all_vector() const
 {
-    vector<char> buffer;
+    std::vector<char> buffer;
     buffer.reserve(16 * 1024 + 1);
 
     if(this->read_raw(buffer.data(), 16 * 1024) < 0)
@@ -279,7 +305,7 @@ void SSLTCPSocket::configure_ssl(bool server)
     SSL_set_fd(m_ssl, m_sockfd);
 }
 
-int SSLTCPSocket::read_raw(char* const buffer, size_t size)
+int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
         /* Read the data */
@@ -289,7 +315,6 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size)
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
-                this->close();
                 // TODO throw new ssl exception
                 buffer[size] = '\0';
                 return -1;

@@ -21,7 +21,7 @@ UDPSocket& UDPSocket::operator=(UDPSocket&& other)
     return *this;
 }
 
-std::unique_ptr<char[]> UDPSocket::receive_from(size_t size)
+std::unique_ptr<char[]> UDPSocket::receive_from(size_t size) const
 {
     std::unique_ptr<char[]> buffer_to = std::make_unique<char[]>(size + 1);
     struct sockaddr_in from = {};
@@ -32,10 +32,10 @@ std::unique_ptr<char[]> UDPSocket::receive_from(size_t size)
     return buffer_to;
 }
 
-vector<char> UDPSocket::receive_vector(size_t size)
+std::vector<char> UDPSocket::receive_vector(size_t size) const
 {
     struct sockaddr_in from = {};
-    vector<char> buffer;
+    std::vector<char> buffer;
     buffer.reserve(size);
 
     if(this->read_raw(buffer.data(), size, from) < 0)
@@ -44,7 +44,7 @@ vector<char> UDPSocket::receive_vector(size_t size)
     return buffer;
 }
 
-void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
+void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr) const
 {
     if(m_socket_state != socket_state::SHUT) {
         struct sockaddr_in dest = {};
@@ -59,21 +59,21 @@ void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr)
     }
 }
 
-void UDPSocket::send_to(const char *buffer_from, int port, const string& addr)
+void UDPSocket::send_to(const char *buffer_from, int port, std::string_view addr) const
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, addr.c_str(), &inAddr);
+    inet_pton(m_family, addr.data(), &inAddr);
     this->send_to(buffer_from, port, inAddr);
 }
 
-void UDPSocket::send_to(const vector<char>& buffer_from, int port, const string &addr)
+void UDPSocket::send_to(const std::vector<char>& buffer_from, int port, std::string_view addr) const
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, addr.c_str(), &inAddr);
+    inet_pton(m_family, addr.data(), &inAddr);
     this->send_to(buffer_from.data(), port, inAddr);
 }
 
-int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from)
+int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from) const
 {
     if(m_socket_state != socket_state::SHUT)
     {
