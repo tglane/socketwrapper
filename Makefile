@@ -11,7 +11,10 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	$(cc) -c $< -o $@ $(CFLAGS)
 
 .PHONY: all
-all: static shared
+all: $(OBJFILES)
+	ar rcs libsocketwrapper.a $^
+	$(cc) -shared -o libsocketwrapper.so $^
+	rm -rf $(OBJDIR)/*.o
 
 .PHONY: static
 static: $(OBJFILES)
@@ -21,6 +24,7 @@ static: $(OBJFILES)
 .PHONY: shared
 shared: $(OBJFILES)
 	$(cc) -shared -o libsocketwrapper.so $^
+	rm -rf $(OBJDIR)/*.o
 
 .PHONY: clean
 clean:
