@@ -229,6 +229,7 @@ void SSLTCPSocket::write(const char *buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         /* Send the actual data */
         if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
         {
@@ -307,7 +308,9 @@ void SSLTCPSocket::configure_ssl(bool server)
 
 int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
 {
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED)) {
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
         /* Read the data */
         int ret = SSL_read(m_ssl, buffer, size);
         if(ret < 0)
