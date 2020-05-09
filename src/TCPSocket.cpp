@@ -162,12 +162,12 @@ std::vector<char> TCPSocket::read_vector(size_t size) const
     return buffer;
 }
 
-void TCPSocket::write(const char* buffer) const
+void TCPSocket::write(const char* buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         /* Send the actual data */
-        if(send(m_sockfd, buffer, std::strlen(buffer), 0) < 0)
+        if(send(m_sockfd, buffer, size, 0) < 0)
             throw SocketWriteException();
     }
     else
@@ -176,7 +176,7 @@ void TCPSocket::write(const char* buffer) const
 
 void TCPSocket::write(const std::vector<char>& buffer) const
 {
-    this->write(buffer.data());
+    this->write(buffer.data(), buffer.size());
 }
 
 std::unique_ptr<char[]> TCPSocket::read_all() const

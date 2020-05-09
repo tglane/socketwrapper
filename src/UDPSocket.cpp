@@ -44,7 +44,7 @@ std::vector<char> UDPSocket::receive_vector(size_t size) const
     return buffer;
 }
 
-void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr) const
+void UDPSocket::send_to(const char* buffer_from, size_t size, int port, in_addr_t addr) const
 {
     if(m_socket_state != socket_state::SHUT) {
         struct sockaddr_in dest = {};
@@ -52,25 +52,25 @@ void UDPSocket::send_to(const char* buffer_from, int port, in_addr_t addr) const
         dest.sin_port = htons((in_port_t) port);
         dest.sin_addr.s_addr = addr;
 
-        if ((::sendto(m_sockfd, buffer_from, std::strlen(buffer_from), 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
+        if ((::sendto(m_sockfd, buffer_from, size, 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
             //Error sending data
             throw SocketWriteException();
         }
     }
 }
 
-void UDPSocket::send_to(const char *buffer_from, int port, std::string_view addr) const
+void UDPSocket::send_to(const char *buffer_from, size_t size, int port, std::string_view addr) const
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.data(), &inAddr);
-    this->send_to(buffer_from, port, inAddr);
+    this->send_to(buffer_from, size, port, inAddr);
 }
 
 void UDPSocket::send_to(const std::vector<char>& buffer_from, int port, std::string_view addr) const
 {
     in_addr_t inAddr{};
     inet_pton(m_family, addr.data(), &inAddr);
-    this->send_to(buffer_from.data(), port, inAddr);
+    this->send_to(buffer_from.data(), buffer_from.size(), port, inAddr);
 }
 
 int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from) const

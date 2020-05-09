@@ -74,7 +74,7 @@ public:
      * @param buffer
      * @throws SocketWriteException
      */
-    void write(const char* buffer) const override;
+    void write(const char* buffer, size_t size) const override;
 
     void write(const std::vector<char>& buffer) const override;
 

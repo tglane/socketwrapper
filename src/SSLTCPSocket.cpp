@@ -225,12 +225,12 @@ std::vector<char> SSLTCPSocket::read_vector(size_t size) const
     return buffer;
 }
 
-void SSLTCPSocket::write(const char *buffer) const
+void SSLTCPSocket::write(const char *buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         /* Send the actual data */
-        if(int ret = SSL_write(m_ssl, buffer, strlen(buffer)) <= 0)
+        if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
         {
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
@@ -251,7 +251,7 @@ void SSLTCPSocket::write(const char *buffer) const
 
 void SSLTCPSocket::write(const std::vector<char>& buffer) const
 {
-    this->write(buffer.data());
+    this->write(buffer.data(), buffer.size());
 }
 
 std::unique_ptr<char[]> SSLTCPSocket::read_all() const

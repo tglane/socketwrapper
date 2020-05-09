@@ -78,7 +78,7 @@ public:
      * @param buff buffer with the content to send
      * @throws SocketWriteException
      */
-    virtual void write(const char* buffer) const;
+    virtual void write(const char* buffer, size_t size) const;
 
     virtual void write(const std::vector<char>& buffer) const;
 

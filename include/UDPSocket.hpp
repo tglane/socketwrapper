@@ -46,9 +46,9 @@ public:
      * @param addr of the client
      * @throws SocketWriteException
      */
-    void send_to(const char* buffer_from, int port, in_addr_t addr) const;
+    void send_to(const char* buffer_from, size_t size, int port, in_addr_t addr) const;
 
-    void send_to(const char* buffer_from, int port, std::string_view addr) const;
+    void send_to(const char* buffer_from, size_t size, int port, std::string_view addr) const;
 
     void send_to(const std::vector<char>& buffer_from, int port, std::string_view addr) const;
 
