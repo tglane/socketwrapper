@@ -67,16 +67,12 @@ public:
      */
     std::unique_ptr<char[]> read(size_t size) const override;
 
-    std::vector<char> read_vector(size_t size) const override;
-
     /**
      * @brief Writes content of param buffer in a existing ssl/tsl connection
      * @param buffer
      * @throws SocketWriteException
      */
     void write(const char* buffer, size_t size) const override;
-
-    void write(const std::vector<char>& buffer) const override;
 
     /**
      * @brief Reads all currently available data to a buffer and returns it
@@ -106,7 +102,7 @@ protected:
      * @param buffer pointer to the buffer to read into
      * @param size size to read from the socket
      */
-    int read_raw(char* const buffer, size_t size) const;
+    int read_raw(char* const buffer, size_t size) const override;
 
     SSL_CTX* m_context; /// SSL context used for the ssl connection
     SSL* m_ssl; /// SSL Object

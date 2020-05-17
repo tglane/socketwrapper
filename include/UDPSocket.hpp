@@ -37,7 +37,8 @@ public:
      */
     std::unique_ptr<char[]> receive_from(size_t size) const;
 
-    std::vector<char> receive_vector(size_t size) const;
+    template<typename T>
+    std::vector<T> receive_vector(size_t size) const;
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -50,7 +51,8 @@ public:
 
     void send_to(const char* buffer_from, size_t size, int port, std::string_view addr) const;
 
-    void send_to(const std::vector<char>& buffer_from, int port, std::string_view addr) const;
+    template<typename T>
+    void send_to(const std::vector<T>& buffer_from, int port, std::string_view addr) const;
 
 private:
 
@@ -62,6 +64,30 @@ private:
     int read_raw(char* const buffer, size_t size, sockaddr_in& from) const;
 
 };
+
+template<typename T>
+std::vector<T> UDPSocket::receive_vector(size_t size) const
+{
+    struct sockaddr_in from = {};
+    std::vector<T> buffer;
+    buffer.resize(size + 1);
+
+    int bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), from);
+    if(bytes < 0)
+        throw SocketReadException();
+
+    buffer.resize(bytes / sizeof(T));
+
+    return buffer;
+}
+
+template<typename T>
+void UDPSocket::send_to(const std::vector<T>& buffer_from, int port, std::string_view addr) const
+{
+    in_addr_t inAddr{};
+    inet_pton(m_family, addr.data(), &inAddr);
+    this->send_to((char*) buffer_from.data(), buffer_from.size() * sizeof(T), port, inAddr);
+}
 
 }
 

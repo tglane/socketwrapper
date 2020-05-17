@@ -109,11 +109,6 @@ std::future<bool> TCPSocket::connect_async(int port, std::string_view addr_to, c
     });
 }
 
-// std::future<bool> TCPSocket::connect_async_by_hostname(int port, const string& hostname, const std::function<bool(TCPSocket&)>& callback)
-// {
-//     return std::async(std::launch::async, [this, port, hostname, const 
-// }
-
 std::unique_ptr<TCPSocket> TCPSocket::accept()
 {
     if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
@@ -151,17 +146,6 @@ std::unique_ptr<char[]> TCPSocket::read(size_t size) const
     return buffer;
 }
 
-std::vector<char> TCPSocket::read_vector(size_t size) const
-{
-    std::vector<char> buffer;
-    buffer.reserve(size + 1);
-
-    if(this->read_raw(buffer.data(), size) < 0)
-        throw SocketReadException();
-    
-    return buffer;
-}
-
 void TCPSocket::write(const char* buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
@@ -173,11 +157,6 @@ void TCPSocket::write(const char* buffer, size_t size) const
     }
     else
         throw SocketWriteException();
-}
-
-void TCPSocket::write(const std::vector<char>& buffer) const
-{
-    this->write(buffer.data(), buffer.size());
 }
 
 std::unique_ptr<char[]> TCPSocket::read_all() const
@@ -222,12 +201,13 @@ int TCPSocket::read_raw(char* const buffer, size_t size) const
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if(::read(m_sockfd, buffer, size) < 0)
+        size_t bytes = ::read(m_sockfd, buffer, size);
+        if(bytes < 0)
             throw SocketReadException();
         else
         {
-            buffer[size] = '\0';
-            return 0;
+            buffer[bytes] = '\0';
+            return bytes;
         }
     }
     

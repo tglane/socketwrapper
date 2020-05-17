@@ -214,17 +214,6 @@ std::unique_ptr<char[]> SSLTCPSocket::read(size_t size) const
     return buffer;
 }
 
-std::vector<char> SSLTCPSocket::read_vector(size_t size) const
-{
-    std::vector<char> buffer;
-    buffer.reserve(size);
-
-    if(this->read_raw(buffer.data(), size) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
 void SSLTCPSocket::write(const char *buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
@@ -248,11 +237,6 @@ void SSLTCPSocket::write(const char *buffer, size_t size) const
     {
         throw SocketWriteException();
     }
-}
-
-void SSLTCPSocket::write(const std::vector<char>& buffer) const
-{
-    this->write(buffer.data(), buffer.size());
 }
 
 std::unique_ptr<char[]> SSLTCPSocket::read_all() const
@@ -331,7 +315,7 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
         else
         {
             buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
-            return 0;
+            return ret;
         }
     }
     else
