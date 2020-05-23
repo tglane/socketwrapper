@@ -204,62 +204,6 @@ std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSock
     });
 }
 
-std::unique_ptr<char[]> SSLTCPSocket::read(size_t size) const
-{
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-
-    if(this->read_raw(buffer.get(), size) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
-void SSLTCPSocket::write(const char *buffer, size_t size) const
-{
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        /* Send the actual data */
-        if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
-        {
-            ret = SSL_get_error(m_ssl, ret);
-            if(ret == 6) {
-                SSL_shutdown(m_ssl);
-            }
-            else
-            {
-                ERR_print_errors_fp(stderr);
-                throw SocketWriteException();
-            }
-        }
-    }
-    else
-    {
-        throw SocketWriteException();
-    }
-}
-
-std::unique_ptr<char[]> SSLTCPSocket::read_all() const
-{
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(16 * 1024 + 1);
-
-    if(this->read_raw(buffer.get(), 16 * 1024) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
-std::vector<char> SSLTCPSocket::read_all_vector() const
-{
-    std::vector<char> buffer;
-    buffer.reserve(16 * 1024 + 1);
-
-    if(this->read_raw(buffer.data(), 16 * 1024) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
 void SSLTCPSocket::configure_ssl(bool server)
 {
     /* Create and configure ssl context ctx */
@@ -324,6 +268,31 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
     }
 
     return -1;
+}
+
+void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
+{
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        /* Send the actual data */
+        if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
+        {
+            ret = SSL_get_error(m_ssl, ret);
+            if(ret == 6) {
+                SSL_shutdown(m_ssl);
+            }
+            else
+            {
+                ERR_print_errors_fp(stderr);
+                throw SocketWriteException();
+            }
+        }
+    }
+    else
+    {
+        throw SocketWriteException();
+    }
 }
 
 }

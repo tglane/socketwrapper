@@ -136,52 +136,6 @@ std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>&
     });
 }
 
-std::unique_ptr<char[]> TCPSocket::read(size_t size) const
-{
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size + 1);
-    
-    if(this->read_raw(buffer.get(), size) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
-void TCPSocket::write(const char* buffer, size_t size) const
-{
-    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        /* Send the actual data */
-        if(send(m_sockfd, buffer, size, 0) < 0)
-            throw SocketWriteException();
-    }
-    else
-        throw SocketWriteException();
-}
-
-std::unique_ptr<char[]> TCPSocket::read_all() const
-{
-    size_t available = bytes_available();
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(available + 1);
-
-    if(this->read_raw(buffer.get(), available) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
-std::vector<char> TCPSocket::read_all_vector() const
-{
-    size_t available = bytes_available();
-    std::vector<char> buffer;
-    buffer.reserve(available + 1);
-    
-    if(this->read_raw(buffer.data(), available) < 0)
-        throw SocketReadException();
-
-    return buffer;
-}
-
 size_t TCPSocket::bytes_available() const
 {
     if(m_socket_state != socket_state::CLOSED)
@@ -214,4 +168,20 @@ int TCPSocket::read_raw(char* const buffer, size_t size) const
     return -1;
 }
 
+void TCPSocket::write_raw(const char* buffer, size_t size) const
+{
+    if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        /* Send the actual data */
+        if(send(m_sockfd, buffer, size, 0) < 0)
+            throw SocketWriteException();
+    }
+    else
+    {
+        throw SocketWriteException();
+    }
 }
+
+}
+

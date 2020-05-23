@@ -69,7 +69,8 @@ public:
      * @param buff buffer to store the given content in
      * @throws SocketReadException
      */
-    virtual std::unique_ptr<char[]> read(size_t size) const;
+    template<typename T>
+    std::unique_ptr<T> read(size_t size) const;
     
     template<typename T>
     std::vector<T> read_vector(size_t size) const;
@@ -79,7 +80,8 @@ public:
      * @param buff buffer with the content to send
      * @throws SocketWriteException
      */
-    virtual void write(const char* buffer, size_t size) const;
+    template<typename T>
+    void write(const T* buffer, size_t size) const;
 
     template<typename T>
     void write_vector(const std::vector<T>& buffer) const;
@@ -89,9 +91,11 @@ public:
      * @return buffer containing all read bytes
      * @throws SocketReadException
      */
-    virtual std::unique_ptr<char[]> read_all() const;
+    template<typename T>
+    std::unique_ptr<T> read_all() const;
 
-    virtual std::vector<char> read_all_vector() const;
+    template<typename T>
+    std::vector<T> read_all_vector() const;
 
     /**
      * @brief Returns the number of bytes available to read
@@ -106,6 +110,8 @@ protected:
 
     virtual int read_raw(char* const buffer, size_t size) const;
 
+    virtual void write_raw(const char* buffer, size_t size) const;
+
     /**
      * Stores the address of a connected client
      * Only set if the socket is in "server mode" and a client is connected
@@ -116,6 +122,17 @@ protected:
     enum tcp_state { WAITING, CONNECTED, LISTENING, ACCEPTED };
 
 };
+
+template<typename T>
+std::unique_ptr<T> TCPSocket::read(size_t size) const
+{
+    std::unique_ptr<T> buffer = std::make_unique<T>(size + 1);
+
+    if(this->read_raw((char*) buffer.get(), size) < 0)
+        throw SocketReadException();
+
+    return buffer;
+}
 
 template<typename T>
 std::vector<T> TCPSocket::read_vector(size_t size) const 
@@ -133,9 +150,40 @@ std::vector<T> TCPSocket::read_vector(size_t size) const
 }
 
 template<typename T>
+void TCPSocket::write(const T* buffer, size_t size) const
+{
+    this->write_raw((char*) buffer, size * sizeof(T));
+}
+
+template<typename T>
 void TCPSocket::write_vector(const std::vector<T>& buffer) const
 {
-    this->write((char*) buffer.data(), buffer.size() * sizeof(T));
+    this->write_raw((char*) buffer.data(), buffer.size() * sizeof(T));
+}
+
+template<typename T>
+std::unique_ptr<T> TCPSocket::read_all() const
+{
+    size_t bytes = bytes_available();
+    std::unique_ptr<T> buffer = std::make_unique<T>(bytes + 1);
+
+    if(this->read_raw((char*) buffer.get(), bytes) < 0)
+        throw SocketReadException();
+
+    return buffer;
+}
+
+template<typename T>
+std::vector<T> TCPSocket::read_all_vector() const
+{
+    size_t bytes = bytes_available();
+    std::vector<T> buffer;
+    buffer.resize(bytes / sizeof(T));
+
+    if(this->read_raw((char*) buffer.data(), bytes) < 0)
+        throw SocketReadException();
+
+    return buffer;
 }
 
 }
