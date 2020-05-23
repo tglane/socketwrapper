@@ -21,29 +21,6 @@ UDPSocket& UDPSocket::operator=(UDPSocket&& other)
     return *this;
 }
 
-// void UDPSocket::send_to(const char* buffer_from, size_t size, int port, in_addr_t addr) const
-// {
-//     if(m_socket_state != socket_state::SHUT) {
-//         struct sockaddr_in dest = {};
-//         dest.sin_family = (sa_family_t) m_family;
-//         dest.sin_port = htons((in_port_t) port);
-//         dest.sin_addr.s_addr = addr;
-// 
-//         std::lock_guard<std::mutex> lock(m_mutex);
-//         if ((::sendto(m_sockfd, buffer_from, size, 0, (struct sockaddr *) &dest, sizeof(struct sockaddr_in))) == -1) {
-//             //Error sending data
-//             throw SocketWriteException();
-//         }
-//     }
-// }
-// 
-// void UDPSocket::send_to(const char *buffer_from, size_t size, int port, std::string_view addr) const
-// {
-//     in_addr_t inAddr{};
-//     inet_pton(m_family, addr.data(), &inAddr);
-//     this->send_to(buffer_from, size, port, inAddr);
-// }
-
 int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from) const
 {
     if(m_socket_state != socket_state::SHUT)

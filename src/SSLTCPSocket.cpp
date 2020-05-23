@@ -186,7 +186,8 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
             throw SocketAcceptingException();
         }
 
-        std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED, m_cert.c_str(), m_key.c_str()));
+        std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, 
+                tcp_state::ACCEPTED, m_cert.c_str(), m_key.c_str()));
         return connSock;
     }
     else

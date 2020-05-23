@@ -67,16 +67,6 @@ private:
      */
     int read_raw(char* const buffer, size_t size, sockaddr_in& from) const;
 
-    /**
-     * @brief Write data to the underlying raw socket
-     * @param buffer with the data to write
-     * @param size of the data to write
-     * @param port 
-     * @param addr struct with address information of the receiver
-     * @thorws SocketWriteException
-     */
-    // void write_raw(const char* buffer, size_t size, int port, in_addr_t addr) const;
-
 };
 
 template<typename T>
