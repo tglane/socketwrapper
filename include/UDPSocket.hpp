@@ -33,13 +33,14 @@ public:
      * @brief Reads the content sended by a client using the underlying socket and returns a buffer containing
      *  the received message
      * @param size_t max number of bytes to read
+     * @param from pointer to sockaddr_in struct to store the senders data; optional - use nullptr if not wanted
      * @throws SocketReadException
      */
     template<typename T>
-    std::unique_ptr<T> receive(size_t size) const;
+    std::unique_ptr<T> receive(size_t size, sockaddr_in* from) const;
 
     template<typename T>
-    std::vector<T> receive_vector(size_t size) const;
+    std::vector<T> receive_vector(size_t size, sockaddr_in* from) const;
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -70,30 +71,46 @@ private:
 };
 
 template<typename T>
-std::unique_ptr<T> UDPSocket::receive(size_t size) const
+std::unique_ptr<T> UDPSocket::receive(size_t size, sockaddr_in* from) const
 {
-    sockaddr_in from{};
     std::unique_ptr<T> buffer = std::make_unique<T>(size + 1);
 
-    if(this->read_raw((char*) buffer.get(), size * sizeof(T), from) < 0)
-        throw SocketReadException();
+    if(from == nullptr)
+    {
+        sockaddr_in tmp{};
+        if(this->read_raw((char*) buffer.get(), size * sizeof(T), tmp) < 0)
+            throw SocketReadException();
+    }
+    else
+    {
+        if(this->read_raw((char*) buffer.get(), size * sizeof(T), *from) < 0)
+            throw SocketReadException();
+    }
 
     return buffer;
 }
 
 template<typename T>
-std::vector<T> UDPSocket::receive_vector(size_t size) const
+std::vector<T> UDPSocket::receive_vector(size_t size, sockaddr_in* from) const
 {
-    sockaddr_in from{};
+    int bytes;
     std::vector<T> buffer;
     buffer.resize(size + 1);
 
-    int bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), from);
+    if(from == nullptr)
+    {
+        sockaddr_in tmp{};
+        bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), tmp);
+    }
+    else
+    {
+        bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), *from);
+    }
+
     if(bytes < 0)
         throw SocketReadException();
 
     buffer.resize(bytes / sizeof(T));
-
     return buffer;
 }
 
