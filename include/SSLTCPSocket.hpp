@@ -55,9 +55,9 @@ public:
      * @return std::unique_ptr<SSLTCPSocket>
      * @throws SocketAcceptingException
      */
-    std::unique_ptr<SSLTCPSocket> accept();
+    std::unique_ptr<SSLTCPSocket> accept() const;
 
-    std::future<bool> accept_async(const std::function<bool(SSLTCPSocket&)>& callback);
+    std::future<bool> accept_async(const std::function<bool(SSLTCPSocket&)>& callback) const;
 
 protected:
 
@@ -99,4 +99,3 @@ protected:
 }
 
 #endif //SOCKETWRAPPER_SSLTCPSOCKET_HPP
-

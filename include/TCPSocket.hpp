@@ -60,9 +60,9 @@ public:
      * @return std::unique_ptr<TCPSocket> to handle the established connection
      * @throws SocketAcceptingException
      */
-    std::unique_ptr<TCPSocket> accept();
+    std::unique_ptr<TCPSocket> accept() const;
 
-    std::future<bool> accept_async(const std::function<bool(TCPSocket&)>& callback);
+    std::future<bool> accept_async(const std::function<bool(TCPSocket&)>& callback) const;
 
     /**
      * @brief Reads the content sended by a client and stores it into a buffer
@@ -189,4 +189,3 @@ std::vector<T> TCPSocket::read_all_vector() const
 }
 
 #endif //SOCKETWRAPPER_TCPSOCKET_HPP
-
