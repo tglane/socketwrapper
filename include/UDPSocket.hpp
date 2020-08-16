@@ -37,7 +37,7 @@ public:
      * @throws SocketReadException
      */
     template<typename T>
-    std::unique_ptr<T> receive(size_t size, sockaddr_in* from) const;
+    std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from) const;
 
     template<typename T>
     std::vector<T> receive_vector(size_t size, sockaddr_in* from) const;
@@ -71,9 +71,9 @@ private:
 };
 
 template<typename T>
-std::unique_ptr<T> UDPSocket::receive(size_t size, sockaddr_in* from) const
+std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from) const
 {
-    std::unique_ptr<T> buffer = std::make_unique<T>(size + 1);
+    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size + 1);
 
     if(from == nullptr)
     {
