@@ -109,7 +109,7 @@ std::future<bool> TCPSocket::connect_async(int port, std::string_view addr_to, c
     });
 }
 
-std::unique_ptr<TCPSocket> TCPSocket::accept()
+std::unique_ptr<TCPSocket> TCPSocket::accept() const 
 {
     if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
     {
@@ -128,7 +128,7 @@ std::unique_ptr<TCPSocket> TCPSocket::accept()
     }
 }
 
-std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>& callback)
+std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>& callback) const
 {
     return std::async(std::launch::async, [&]() {
         std::unique_ptr<TCPSocket> conn = this->accept();
@@ -184,4 +184,3 @@ void TCPSocket::write_raw(const char* buffer, size_t size) const
 }
 
 }
-

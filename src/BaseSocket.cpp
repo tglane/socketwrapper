@@ -122,11 +122,9 @@ int BaseSocket::resolve_hostname(const char* host_name, sockaddr_in* addr_out) c
     }
     
     if(resultList != NULL)
-    {
         ::freeaddrinfo(resultList);
-    }
+
     return result;    
 }
 
 }
-

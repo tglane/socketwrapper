@@ -175,16 +175,15 @@ std::future<bool> SSLTCPSocket::connect_async(int port, std::string_view addr_to
     });
 }
 
-std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
+std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept() const
 {
     if(m_socket_state != socket_state::CLOSED && m_tcp_state == tcp_state::LISTENING)
     {
 
         socklen_t len = sizeof(m_client_addr);
         int conn_fd = ::accept(m_sockfd, (sockaddr *) &m_client_addr, &len);
-        if (conn_fd < 0) {
+        if (conn_fd < 0) 
             throw SocketAcceptingException();
-        }
 
         std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, 
                 tcp_state::ACCEPTED, m_cert.c_str(), m_key.c_str()));
@@ -197,7 +196,7 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept()
 
 }
 
-std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSocket&)>& callback)
+std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSocket&)>& callback) const
 {
     return std::async(std::launch::async, [&]() -> bool {
             std::unique_ptr<SSLTCPSocket> conn = this->accept();
@@ -297,4 +296,3 @@ void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
 }
 
 }
-
