@@ -5,8 +5,6 @@
 #ifndef SOCKETWRAPPER_TCPSOCKET_HPP
 #define SOCKETWRAPPER_TCPSOCKET_HPP
 
-#include <sys/ioctl.h>
-
 #include "BaseSocket.hpp"
 
 namespace socketwrapper
@@ -96,13 +94,6 @@ public:
 
     template<typename T>
     std::vector<T> read_all_vector() const;
-
-    /**
-     * @brief Returns the number of bytes available to read
-     * @return int
-     * @throws ReadBytesAvailableException
-     */
-    size_t bytes_available() const;
 
 protected:
 

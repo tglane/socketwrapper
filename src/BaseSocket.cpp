@@ -2,6 +2,7 @@
 // Created by timog on 22.12.18.
 //
 
+#include <sys/ioctl.h>
 #include "../include/BaseSocket.hpp"
 
 namespace socketwrapper
@@ -125,6 +126,20 @@ int BaseSocket::resolve_hostname(const char* host_name, sockaddr_in* addr_out) c
         ::freeaddrinfo(resultList);
 
     return result;    
+}
+
+size_t BaseSocket::bytes_available() const
+{
+    if(m_socket_state != socket_state::CLOSED)
+    {
+        int bytes;
+        ioctl(m_sockfd, FIONREAD, &bytes);
+        return bytes;
+    }
+    else
+    {
+        throw ReadBytesAvailableException();
+    }
 }
 
 }

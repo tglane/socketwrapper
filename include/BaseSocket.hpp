@@ -61,6 +61,13 @@ public:
      */
     int get_socket_descriptor() const { return m_sockfd; }
 
+    /**
+     * @brief Returns the number of bytes available to read
+     * @return int
+     * @throws ReadBytesAvailableException
+     */
+    size_t bytes_available() const;
+
 protected:
 
     BaseSocket(int family, int sock_type);

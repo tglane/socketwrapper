@@ -136,20 +136,6 @@ std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>&
     });
 }
 
-size_t TCPSocket::bytes_available() const
-{
-    if(m_socket_state != socket_state::CLOSED)
-    {
-        int bytes;
-        ioctl(m_sockfd, FIONREAD, &bytes);
-        return bytes;
-    }
-    else
-    {
-        throw ReadBytesAvailableException();
-    }
-}
-
 int TCPSocket::read_raw(char* const buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
