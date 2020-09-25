@@ -4,6 +4,8 @@
 
 #include "../include/SSLTCPSocket.hpp"
 
+#include <iostream>
+
 namespace socketwrapper
 {
 
@@ -12,8 +14,6 @@ bool SSLTCPSocket::ssl_initialized = false;
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     : TCPSocket(family), m_cert(cert), m_key(key)
 {
-    m_context = nullptr;
-    m_ssl = nullptr;
 
     if(!ssl_initialized)
     {
@@ -29,14 +29,19 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     //TODO Add error handling
 }
 
-SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, const char* cert, const char* key)
-     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_cert(cert), m_key(key)
+SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, std::shared_ptr<SSL_CTX> ctx)
+     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_context(std::move(ctx))
 {
+    m_ssl = nullptr;
+
     if(m_tcp_state == tcp_state::ACCEPTED)
     {
         try
         {
-            this->configure_ssl(true);
+            m_ssl = SSL_new(m_context.get());
+            if(m_ssl == nullptr)
+                throw SSLContextCreationException();
+            SSL_set_fd(m_ssl, m_sockfd);
         }
         catch(SSLContextCreationException &e)
         {
@@ -71,12 +76,12 @@ SSLTCPSocket::~SSLTCPSocket()
 SSLTCPSocket& SSLTCPSocket::operator=(SSLTCPSocket&& other)
 {
     TCPSocket::operator=(std::move(other));
-    this->m_context = other.m_context;
+    this->m_context = std::move(other.m_context);
     this->m_ssl = other.m_ssl;
     this->m_cert = other.m_cert;
     this->m_key = other.m_key;
 
-    other.m_context = nullptr;
+    // other.m_context = nullptr;
     other.m_ssl = nullptr;
     other.m_cert = "";
     other.m_key = "";
@@ -88,18 +93,23 @@ void SSLTCPSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
-        if(m_ssl)
+        std::cout << "de1" << std::endl;
+        
+        if(m_ssl != NULL)
         {
+            std::cout << "de2" << std::endl;
             SSL_shutdown(m_ssl);
+            std::cout << "de3" << std::endl;
             SSL_free(m_ssl);
+            std::cout << "de4" << std::endl;
         }
-        if(m_context)
-        {
-            SSL_CTX_free(m_context);
-        }
-        EVP_cleanup();
-        ssl_initialized = false;
-
+        std::cout << "de5" << std::endl;
+        // if(m_context != NULL)
+        // {
+        //     SSL_CTX_free(m_context);
+        //     std::cout << "??" << std::endl;
+        // }
+        
         if (::close(m_sockfd) == -1) {
             throw SocketCloseException();
         } else {
@@ -107,6 +117,12 @@ void SSLTCPSocket::close()
             m_tcp_state = tcp_state::WAITING;
         }
     }
+}
+
+void SSLTCPSocket::listen(int queuesize)
+{
+    configure_ssl_context(true);
+    TCPSocket::listen(queuesize);
 }
 
 void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
@@ -127,7 +143,9 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
         {
             try
             {
-                this->configure_ssl(false);
+                this->configure_ssl_context(false);
+                m_ssl = SSL_new(m_context.get());
+                SSL_set_fd(m_ssl, m_sockfd);
             }
             catch(SSLContextCreationException &e)
             {
@@ -185,9 +203,8 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept() const
         if (conn_fd < 0) 
             throw SocketAcceptingException();
 
-        std::unique_ptr<SSLTCPSocket> connSock(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, 
-                tcp_state::ACCEPTED, m_cert.c_str(), m_key.c_str()));
-        return connSock;
+        return std::unique_ptr<SSLTCPSocket>(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, 
+                tcp_state::ACCEPTED, m_context));
     }
     else
     {
@@ -204,34 +221,36 @@ std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSock
     });
 }
 
-void SSLTCPSocket::configure_ssl(bool server)
+void SSLTCPSocket::configure_ssl_context(bool server)
 {
     /* Create and configure ssl context ctx */
     if(server)
     {
-        m_context = SSL_CTX_new(TLS_server_method());
+        // m_context = SSL_CTX_new(TLS_server_method());
+        m_context = std::shared_ptr<SSL_CTX>(SSL_CTX_new(TLS_server_method()), 
+            [](SSL_CTX* ctx) { if(ctx) SSL_CTX_free(ctx); });
     }
     else
     {
-        m_context = SSL_CTX_new(TLS_client_method());
+        // m_context = SSL_CTX_new(TLS_client_method());
+        m_context = std::shared_ptr<SSL_CTX>(SSL_CTX_new(TLS_client_method()),
+            [](SSL_CTX* ctx) { if(ctx) SSL_CTX_free(ctx); });
     }
-    if(!m_context)
+
+    if(m_context.get() == nullptr)
     {
         throw SSLContextCreationException();
     }
 
     SSL_CTX_set_ecdh_auto(m_context, 1);
-    if(SSL_CTX_use_certificate_file(m_context, m_cert.c_str(), SSL_FILETYPE_PEM) <= 0)
+    if(SSL_CTX_use_certificate_file(m_context.get(), m_cert.c_str(), SSL_FILETYPE_PEM) <= 0)
     {
         throw SSLContextCreationException();
     }
-    if(SSL_CTX_use_PrivateKey_file(m_context, m_key.c_str(), SSL_FILETYPE_PEM) <= 0)
+    if(SSL_CTX_use_PrivateKey_file(m_context.get(), m_key.c_str(), SSL_FILETYPE_PEM) <= 0)
     {
         throw SSLContextCreationException();
     }
-
-    m_ssl = SSL_new(m_context);
-    SSL_set_fd(m_ssl, m_sockfd);
 }
 
 int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
@@ -276,8 +295,9 @@ void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         /* Send the actual data */
+        std::cout << "test" << std::endl;
         if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
-        {
+        { 
             ret = SSL_get_error(m_ssl, ret);
             if(ret == 6) {
                 SSL_shutdown(m_ssl);
@@ -288,6 +308,7 @@ void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
                 throw SocketWriteException();
             }
         }
+        std::cout << "dababababa" << std::endl;
     }
     else
     {

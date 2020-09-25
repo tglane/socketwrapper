@@ -34,6 +34,13 @@ public:
      * @throws SocketCloseException
      */
     void close() override;
+    
+    /**
+     * @brief Sets the internal socket in listening mode
+     * @param int queuesize max number of clients waiting for establishing a connection
+     * @throws SocketListenException
+     */
+    void listen(int queuesize = 5) override;
 
     /**
      * @brief Connects to a server and initiates the tls/ssl-handshake
@@ -64,14 +71,14 @@ protected:
     /**
      * @throws SocketAcceptingException SSLContextCreationException
      */
-    SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, const char* cert, const char* key);
+    SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, std::shared_ptr<SSL_CTX> ctx);
 
     /**
-     * @brief Configures the SSL context and SSL Object
+     * @brief Configures the SSL context
      * @param bool server true if socket is in server mode, false else
      * @throws SSLContextCreationException
      */
-    void configure_ssl(bool server);
+    void configure_ssl_context(bool server);
 
     /**
      * @brief Read from the raw unix socket into the given buffer
@@ -87,8 +94,9 @@ protected:
      */
     void write_raw(const char* buffer, size_t size) const override;
     
-    SSL_CTX* m_context; /// SSL context used for the ssl connection
-    SSL* m_ssl; /// SSL Object
+    // SSL_CTX* m_context; /// SSL context used for the ssl connection
+    std::shared_ptr<SSL_CTX> m_context;
+    SSL* m_ssl = nullptr; /// SSL Object
 
     std::string m_cert;
     std::string m_key;
