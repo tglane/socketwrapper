@@ -14,7 +14,6 @@ bool SSLTCPSocket::ssl_initialized = false;
 SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     : TCPSocket(family), m_cert(cert), m_key(key)
 {
-
     if(!ssl_initialized)
     {
         /* initialize SSL */
@@ -32,8 +31,6 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
 SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, std::shared_ptr<SSL_CTX> ctx)
      : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_context(std::move(ctx))
 {
-    m_ssl = nullptr;
-
     if(m_tcp_state == tcp_state::ACCEPTED)
     {
         try
@@ -93,26 +90,18 @@ void SSLTCPSocket::close()
 {
     if(m_socket_state != socket_state::CLOSED)
     {
-        std::cout << "de1" << std::endl;
-        
         if(m_ssl != NULL)
         {
-            std::cout << "de2" << std::endl;
             SSL_shutdown(m_ssl);
-            std::cout << "de3" << std::endl;
             SSL_free(m_ssl);
-            std::cout << "de4" << std::endl;
         }
-        std::cout << "de5" << std::endl;
-        // if(m_context != NULL)
-        // {
-        //     SSL_CTX_free(m_context);
-        //     std::cout << "??" << std::endl;
-        // }
-        
-        if (::close(m_sockfd) == -1) {
+
+        if (::close(m_sockfd) == -1)
+        {
             throw SocketCloseException();
-        } else {
+        }
+        else
+        {
             m_socket_state = socket_state::CLOSED;
             m_tcp_state = tcp_state::WAITING;
         }
@@ -295,7 +284,6 @@ void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         /* Send the actual data */
-        std::cout << "test" << std::endl;
         if(int ret = SSL_write(m_ssl, buffer, size) <= 0)
         { 
             ret = SSL_get_error(m_ssl, ret);
@@ -308,7 +296,6 @@ void SSLTCPSocket::write_raw(const char *buffer, size_t size) const
                 throw SocketWriteException();
             }
         }
-        std::cout << "dababababa" << std::endl;
     }
     else
     {
