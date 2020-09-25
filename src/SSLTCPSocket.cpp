@@ -231,7 +231,9 @@ void SSLTCPSocket::configure_ssl_context(bool server)
         throw SSLContextCreationException();
     }
 
-    SSL_CTX_set_ecdh_auto(m_context, 1);
+    SSL_CTX_set_mode(m_context.get(), SSL_MODE_AUTO_RETRY);
+    SSL_CTX_set_ecdh_auto(m_context.get(), 1);
+
     if(SSL_CTX_use_certificate_file(m_context.get(), m_cert.c_str(), SSL_FILETYPE_PEM) <= 0)
     {
         throw SSLContextCreationException();
