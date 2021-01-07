@@ -268,7 +268,6 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
         }
         else
         {
-            buffer[size] = '\0'; //Null-terminate the String -> '' declares a char --- "" declares a String
             return ret;
         }
     }

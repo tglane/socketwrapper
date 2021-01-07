@@ -39,8 +39,23 @@ public:
     template<typename T>
     std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from) const;
 
+    std::string receive_string(size_t size, sockaddr_in* from) const;
+
     template<typename T>
     std::vector<T> receive_vector(size_t size, sockaddr_in* from) const;
+
+
+    std::future<std::string> receive_string_async(size_t size, sockaddr_in* from) const;
+
+    template<typename T>
+    std::future<std::vector<T>> recevice_vector_async(size_t size, sockaddr_in* from) const;
+
+    std::future<bool> receive_string_async(size_t size, sockaddr_in* from,
+        const std::function<void(const std::string&, sockaddr_in*)>& callback) const;
+
+    template<typename T>
+    std::future<bool> recevice_vector_async(size_t size, sockaddr_in* from,
+        const std::function<void(const std::vector<T>&, sockaddr_in*)>& callback) const;
 
     /**
      * Sends the data from a buffer a client using the underlying socket
@@ -55,6 +70,10 @@ public:
     template<typename T>
     void send_to(const T* buffer_from, size_t size, int port, std::string_view addr) const;
 
+    void send_to(const std::string& buffer, int port, std::string_view addr) const;
+
+    void send_to(std::string_view buffer, int port, std::string_view addr) const;
+
     template<typename T>
     void send_to(const std::vector<T>& buffer_from, int port, std::string_view addr) const;
 
@@ -64,28 +83,20 @@ private:
      * @brief Read data from an underlying raw socket
      * @param buffer to read into
      * @param size of the data to read from socket
+     * @param tv pointer to timeval struct to specifiy the waiting time. Directly passed to select function. If nullptr, function waites without limit
      * @throws SocketReadException
      */
-    int read_raw(char* const buffer, size_t size, sockaddr_in& from) const;
+    int read_raw(char* const buffer, size_t size, sockaddr_in* from, timeval* tv = nullptr) const;
 
 };
 
 template<typename T>
 std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from) const
 {
-    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size + 1);
+    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
-    if(from == nullptr)
-    {
-        sockaddr_in tmp{};
-        if(this->read_raw((char*) buffer.get(), size * sizeof(T), tmp) < 0)
-            throw SocketReadException();
-    }
-    else
-    {
-        if(this->read_raw((char*) buffer.get(), size * sizeof(T), *from) < 0)
-            throw SocketReadException();
-    }
+    if(this->read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), from) < 0)
+        throw SocketReadException();
 
     return buffer;
 }
@@ -93,25 +104,50 @@ std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from) const
 template<typename T>
 std::vector<T> UDPSocket::receive_vector(size_t size, sockaddr_in* from) const
 {
-    int bytes;
     std::vector<T> buffer;
-    buffer.resize(size + 1);
+    buffer.resize(size);
 
-    if(from == nullptr)
-    {
-        sockaddr_in tmp{};
-        bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), tmp);
-    }
-    else
-    {
-        bytes = this->read_raw((char*) buffer.data(), size * sizeof(T), *from);
-    }
-
+    int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), from);
     if(bytes < 0)
         throw SocketReadException();
 
     buffer.resize(bytes / sizeof(T));
     return buffer;
+}
+
+template<typename T>
+std::future<std::vector<T>> UDPSocket::recevice_vector_async(size_t size, sockaddr_in* from) const
+{
+    return std::async(std::launch::async, [this, size, from]() -> std::vector<T>
+    {
+        std::vector<T> buffer;
+        buffer.resize(size);
+
+        int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), from);
+        if(bytes < 0)
+            return {};
+
+        buffer.resize(bytes / sizeof(T));
+        return buffer;
+    });
+}
+
+template<typename T>
+std::future<bool> UDPSocket::recevice_vector_async(size_t size, sockaddr_in* from,
+    const std::function<void(const std::vector<T>&, sockaddr_in*)>& callback) const
+{
+    return std::async(std::launch::async, [this, size, from, &callback]() -> bool
+    {
+        std::vector<T> buffer;
+        try {
+            buffer = this->receive_vector<T>(size, from);
+        } catch(SocketReadException&) {
+            return false;
+        }
+
+        callback(buffer, from);
+        return true;
+    });
 }
 
 template<typename T>

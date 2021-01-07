@@ -71,6 +71,8 @@ public:
     template<typename T>
     std::unique_ptr<T[]> read(size_t size, size_t* bytes_read = nullptr) const;
     
+    std::string read_string(size_t size) const;
+
     template<typename T>
     std::vector<T> read_vector(size_t size) const;
 
@@ -81,6 +83,10 @@ public:
      */
     template<typename T>
     void write(const T* buffer, size_t size) const;
+
+    void write(const std::string& buffer) const;
+
+    void write(std::string_view buffer) const;
 
     template<typename T>
     void write_vector(const std::vector<T>& buffer) const;
@@ -119,7 +125,7 @@ protected:
 template<typename T>
 std::unique_ptr<T[]> TCPSocket::read(size_t size, size_t* bytes_read) const
 {
-    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size + 1);
+    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
     size_t br = this->read_raw((char*) buffer.get(), size);
     if(br < 0)
@@ -135,7 +141,7 @@ template<typename T>
 std::vector<T> TCPSocket::read_vector(size_t size) const 
 {
     std::vector<T> buffer;
-    buffer.resize(size + 1);
+    buffer.resize(size);
     
     int bytes = this->read_raw((char*) buffer.data(), size * sizeof(T));
     if(bytes < 0)
@@ -162,7 +168,7 @@ template<typename T>
 std::unique_ptr<T[]> TCPSocket::read_all(size_t* bytes_read) const
 {
     size_t bytes = bytes_available();
-    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(bytes + 1);
+    std::unique_ptr<T[]> buffer = std::make_unique<T[]>(bytes);
 
     if(this->read_raw((char*) buffer.get(), bytes) < 0)
         throw SocketReadException();

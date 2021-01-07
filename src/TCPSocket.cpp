@@ -136,6 +136,38 @@ std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>&
     });
 }
 
+void TCPSocket::write(const std::string& buffer) const
+{
+    this->write_raw(buffer.data(), buffer.size());
+}
+
+void TCPSocket::write(std::string_view buffer) const
+{
+    this->write_raw(buffer.data(), buffer.size());
+}
+
+std::string TCPSocket::read_string(size_t size) const
+{
+    std::string buffer;
+    buffer.resize(size + 1);
+    
+    int bytes = this->read_raw((char*) buffer.data(), size);
+    if(bytes < 0)
+        throw SocketReadException();
+  
+    if(buffer[bytes - 1] != '\0')
+    {
+        buffer.resize(bytes + 1);
+        buffer[bytes] = '\0';
+    }
+    else
+    {
+        buffer.resize(bytes);
+    }
+
+    return buffer;
+}
+
 int TCPSocket::read_raw(char* const buffer, size_t size) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
@@ -145,10 +177,7 @@ int TCPSocket::read_raw(char* const buffer, size_t size) const
         if(bytes < 0)
             throw SocketReadException();
         else
-        {
-            buffer[bytes] = '\0';
             return bytes;
-        }
     }
     
     return -1;

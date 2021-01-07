@@ -3,6 +3,7 @@
 //
 
 #include "../include/UDPSocket.hpp"
+#include <sys/select.h>
 
 namespace socketwrapper
 {
@@ -21,22 +22,112 @@ UDPSocket& UDPSocket::operator=(UDPSocket&& other)
     return *this;
 }
 
-int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in& from) const
+void UDPSocket::send_to(const std::string& buffer, int port, std::string_view addr) const
+{
+    in_addr_t in_addr{};
+    inet_pton(m_family, addr.data(), &in_addr);
+    this->send_to<char>(buffer.data(), buffer.size(), port, in_addr);
+}
+
+void UDPSocket::send_to(std::string_view buffer, int port, std::string_view addr) const
+{
+    in_addr_t in_addr{};
+    inet_pton(m_family, addr.data(), &in_addr);
+    this->send_to<char>(buffer.data(), buffer.size(), port, in_addr);
+}
+
+std::string UDPSocket::receive_string(size_t size, sockaddr_in* from) const
+{
+    std::string buffer;
+    buffer.resize(size + 1);
+
+    int bytes = this->read_raw((char*) buffer.data(), size, from);
+    if(bytes < 0)
+        throw SocketReadException();
+
+    if(buffer[bytes - 1] != '\0')
+    {
+        buffer.resize(bytes + 1);
+        buffer[bytes] = '\0';
+    }
+    else
+    {
+        buffer.resize(bytes);
+    }
+
+    return buffer;
+}
+
+std::future<std::string> UDPSocket::receive_string_async(size_t size, sockaddr_in* from) const
+{
+    return std::async(std::launch::async, [this, size, from]() -> std::string
+    {
+        std::string buffer;
+        buffer.resize(size + 1);
+
+        int bytes = this->read_raw((char*) buffer.data(), size, from);
+        if(bytes < 0)
+            return "";
+
+        if(buffer[bytes - 1] != '\0')
+        {
+            buffer.resize(bytes + 1);
+            buffer[bytes] = '\0';
+        }
+        else
+        {
+            buffer.resize(bytes);
+        }
+        
+
+        return buffer;
+    });
+}
+
+std::future<bool> UDPSocket::receive_string_async(size_t size, sockaddr_in* from, 
+    const std::function<void(const std::string& buffer, sockaddr_in* from)>& callback) const
+{
+    return std::async(std::launch::async, [this, size, from, callback]() -> bool
+    {
+        std::string buffer;
+        try {
+            buffer = this->receive_string(size, from);
+        } catch(SocketReadException&) {
+            return false;
+        }
+
+        callback(buffer, from);
+        return true;
+    });
+}
+
+int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, timeval* tv) const
 {
     if(m_socket_state != socket_state::SHUT)
     {
-        socklen_t flen = sizeof(from);
-        std::lock_guard<std::mutex> lock(m_mutex);
-        int ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) &from, &flen);
-        if(ret < 0)
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds);
+
+        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        switch(recv_fd)
         {
-            throw SocketReadException();
+            case(0): // Timeout
+                return -1;
+            case(-1): // Error
+                throw SocketReadException();
+            default:
+            {
+                socklen_t flen = sizeof(from);
+                std::lock_guard<std::mutex> lock(m_mutex);
+                int ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) from, &flen);
+                if(ret < 0)
+                    throw SocketReadException();
+                return ret;
+            }
         }
-        else if(ret > 0) 
-        {
-            buffer[ret] = '\0';
-            return ret;
-        }
+
+        
     }
 
     return -1;
