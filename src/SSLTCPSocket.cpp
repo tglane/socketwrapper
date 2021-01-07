@@ -244,36 +244,46 @@ void SSLTCPSocket::configure_ssl_context(bool server)
     }
 }
 
-int SSLTCPSocket::read_raw(char* const buffer, size_t size) const
+int SSLTCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        /* Read the data */
-        int ret = SSL_read(m_ssl, buffer, size);
-        if(ret < 0)
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds);
+
+        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        switch(recv_fd)
         {
-            ret = SSL_get_error(m_ssl, ret);
-            if(ret == 6) {
-                SSL_shutdown(m_ssl);
-                // TODO throw new ssl exception
-                buffer[size] = '\0';
+            case(0): // Timeout
+            case(-1): // Error
                 return -1;
-            }
-            else
+            default:
             {
-                ERR_print_errors_fp(stderr);
-                throw SocketReadException();
+                std::lock_guard<std::mutex> lock(m_mutex);
+                /* Read the data */
+                int ret = SSL_read(m_ssl, buffer, size);
+                if(ret < 0)
+                {
+                    ret = SSL_get_error(m_ssl, ret);
+                    if(ret == 6) {
+                        SSL_shutdown(m_ssl);
+                        // TODO throw new ssl exception
+                        buffer[size] = '\0';
+                        return -1;
+                    }
+                    else
+                    {
+                        ERR_print_errors_fp(stderr);
+                        throw SocketReadException();
+                    }
+                }
+                else
+                {
+                    return ret;
+                }
             }
         }
-        else
-        {
-            return ret;
-        }
-    }
-    else
-    {
-        throw SocketReadException();
     }
 
     return -1;

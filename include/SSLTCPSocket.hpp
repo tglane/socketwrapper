@@ -85,7 +85,7 @@ protected:
      * @param buffer pointer to the buffer to read into
      * @param size size to read from the socket
      */
-    int read_raw(char* const buffer, size_t size) const override;
+    int read_raw(char* const buffer, size_t size, timeval* tv = nullptr) const override;
 
     /**
      * @brief Write data to the raw unix socket from a given buffer

@@ -3,7 +3,6 @@
 //
 
 #include "../include/UDPSocket.hpp"
-#include <sys/select.h>
 
 namespace socketwrapper
 {
@@ -78,7 +77,6 @@ std::future<std::string> UDPSocket::receive_string_async(size_t size, sockaddr_i
         {
             buffer.resize(bytes);
         }
-        
 
         return buffer;
     });
@@ -113,9 +111,8 @@ int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, time
         switch(recv_fd)
         {
             case(0): // Timeout
-                return -1;
             case(-1): // Error
-                throw SocketReadException();
+                return -1;
             default:
             {
                 socklen_t flen = sizeof(from);

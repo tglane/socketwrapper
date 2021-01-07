@@ -168,16 +168,69 @@ std::string TCPSocket::read_string(size_t size) const
     return buffer;
 }
 
-int TCPSocket::read_raw(char* const buffer, size_t size) const
+std::future<std::string> TCPSocket::read_string_async(size_t size) const
+{
+    return std::async(std::launch::async, [this, size]() -> std::string
+    {
+        std::string buffer;
+        buffer.resize(size + 1);
+
+        int bytes = this->read_raw((char*) buffer.data(), size);
+        if(bytes < 0)
+            return "";
+        
+        if(buffer[bytes - 1] != '\0')
+        {
+            buffer.resize(bytes + 1);
+            buffer[bytes] = '\0';
+        }
+        else
+        {
+            buffer.resize(bytes);
+        }
+        return buffer;
+    });
+}
+
+std::future<bool> TCPSocket::read_string_async(size_t size, const std::function<void(const std::string&)>& callback) const
+{
+    return std::async(std::launch::async, [this, size, &callback]() -> bool
+    {
+        std::string buffer;
+        try {
+            buffer = this->read_string(size);
+        } catch(SocketReadException&) {
+            return false;
+        }
+
+        callback(buffer);
+        return true;
+    });
+}
+
+int TCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        size_t bytes = ::read(m_sockfd, buffer, size);
-        if(bytes < 0)
-            throw SocketReadException();
-        else
-            return bytes;
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds); 
+
+        int rec_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        switch(rec_fd)
+        {
+            case(0): // Timeout
+            case(-1): // Error
+                return -1;
+            default:
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                size_t bytes = ::read(m_sockfd, buffer, size);
+                if(bytes < 0)
+                    throw SocketReadException();
+                return bytes;
+            }
+        }
     }
     
     return -1;

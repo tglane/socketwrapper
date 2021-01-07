@@ -76,6 +76,17 @@ public:
     template<typename T>
     std::vector<T> read_vector(size_t size) const;
 
+
+    std::future<std::string> read_string_async(size_t size) const;
+
+    template<typename T>
+    std::future<std::vector<T>> read_vector_async(size_t size) const;
+
+    std::future<bool> read_string_async(size_t size, const std::function<void(const std::string&)>& callback) const;
+
+    template<typename T>
+    std::future<bool> read_vector_async(size_t size, const std::function<void(const std::vector<T>&)>& callback) const;
+
     /**
      * @brief Sends the content of a buffer to connected client
      * @param buffer buffer with the content to send
@@ -107,7 +118,7 @@ protected:
 
     TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state);
 
-    virtual int read_raw(char* const buffer, size_t size) const;
+    virtual int read_raw(char* const buffer, size_t size, timeval* tv = nullptr) const;
 
     virtual void write_raw(const char* buffer, size_t size) const;
 
@@ -127,7 +138,7 @@ std::unique_ptr<T[]> TCPSocket::read(size_t size, size_t* bytes_read) const
 {
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
-    size_t br = this->read_raw((char*) buffer.get(), size);
+    size_t br = this->read_raw(reinterpret_cast<char*>(buffer.get()), size);
     if(br < 0)
         throw SocketReadException();
 
@@ -143,13 +154,46 @@ std::vector<T> TCPSocket::read_vector(size_t size) const
     std::vector<T> buffer;
     buffer.resize(size);
     
-    int bytes = this->read_raw((char*) buffer.data(), size * sizeof(T));
+    int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T));
     if(bytes < 0)
         throw SocketReadException();
   
     buffer.resize(bytes / sizeof(T));
-
     return buffer;
+}
+
+template<typename T>
+std::future<std::vector<T>> TCPSocket::read_vector_async(size_t size) const
+{
+    return std::async(std::launch::async, [this, size]() -> std::vector<T>
+    {
+        std::vector<T> buffer;
+        buffer.resize(size);
+
+        int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T));
+        if(bytes < 0)
+            return {};
+        
+        buffer.resize(bytes / sizeof(T));
+        return buffer;
+    });
+}
+
+template<typename T>
+std::future<bool> TCPSocket::read_vector_async(size_t size, const std::function<void(const std::vector<T>&)>& callback) const
+{
+    return std::async(std::launch::async, [this, size, &callback]() -> bool
+    {
+        std::vector<T> buffer;
+        try {
+            buffer = this->read_vector<T>(size);
+        } catch(SocketReadException&) {
+            return false;
+        }
+
+        callback(buffer);
+        return false;
+    });
 }
 
 template<typename T>

@@ -15,6 +15,7 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <netinet/in.h> //for struct sockaddr_in
 #include <netdb.h> //for struct addrinfo
 #include <unistd.h> //for close(), ...
