@@ -151,10 +151,32 @@ std::string TCPSocket::read_string(size_t size) const
     std::string buffer;
     buffer.resize(size + 1);
     
-    int bytes = this->read_raw((char*) buffer.data(), size);
+    int bytes = this->read_raw((char*) buffer.data(), size, nullptr);
     if(bytes < 0)
         throw SocketReadException();
   
+    if(buffer[bytes - 1] != '\0')
+    {
+        buffer.resize(bytes + 1);
+        buffer[bytes] = '\0';
+    }
+    else
+    {
+        buffer.resize(bytes);
+    }
+
+    return buffer;
+}
+
+std::string TCPSocket::read_string(size_t size, const timeval& timeout) const
+{
+    std::string buffer;
+    buffer.resize(size + 1);
+
+    int bytes = this->read_raw((char*) buffer.data(), size, &timeout);
+    if(bytes < 0)
+        throw SocketReadException();
+
     if(buffer[bytes - 1] != '\0')
     {
         buffer.resize(bytes + 1);
@@ -208,7 +230,7 @@ std::future<bool> TCPSocket::read_string_async(size_t size, const std::function<
     });
 }
 
-int TCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
+int TCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeout) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
@@ -216,7 +238,7 @@ int TCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds); 
 
-        int rec_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        int rec_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, const_cast<timeval*>(timeout));
         switch(rec_fd)
         {
             case(0): // Timeout

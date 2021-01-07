@@ -57,6 +57,28 @@ std::string UDPSocket::receive_string(size_t size, sockaddr_in* from) const
     return buffer;
 }
 
+std::string UDPSocket::receive_string(size_t size, sockaddr_in* from, const timeval& timeout) const
+{
+    std::string buffer;
+    buffer.resize(size + 1);
+
+    int bytes = this->read_raw((char*) buffer.data(), size, from, &timeout);
+    if(bytes < 0)
+        throw SocketReadException();
+
+    if(buffer[bytes - 1] != '\0')
+    {
+        buffer.resize(bytes + 1);
+        buffer[bytes] = '\0';
+    }
+    else
+    {
+        buffer.resize(bytes);
+    }
+
+    return buffer;
+}
+
 std::future<std::string> UDPSocket::receive_string_async(size_t size, sockaddr_in* from) const
 {
     return std::async(std::launch::async, [this, size, from]() -> std::string
@@ -99,7 +121,7 @@ std::future<bool> UDPSocket::receive_string_async(size_t size, sockaddr_in* from
     });
 }
 
-int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, timeval* tv) const
+int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, const timeval* timeout) const
 {
     if(m_socket_state != socket_state::SHUT)
     {
@@ -107,7 +129,7 @@ int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, time
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds);
 
-        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, const_cast<timeval*>(timeout));
         switch(recv_fd)
         {
             case(0): // Timeout

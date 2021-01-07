@@ -244,7 +244,7 @@ void SSLTCPSocket::configure_ssl_context(bool server)
     }
 }
 
-int SSLTCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
+int SSLTCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeout) const
 {
     if(m_socket_state != socket_state::CLOSED && (m_tcp_state == tcp_state::ACCEPTED || m_tcp_state == tcp_state::CONNECTED))
     {
@@ -252,7 +252,7 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size, timeval* tv) const
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds);
 
-        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, tv);
+        int recv_fd = select(m_sockfd + 1, &fds, nullptr, nullptr, const_cast<timeval*>(timeout));
         switch(recv_fd)
         {
             case(0): // Timeout
