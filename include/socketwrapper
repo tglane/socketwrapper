@@ -1,0 +1,12 @@
+// -*- C++ -*- forwarding header.
+
+#ifndef SOCKETWRAPPER_HEADER
+#define SOCKETWRAPPER_HEADER
+
+#include "UDPSocket.hpp"
+#include "TCPSocket.hpp"
+#include "SSLTCPSocket.hpp"
+#include "BaseException.hpp"
+
+#endif
+
