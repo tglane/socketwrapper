@@ -33,6 +33,8 @@ class BaseSocket
 
 public:
 
+    enum class socket_state { SHUT, CLOSED, CREATED, BOUND };
+
     BaseSocket() = delete;
 
     virtual ~BaseSocket();
@@ -73,7 +75,7 @@ protected:
 
     BaseSocket(int family, int sock_type);
 
-    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state);
+    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, socket_state state);
 
     BaseSocket(BaseSocket&& other);
 
@@ -99,8 +101,7 @@ protected:
     int m_socktype;
     int m_family;
 
-    int m_socket_state;
-    enum socket_state {SHUT, CLOSED, CREATED, BOUND};
+    socket_state m_socket_state;
 
 };
 

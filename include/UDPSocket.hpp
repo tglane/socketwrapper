@@ -37,10 +37,10 @@ public:
      * @throws SocketReadException
      */
     template<typename T>
-    std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from) const;
+    std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from, size_t* bytes_read = nullptr) const;
 
     template<typename T>
-    std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from, const timeval& timeout) const;
+    std::unique_ptr<T[]> receive(size_t size, sockaddr_in* from, const timeval& timeout, size_t* bytes_read = nullptr) const;
 
     std::string receive_string(size_t size, sockaddr_in* from) const;
 
@@ -99,23 +99,25 @@ private:
 };
 
 template<typename T>
-std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from) const
+std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from, size_t* bytes_read) const
 {
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
-    if(this->read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), from) < 0)
-        throw SocketReadException();
+    size_t br = this->read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), from);
+    if(bytes_read != nullptr)
+        *bytes_read = br;
 
     return buffer;
 }
 
 template<typename T>
-std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from, const timeval& timeout) const
+std::unique_ptr<T[]> UDPSocket::receive(size_t size, sockaddr_in* from, const timeval& timeout, size_t* bytes_read) const
 {
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
-    if(this->read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), from, &timeout) < 0)
-        throw SocketReadException();
+    size_t br = read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), from, &timeout);
+    if(bytes_read != nullptr)
+        *bytes_read = br;
 
     return buffer;
 }
@@ -127,9 +129,6 @@ std::vector<T> UDPSocket::receive_vector(size_t size, sockaddr_in* from) const
     buffer.resize(size);
 
     int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), from);
-    if(bytes < 0)
-        throw SocketReadException();
-
     buffer.resize(bytes / sizeof(T));
     return buffer;
 }
@@ -141,9 +140,6 @@ std::vector<T> UDPSocket::receive_vector(size_t size, sockaddr_in* from, const t
     buffer.resize(size);
 
     int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), from, &timeout);
-    if(bytes < 0)
-        throw SocketReadException();
-
     buffer.resize(bytes / sizeof(T));
     return buffer;
 }
@@ -157,9 +153,6 @@ std::future<std::vector<T>> UDPSocket::recevice_vector_async(size_t size, sockad
         buffer.resize(size);
 
         int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), from);
-        if(bytes < 0)
-            return {};
-
         buffer.resize(bytes / sizeof(T));
         return buffer;
     });
@@ -169,12 +162,12 @@ template<typename T>
 std::future<bool> UDPSocket::recevice_vector_async(size_t size, sockaddr_in* from,
     const std::function<void(const std::vector<T>&, sockaddr_in*)>& callback) const
 {
-    return std::async(std::launch::async, [this, size, from, &callback]() -> bool
+    return std::async(std::launch::async, [this, size, from, callback]() -> bool
     {
         std::vector<T> buffer;
         try {
             buffer = this->receive_vector<T>(size, from);
-        } catch(SocketReadException&) {
+        } catch(...) {
             return false;
         }
 

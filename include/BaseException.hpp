@@ -63,6 +63,11 @@ public:
     const char* what() override { return "Error reading data through the socket"; }
 };
 
+class SocketTimeoutException : public BaseException {
+public:
+    const char* what() override { return "Error timeout"; }
+};
+
 class SocketWriteException : public BaseException {
 public:
     const char* what() override { return "Error transmitting data through the socket"; }

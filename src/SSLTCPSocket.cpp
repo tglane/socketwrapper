@@ -28,7 +28,7 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     //TODO Add error handling
 }
 
-SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state, std::shared_ptr<SSL_CTX> ctx)
+SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx)
      : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_context(std::move(ctx))
 {
     if(m_tcp_state == tcp_state::ACCEPTED)
@@ -204,7 +204,7 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept() const
 
 std::future<bool> SSLTCPSocket::accept_async(const std::function<bool(SSLTCPSocket&)>& callback) const
 {
-    return std::async(std::launch::async, [&]() -> bool {
+    return std::async(std::launch::async, [this, callback]() -> bool {
             std::unique_ptr<SSLTCPSocket> conn = this->accept();
         return callback(*conn);
     });
@@ -256,8 +256,9 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeo
         switch(recv_fd)
         {
             case(0): // Timeout
+                throw SocketTimeoutException {};
             case(-1): // Error
-                return -1;
+                throw SocketReadException {};
             default:
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
@@ -275,7 +276,7 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeo
                     else
                     {
                         ERR_print_errors_fp(stderr);
-                        throw SocketReadException();
+                        throw SocketReadException {};
                     }
                 }
                 else
@@ -286,7 +287,7 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeo
         }
     }
 
-    return -1;
+    throw SocketReadException {};
 }
 
 void SSLTCPSocket::write_raw(const char *buffer, size_t size) const

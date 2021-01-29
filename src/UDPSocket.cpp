@@ -41,9 +41,6 @@ std::string UDPSocket::receive_string(size_t size, sockaddr_in* from) const
     buffer.resize(size + 1);
 
     int bytes = this->read_raw((char*) buffer.data(), size, from);
-    if(bytes < 0)
-        throw SocketReadException();
-
     if(buffer[bytes - 1] != '\0')
     {
         buffer.resize(bytes + 1);
@@ -63,9 +60,6 @@ std::string UDPSocket::receive_string(size_t size, sockaddr_in* from, const time
     buffer.resize(size + 1);
 
     int bytes = this->read_raw((char*) buffer.data(), size, from, &timeout);
-    if(bytes < 0)
-        throw SocketReadException();
-
     if(buffer[bytes - 1] != '\0')
     {
         buffer.resize(bytes + 1);
@@ -87,9 +81,6 @@ std::future<std::string> UDPSocket::receive_string_async(size_t size, sockaddr_i
         buffer.resize(size + 1);
 
         int bytes = this->read_raw((char*) buffer.data(), size, from);
-        if(bytes < 0)
-            return "";
-
         if(buffer[bytes - 1] != '\0')
         {
             buffer.resize(bytes + 1);
@@ -112,7 +103,7 @@ std::future<bool> UDPSocket::receive_string_async(size_t size, sockaddr_in* from
         std::string buffer;
         try {
             buffer = this->receive_string(size, from);
-        } catch(SocketReadException&) {
+        } catch(...) {
             return false;
         }
 
@@ -133,15 +124,16 @@ int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, cons
         switch(recv_fd)
         {
             case(0): // Timeout
+                throw SocketTimeoutException {};
             case(-1): // Error
-                return -1;
+                throw SocketReadException {};
             default:
             {
                 socklen_t flen = sizeof(from);
                 std::lock_guard<std::mutex> lock(m_mutex);
                 int ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) from, &flen);
                 if(ret < 0)
-                    throw SocketReadException();
+                    throw SocketReadException {};
                 return ret;
             }
         }
@@ -149,7 +141,7 @@ int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, cons
         
     }
 
-    return -1;
+    throw SocketReadException {};
 }
 
 }

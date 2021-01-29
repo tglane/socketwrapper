@@ -11,7 +11,7 @@ TCPSocket::TCPSocket(int family)
     : BaseSocket(family, SOCK_STREAM), m_client_addr{}, m_tcp_state(tcp_state::WAITING)
 {}
 
-TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state)
+TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, socket_state state, tcp_state tcp_state)
     : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
 {}
 
@@ -130,7 +130,7 @@ std::unique_ptr<TCPSocket> TCPSocket::accept() const
 
 std::future<bool> TCPSocket::accept_async(const std::function<bool(TCPSocket&)>& callback) const
 {
-    return std::async(std::launch::async, [&]() {
+    return std::async(std::launch::async, [this, callback]() {
         std::unique_ptr<TCPSocket> conn = this->accept();
         return callback(*conn);
     });
@@ -152,9 +152,6 @@ std::string TCPSocket::read_string(size_t size) const
     buffer.resize(size + 1);
     
     int bytes = this->read_raw((char*) buffer.data(), size, nullptr);
-    if(bytes < 0)
-        throw SocketReadException();
-  
     if(buffer[bytes - 1] != '\0')
     {
         buffer.resize(bytes + 1);
@@ -174,9 +171,6 @@ std::string TCPSocket::read_string(size_t size, const timeval& timeout) const
     buffer.resize(size + 1);
 
     int bytes = this->read_raw((char*) buffer.data(), size, &timeout);
-    if(bytes < 0)
-        throw SocketReadException();
-
     if(buffer[bytes - 1] != '\0')
     {
         buffer.resize(bytes + 1);
@@ -198,9 +192,6 @@ std::future<std::string> TCPSocket::read_string_async(size_t size) const
         buffer.resize(size + 1);
 
         int bytes = this->read_raw((char*) buffer.data(), size);
-        if(bytes < 0)
-            return "";
-        
         if(buffer[bytes - 1] != '\0')
         {
             buffer.resize(bytes + 1);
@@ -216,12 +207,12 @@ std::future<std::string> TCPSocket::read_string_async(size_t size) const
 
 std::future<bool> TCPSocket::read_string_async(size_t size, const std::function<void(const std::string&)>& callback) const
 {
-    return std::async(std::launch::async, [this, size, &callback]() -> bool
+    return std::async(std::launch::async, [this, size, callback]() -> bool
     {
         std::string buffer;
         try {
             buffer = this->read_string(size);
-        } catch(SocketReadException&) {
+        } catch(...) {
             return false;
         }
 
@@ -242,20 +233,21 @@ int TCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeout)
         switch(rec_fd)
         {
             case(0): // Timeout
+                throw SocketTimeoutException {};
             case(-1): // Error
-                return -1;
+                throw SocketReadException {};
             default:
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 size_t bytes = ::read(m_sockfd, buffer, size);
                 if(bytes < 0)
-                    throw SocketReadException();
+                    throw SocketReadException {};
                 return bytes;
             }
         }
     }
     
-    return -1;
+    throw SocketReadException {};
 }
 
 void TCPSocket::write_raw(const char* buffer, size_t size) const

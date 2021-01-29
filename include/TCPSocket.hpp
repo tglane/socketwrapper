@@ -19,6 +19,8 @@ class TCPSocket : public BaseSocket
 
 public:
 
+    enum class tcp_state { WAITING, CONNECTED, LISTENING, ACCEPTED };
+
     explicit TCPSocket(int family);
 
     TCPSocket(TCPSocket&& other);
@@ -126,7 +128,7 @@ public:
 
 protected:
 
-    TCPSocket(int family, int socket_fd, sockaddr_in own_addr, int state, int tcp_state);
+    TCPSocket(int family, int socket_fd, sockaddr_in own_addr, socket_state state, tcp_state tcp_state);
 
     virtual int read_raw(char* const buffer, size_t size, const timeval* timeout = nullptr) const;
 
@@ -138,8 +140,7 @@ protected:
      */
     sockaddr_in m_client_addr;
 
-    int m_tcp_state;
-    enum tcp_state { WAITING, CONNECTED, LISTENING, ACCEPTED };
+    tcp_state m_tcp_state;
 
 };
 
@@ -149,9 +150,6 @@ std::unique_ptr<T[]> TCPSocket::read(size_t size, size_t* bytes_read) const
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
     size_t br = this->read_raw(reinterpret_cast<char*>(buffer.get()), size * sizeof(T), nullptr);
-    if(br < 0)
-        throw SocketReadException();
-
     if(bytes_read != nullptr)
         *bytes_read = br;
 
@@ -164,9 +162,6 @@ std::unique_ptr<T[]> TCPSocket::read(size_t size, const timeval& timeout, size_t
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(size);
 
     size_t br = this->read_raw(reinterpret_cast<char*>(buffer.get()), size, &timeout);
-    if(br < 0)
-        throw SocketReadException();
-
     if(bytes_read != nullptr)
         *bytes_read = br;
 
@@ -180,9 +175,6 @@ std::vector<T> TCPSocket::read_vector(size_t size) const
     buffer.resize(size);
     
     int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), nullptr);
-    if(bytes < 0)
-        throw SocketReadException();
-  
     buffer.resize(bytes / sizeof(T));
     return buffer;
 }
@@ -194,9 +186,6 @@ std::vector<T> TCPSocket::read_vector(size_t size, const timeval& timeout) const
     buffer.resize(size);
 
     int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T), &timeout);
-    if(bytes < 0)
-        throw SocketReadException();
-
     buffer.resize(bytes / sizeof(T));
     return buffer;
 }
@@ -210,9 +199,6 @@ std::future<std::vector<T>> TCPSocket::read_vector_async(size_t size) const
         buffer.resize(size);
 
         int bytes = this->read_raw(reinterpret_cast<char*>(buffer.data()), size * sizeof(T));
-        if(bytes < 0)
-            return {};
-        
         buffer.resize(bytes / sizeof(T));
         return buffer;
     });
@@ -221,12 +207,12 @@ std::future<std::vector<T>> TCPSocket::read_vector_async(size_t size) const
 template<typename T>
 std::future<bool> TCPSocket::read_vector_async(size_t size, const std::function<void(const std::vector<T>&)>& callback) const
 {
-    return std::async(std::launch::async, [this, size, &callback]() -> bool
+    return std::async(std::launch::async, [this, size, callback]() -> bool
     {
         std::vector<T> buffer;
         try {
             buffer = this->read_vector<T>(size);
-        } catch(SocketReadException&) {
+        } catch(...) {
             return false;
         }
 
@@ -253,9 +239,7 @@ std::unique_ptr<T[]> TCPSocket::read_all(size_t* bytes_read) const
     size_t bytes = bytes_available();
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(bytes);
 
-    if(this->read_raw((char*) buffer.get(), bytes) < 0)
-        throw SocketReadException();
-
+    this->read_raw((char*) buffer.get(), bytes);
     if(bytes_read != nullptr)
         *bytes_read = bytes;
 
@@ -269,9 +253,7 @@ std::vector<T> TCPSocket::read_all_vector() const
     std::vector<T> buffer;
     buffer.resize(bytes / sizeof(T));
 
-    if(this->read_raw((char*) buffer.data(), bytes) < 0)
-        throw SocketReadException();
-
+    this->read_raw((char*) buffer.data(), bytes);
     return buffer;
 }
 

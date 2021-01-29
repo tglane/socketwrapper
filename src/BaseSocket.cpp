@@ -14,7 +14,7 @@ BaseSocket::BaseSocket(int family, int sock_type)
     this->create_new_file_descriptor();
 }
 
-BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, int state)
+BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, socket_state state)
     : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_socket_state(state)
 {}
 
