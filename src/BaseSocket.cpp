@@ -9,13 +9,13 @@ namespace socketwrapper
 {
 
 BaseSocket::BaseSocket(int family, int sock_type)
-    : m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_sockfd{}, m_socket_state(socket_state::SHUT)
+    : m_sockfd{}, m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_socket_state(socket_state::SHUT)
 {
     this->create_new_file_descriptor();
 }
 
-BaseSocket::BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, socket_state state)
-    : m_family(family), m_socktype(sock_type), m_sockfd(socket_fd), m_sockaddr_in(own_addr), m_socket_state(state)
+BaseSocket::BaseSocket(int socket_fd, int family, int sock_type, sockaddr_in own_addr, socket_state state)
+    : m_sockfd(socket_fd), m_family(family), m_socktype(sock_type), m_sockaddr_in(own_addr), m_socket_state(state)
 {}
 
 BaseSocket::BaseSocket(BaseSocket&& other)

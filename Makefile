@@ -1,6 +1,6 @@
 cc = g++
 
-CFLAGS = -std=c++17 -lpthread -fpic -Iinclude
+CFLAGS = -std=c++17 -lpthread -fpic -Iinclude -Wall -Werror -Wpedantic
 
 SRCDIR = src
 SRCFILES = $(wildcard $(SRCDIR)/*.cpp)

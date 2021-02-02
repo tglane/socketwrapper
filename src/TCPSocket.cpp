@@ -11,8 +11,8 @@ TCPSocket::TCPSocket(int family)
     : BaseSocket(family, SOCK_STREAM), m_client_addr{}, m_tcp_state(tcp_state::WAITING)
 {}
 
-TCPSocket::TCPSocket(int family, int socket_fd, sockaddr_in own_addr, socket_state state, tcp_state tcp_state)
-    : BaseSocket(family, SOCK_STREAM, socket_fd, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
+TCPSocket::TCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state)
+    : BaseSocket(socket_fd, family, SOCK_STREAM, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
 {}
 
 TCPSocket::TCPSocket(TCPSocket&& other)
@@ -119,7 +119,7 @@ std::unique_ptr<TCPSocket> TCPSocket::accept() const
         if(conn_fd < 0) 
             throw SocketAcceptingException();
 
-        std::unique_ptr<TCPSocket> connSock(new TCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED));
+        std::unique_ptr<TCPSocket> connSock(new TCPSocket(conn_fd, m_family, m_sockaddr_in, m_socket_state, tcp_state::ACCEPTED));
         return connSock;
     }
     else

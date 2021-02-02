@@ -28,8 +28,8 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     //TODO Add error handling
 }
 
-SSLTCPSocket::SSLTCPSocket(int family, int socket_fd, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx)
-     : TCPSocket(family, socket_fd, own_addr, state, tcp_state), m_context(std::move(ctx))
+SSLTCPSocket::SSLTCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx)
+     : TCPSocket(socket_fd, family, own_addr, state, tcp_state), m_context(std::move(ctx))
 {
     if(m_tcp_state == tcp_state::ACCEPTED)
     {

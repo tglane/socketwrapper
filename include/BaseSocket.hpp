@@ -75,7 +75,7 @@ protected:
 
     BaseSocket(int family, int sock_type);
 
-    BaseSocket(int family, int sock_type, int socket_fd, sockaddr_in own_addr, socket_state state);
+    BaseSocket(int socket_fd, int family, int sock_type, sockaddr_in own_addr, socket_state state);
 
     BaseSocket(BaseSocket&& other);
 
@@ -94,15 +94,14 @@ protected:
 
     mutable std::mutex m_mutex;
 
-    sockaddr_in m_sockaddr_in;
-
     int m_sockfd;
 
-    int m_socktype;
     int m_family;
+    int m_socktype;
+
+    sockaddr_in m_sockaddr_in;
 
     socket_state m_socket_state;
-
 };
 
 }
