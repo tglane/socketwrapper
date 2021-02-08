@@ -50,9 +50,9 @@ public:
 
     virtual void connect(int port_to, std::string_view addr_to);
 
-    virtual std::future<bool> connect_async(int port, in_addr_t addr_to, const std::function<bool(TCPSocket&)>& callback);
+    std::future<bool> connect_async(int port, in_addr_t addr_to, const std::function<bool(TCPSocket&)>& callback);
 
-    virtual std::future<bool> connect_async(int port, std::string_view addr_to, const std::function<bool(TCPSocket&)>& callback);
+    std::future<bool> connect_async(int port, std::string_view addr_to, const std::function<bool(TCPSocket&)>& callback);
 
     /**
      * @briefWaits for a client to connect to the socket

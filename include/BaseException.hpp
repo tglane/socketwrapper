@@ -9,78 +9,69 @@
 
 namespace socketwrapper {
 
-/**
- * Abstract base exception class
- */
-class BaseException : public std::exception {
+class SetSockOptException : public std::exception {
 public:
-    virtual const char* what() = 0;
+    const char* what() const throw () { return "Error calling setsockopt"; }
 };
 
-class SetSockOptException : public BaseException {
+class SocketAcceptingException : public std::exception {
 public:
-    const char* what() override { return "Error calling setsockopt"; }
+    const char* what() const throw () { return "Error accepting connection"; }
 };
 
-class SocketAcceptingException : public BaseException {
+class SocketBindException : public std::exception {
 public:
-    const char* what() override { return "Error accepting connection"; }
+    const char* what() const throw () { return "Error binding socket"; }
 };
 
-class SocketBindException : public BaseException {
+class SocketBoundException : std::exception {
 public:
-    const char* what() override { return "Error binding socket"; }
+    const char *what() const throw () { return "Socket already bound"; }
 };
 
-class SocketBoundException : BaseException {
+class SocketCloseException : std::exception {
 public:
-    const char *what() override { return "Socket already bound"; }
+    const char* what() const throw () { return "Error closing socket"; }
 };
 
-class SocketCloseException : BaseException
-{
+class SocketConnectingException : public std::exception {
 public:
-    const char* what() override { return "Error closing socket"; }
+    const char* what() const throw () { return "Error connecting to the given address"; }
 };
 
-class SocketConnectingException : public BaseException {
+class SocketCreationException : public std::exception {
 public:
-    const char* what() override { return "Error connecting to the given address"; }
+    const char* what() const throw () { return "Error creating socket"; }
 };
 
-class SocketCreationException : public BaseException {
+class SocketListenException : public std::exception {
 public:
-    const char* what() override { return "Error creating socket"; }
+    const char* what() const throw () { return "Error setting Socket to listening mode"; }
 };
 
-class SocketListenException : public BaseException {
+class SocketReadException : public std::exception {
 public:
-    const char* what() override { return "Error setting Socket to listening mode"; }
+    const char* what() const throw () { return "Error reading data through the socket"; }
 };
 
-class SocketReadException : public BaseException {
+class SocketTimeoutException : public std::exception {
 public:
-    const char* what() override { return "Error reading data through the socket"; }
+    const char* what() const throw () { return "Error timeout"; }
 };
 
-class SocketTimeoutException : public BaseException {
+class SocketWriteException : public std::exception {
 public:
-    const char* what() override { return "Error timeout"; }
+    const char* what() const throw () { return "Error transmitting data through the socket"; }
 };
 
-class SocketWriteException : public BaseException {
+class ReadBytesAvailableException : std::exception {
 public:
-    const char* what() override { return "Error transmitting data through the socket"; }
+    const char* what() const throw () { return "Error reading available bytes"; }
 };
 
-class ReadBytesAvailableException : BaseException {
+class SSLContextCreationException : std::exception {
 public:
-    const char* what() override { return "Error reading available bytes"; }
-};
-
-class SSLContextCreationException : BaseException {
-public:
-    const char* what() override { return "Error creating the ssl context"; }
+    const char* what() const throw () { return "Error creating the ssl context"; }
 };
 
 }
