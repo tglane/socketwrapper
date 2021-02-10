@@ -245,7 +245,7 @@ std::unique_ptr<T[]> TCPSocket::read_all(size_t* bytes_read) const
     size_t bytes_ready = bytes_available();
     std::unique_ptr<T[]> buffer = std::make_unique<T[]>(bytes_ready);
 
-    size_t bytes = this->read_raw((char*) buffer.get(), bytes);
+    size_t bytes = this->read_raw((char*) buffer.get(), bytes_ready);
     if(bytes_read != nullptr)
         *bytes_read = bytes;
 
