@@ -2,21 +2,22 @@
 // Created by timog on 23.12.18.
 //
 
+#include <iostream>
 #include "../include/TCPSocket.hpp"
 
 namespace socketwrapper
 {
 
-TCPSocket::TCPSocket(int family)
-    : BaseSocket(family, SOCK_STREAM), m_client_addr{}, m_tcp_state(tcp_state::WAITING)
+TCPSocket::TCPSocket(ip_version family)
+    : BaseSocket {family, sock_type::stream}, m_client_addr {}, m_tcp_state {tcp_state::WAITING}
 {}
 
-TCPSocket::TCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state)
-    : BaseSocket(socket_fd, family, SOCK_STREAM, own_addr, state), m_client_addr{}, m_tcp_state(tcp_state)
+TCPSocket::TCPSocket(int socket_fd, ip_version family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state)
+    : BaseSocket {socket_fd, family, sock_type::stream, own_addr, state}, m_client_addr {}, m_tcp_state {tcp_state}
 {}
 
 TCPSocket::TCPSocket(TCPSocket&& other)
-    : BaseSocket(std::move(other))
+    : BaseSocket {std::move(other)}
 {
     *this = std::move(other);
 }
@@ -85,7 +86,7 @@ void TCPSocket::connect(int port_to, in_addr_t addr_to)
 void TCPSocket::connect(int port_to, std::string_view addr_to)
 {
     in_addr_t in_addr{};
-    inet_pton(m_family, addr_to.data(), &in_addr);
+    inet_pton(static_cast<uint8_t>(m_family), addr_to.data(), &in_addr);
 
     TCPSocket::connect(port_to, ntohl(in_addr));
 }
@@ -102,7 +103,7 @@ std::future<bool> TCPSocket::connect_async(int port, std::string_view addr_to, c
 {
     return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
         in_addr_t in_addr{};
-        inet_pton(this->m_family, addr_to.data(), &in_addr);
+        inet_pton(static_cast<uint8_t>(m_family), addr_to.data(), &in_addr);
             
         this->connect(port, ntohl(in_addr));
         return callback(*this);
@@ -239,7 +240,9 @@ int TCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeout)
             default:
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
-                size_t bytes = ::read(m_sockfd, buffer, size);
+                auto bytes = ::read(m_sockfd, buffer, size);
+                while(bytes == -1 && errno == EINTR)
+                    bytes = ::read(m_sockfd, buffer, size);
                 if(bytes < 0)
                     throw SocketReadException {};
                 return bytes;

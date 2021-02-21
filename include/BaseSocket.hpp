@@ -20,10 +20,24 @@
 #include <netdb.h> //for struct addrinfo
 #include <unistd.h> //for close(), ...
 #include <arpa/inet.h> //for inet_addr()
+#include <errno.h>
 
 #include "BaseException.hpp"
 
 namespace socketwrapper {
+
+enum class ip_version : uint8_t
+{
+    v4 = AF_INET,
+    v6 = AF_INET6
+};
+
+enum class sock_type : uint8_t
+{
+    not_set = 0,
+    stream = SOCK_STREAM,
+    dgram = SOCK_DGRAM
+};
 
 /**
  * @brief Simple socket wrapper base class that wraps the c socket functions into a c++ socket class
@@ -73,9 +87,9 @@ public:
 
 protected:
 
-    BaseSocket(int family, int sock_type);
+    BaseSocket(ip_version family, sock_type sock_type);
 
-    BaseSocket(int socket_fd, int family, int sock_type, sockaddr_in own_addr, socket_state state);
+    BaseSocket(int socket_fd, ip_version family, sock_type sock_type, sockaddr_in own_addr, socket_state state);
 
     BaseSocket(BaseSocket&& other);
 
@@ -96,8 +110,8 @@ protected:
 
     int m_sockfd;
 
-    int m_family;
-    int m_socktype;
+    ip_version m_family;
+    sock_type m_socktype;
 
     sockaddr_in m_sockaddr_in;
 

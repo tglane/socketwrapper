@@ -8,14 +8,14 @@
 namespace socketwrapper
 {
 
-BaseSocket::BaseSocket(int family, int sock_type)
-    : m_sockfd{}, m_family(family), m_socktype(sock_type), m_sockaddr_in{}, m_socket_state(socket_state::SHUT)
+BaseSocket::BaseSocket(ip_version family, sock_type sock_type)
+    : m_sockfd {}, m_family {family}, m_socktype {sock_type}, m_sockaddr_in {}, m_socket_state {socket_state::SHUT}
 {
-    this->create_new_file_descriptor();
+    create_new_file_descriptor();
 }
 
-BaseSocket::BaseSocket(int socket_fd, int family, int sock_type, sockaddr_in own_addr, socket_state state)
-    : m_sockfd(socket_fd), m_family(family), m_socktype(sock_type), m_sockaddr_in(own_addr), m_socket_state(state)
+BaseSocket::BaseSocket(int socket_fd, ip_version family, sock_type sock_type, sockaddr_in own_addr, socket_state state)
+    : m_sockfd {socket_fd}, m_family {family}, m_socktype {sock_type}, m_sockaddr_in {own_addr}, m_socket_state {state}
 {}
 
 BaseSocket::BaseSocket(BaseSocket&& other)
@@ -35,9 +35,8 @@ BaseSocket& BaseSocket::operator=(BaseSocket&& other)
     this->m_family = other.m_family;
     this->m_socket_state = other.m_socket_state;
 
-    other.m_sockfd = 0;
-    other.m_socktype = 0;
-    other.m_family = 0;
+    other.m_sockfd = -1;
+    other.m_socktype = sock_type::not_set;
     other.m_socket_state = socket_state::SHUT;
 
     return *this;
@@ -45,18 +44,12 @@ BaseSocket& BaseSocket::operator=(BaseSocket&& other)
 
 bool BaseSocket::create_new_file_descriptor()
 {
-    m_sockaddr_in.sin_family = {(sa_family_t) m_family};
+    m_sockaddr_in.sin_family = {static_cast<uint8_t>(m_family)};
 
-    if(m_family == AF_UNSPEC)
-    {
-        //Unable to create a socket now
-        return false;
-    }
-
-    m_sockfd = socket(m_sockaddr_in.sin_family, m_socktype, 0);
+    m_sockfd = socket(m_sockaddr_in.sin_family, static_cast<int>(m_socktype), 0);
     if(m_sockfd == -1)
         throw SocketCreationException();
-    
+
     int reuse = 1;
     if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) 
         throw SetSockOptException();
@@ -87,7 +80,7 @@ void BaseSocket::bind(const in_addr_t& address, int port)
 void BaseSocket::bind(std::string_view address, int port)
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, address.data(), &inAddr);
+    inet_pton(static_cast<uint8_t>(m_family), address.data(), &inAddr);
 
     BaseSocket::bind(inAddr ,port);
 }
@@ -110,8 +103,8 @@ int BaseSocket::resolve_hostname(const char* host_name, sockaddr_in* addr_out) c
     addrinfo hints = {};
     int result = -1;
 
-    hints.ai_family = m_family;
-    hints.ai_socktype = m_socktype;
+    hints.ai_family = static_cast<uint8_t>(m_family);
+    hints.ai_socktype = static_cast<uint8_t>(m_socktype);
 
     ret = getaddrinfo(host_name, NULL, &hints, &resultList);
 

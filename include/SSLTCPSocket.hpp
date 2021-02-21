@@ -21,7 +21,7 @@ class SSLTCPSocket : public TCPSocket
 
 public:
 
-    SSLTCPSocket(int family, const char* cert, const char* key);
+    SSLTCPSocket(ip_version family, std::string_view cert, std::string_view key);
 
     SSLTCPSocket(SSLTCPSocket&& other);
 
@@ -71,7 +71,7 @@ protected:
     /**
      * @throws SocketAcceptingException SSLContextCreationException
      */
-    SSLTCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx);
+    SSLTCPSocket(int socket_fd, ip_version family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx);
 
     /**
      * @brief Configures the SSL context

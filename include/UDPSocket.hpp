@@ -23,7 +23,7 @@ public:
      * Constructor
      * @param int family
      */
-    explicit UDPSocket(int family);
+    explicit UDPSocket(ip_version family);
 
     UDPSocket(UDPSocket&& other);
 
@@ -195,7 +195,7 @@ template<typename T>
 void UDPSocket::send_to(const T* buffer_from, size_t size, int port, std::string_view addr) const
 {
     in_addr_t in_addr{};
-    inet_pton(m_family, addr.data(), &in_addr);
+    inet_pton(static_cast<uint8_t>(m_family), addr.data(), &in_addr);
     this->send_to<T>(buffer_from, size, port, in_addr);
 }
 
@@ -203,7 +203,7 @@ template<typename T>
 void UDPSocket::send_to(const std::vector<T>& buffer_from, int port, std::string_view addr) const
 {
     in_addr_t in_addr{};
-    inet_pton(m_family, addr.data(), &in_addr);
+    inet_pton(static_cast<uint8_t>(m_family), addr.data(), &in_addr);
     this->send_to<T>(buffer_from.data(), buffer_from.size(), port, in_addr);
 }
 

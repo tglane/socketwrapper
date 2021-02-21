@@ -7,12 +7,12 @@
 namespace socketwrapper
 {
 
-UDPSocket::UDPSocket(int family)
-    : BaseSocket(family, SOCK_DGRAM)
+UDPSocket::UDPSocket(ip_version family)
+    : BaseSocket {family, sock_type::dgram}
 {}
 
 UDPSocket::UDPSocket(UDPSocket&& other)
-    : BaseSocket(std::move(other))
+    : BaseSocket {std::move(other)}
 {}
 
 UDPSocket& UDPSocket::operator=(UDPSocket&& other)
@@ -24,14 +24,14 @@ UDPSocket& UDPSocket::operator=(UDPSocket&& other)
 void UDPSocket::send_to(const std::string& buffer, int port, std::string_view addr) const
 {
     in_addr_t in_addr{};
-    inet_pton(m_family, addr.data(), &in_addr);
+    inet_pton(static_cast<uint8_t>(m_family), addr.data(), &in_addr);
     this->send_to<char>(buffer.data(), buffer.size(), port, in_addr);
 }
 
 void UDPSocket::send_to(std::string_view buffer, int port, std::string_view addr) const
 {
     in_addr_t in_addr{};
-    inet_pton(m_family, addr.data(), &in_addr);
+    inet_pton(static_cast<uint8_t>(m_family), addr.data(), &in_addr);
     this->send_to<char>(buffer.data(), buffer.size(), port, in_addr);
 }
 
@@ -131,7 +131,9 @@ int UDPSocket::read_raw(char* const buffer, size_t size, sockaddr_in* from, cons
             {
                 socklen_t flen = sizeof(from);
                 std::lock_guard<std::mutex> lock(m_mutex);
-                int ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) from, &flen);
+                auto ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) from, &flen);
+                while(ret == -1 && errno == EINTR)
+                   ret = ::recvfrom(m_sockfd, buffer, size, 0, (struct sockaddr*) from, &flen);
                 if(ret < 0)
                     throw SocketReadException {};
                 return ret;

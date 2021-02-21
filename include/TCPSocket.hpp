@@ -21,7 +21,7 @@ public:
 
     enum class tcp_state { WAITING, CONNECTED, LISTENING, ACCEPTED };
 
-    explicit TCPSocket(int family);
+    explicit TCPSocket(ip_version family);
 
     TCPSocket(TCPSocket&& other);
 
@@ -134,7 +134,7 @@ public:
 
 protected:
 
-    TCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state);
+    TCPSocket(int socket_fd, ip_version family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state);
 
     virtual int read_raw(char* const buffer, size_t size, const timeval* timeout = nullptr) const;
 

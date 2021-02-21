@@ -11,8 +11,8 @@ namespace socketwrapper
 
 bool SSLTCPSocket::ssl_initialized = false;
 
-SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
-    : TCPSocket(family), m_cert(cert), m_key(key)
+SSLTCPSocket::SSLTCPSocket(ip_version family, std::string_view cert, std::string_view key)
+    : TCPSocket {family}, m_cert {cert}, m_key {key}
 {
     if(!ssl_initialized)
     {
@@ -28,8 +28,8 @@ SSLTCPSocket::SSLTCPSocket(int family, const char* cert, const char* key)
     //TODO Add error handling
 }
 
-SSLTCPSocket::SSLTCPSocket(int socket_fd, int family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx)
-     : TCPSocket(socket_fd, family, own_addr, state, tcp_state), m_context(std::move(ctx))
+SSLTCPSocket::SSLTCPSocket(int socket_fd, ip_version family, sockaddr_in own_addr, socket_state state, tcp_state tcp_state, std::shared_ptr<SSL_CTX> ctx)
+     : TCPSocket {socket_fd, family, own_addr, state, tcp_state}, m_context {std::move(ctx)}
 {
     if(m_tcp_state == tcp_state::ACCEPTED)
     {
@@ -60,7 +60,7 @@ SSLTCPSocket::SSLTCPSocket(int socket_fd, int family, sockaddr_in own_addr, sock
 }
 
 SSLTCPSocket::SSLTCPSocket(SSLTCPSocket&& other)
-    : TCPSocket(std::move(other))
+    : TCPSocket {std::move(other)}
 {
     *this = std::move(other);
 }
@@ -158,7 +158,7 @@ void SSLTCPSocket::connect(int port_to, in_addr_t addr_to)
 void SSLTCPSocket::connect(int port_to, std::string_view addr_to)
 {
     in_addr_t inAddr{};
-    inet_pton(m_family, addr_to.data(), &inAddr);
+    inet_pton(static_cast<uint8_t>(m_family), addr_to.data(), &inAddr);
 
     this->connect(port_to, ntohl(inAddr));
 }
@@ -175,7 +175,7 @@ std::future<bool> SSLTCPSocket::connect_async(int port, std::string_view addr_to
 {
     return std::async(std::launch::async, [this, port, addr_to, callback]() -> bool {
         in_addr_t in_addr{};
-        inet_pton(this->m_family, addr_to.data(), &in_addr);
+        inet_pton(static_cast<uint8_t>(m_family), addr_to.data(), &in_addr);
 
         this->connect(port, ntohl(in_addr));
         return callback(*this);
@@ -192,7 +192,7 @@ std::unique_ptr<SSLTCPSocket> SSLTCPSocket::accept() const
         if (conn_fd < 0) 
             throw SocketAcceptingException();
 
-        return std::unique_ptr<SSLTCPSocket>(new SSLTCPSocket(m_family, conn_fd, m_sockaddr_in, m_socket_state, 
+        return std::unique_ptr<SSLTCPSocket>(new SSLTCPSocket(conn_fd, m_family, m_sockaddr_in, m_socket_state, 
                 tcp_state::ACCEPTED, m_context));
     }
     else
@@ -264,6 +264,8 @@ int SSLTCPSocket::read_raw(char* const buffer, size_t size, const timeval* timeo
                 std::lock_guard<std::mutex> lock(m_mutex);
                 /* Read the data */
                 int ret = SSL_read(m_ssl, buffer, size);
+                while(ret == -1 && errno == EINTR)
+                    ret = SSL_read(m_ssl, buffer, size);
                 if(ret < 0)
                 {
                     ret = SSL_get_error(m_ssl, ret);
