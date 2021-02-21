@@ -2,7 +2,6 @@
 // Created by timog on 23.12.18.
 //
 
-#include <iostream>
 #include "../include/TCPSocket.hpp"
 
 namespace socketwrapper
