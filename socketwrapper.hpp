@@ -35,9 +35,9 @@ enum class socket_type : uint8_t
 namespace utility {
 
     // TODO Make this a too -> template<ip_version IP_VER>
+    template<ip_version IP_VER>
     int resolve_hostname(std::string_view host_name,
                         uint16_t port,
-                        ip_version ip_ver,
                         socket_type type,
                         std::variant<sockaddr_in, sockaddr_in6>& addr_out)
     {
@@ -45,7 +45,7 @@ namespace utility {
         addrinfo* resultlist = NULL;
         addrinfo hints = {};
     
-        hints.ai_family = static_cast<uint8_t>(ip_ver);
+        hints.ai_family = static_cast<uint8_t>(IP_VER);
         hints.ai_socktype = static_cast<uint8_t>(type);
     
         std::array<char, 5> port_buffer;
@@ -57,12 +57,12 @@ namespace utility {
         ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &resultlist);
         if(ret == 0)
         {
-            if(ip_ver == ip_version::v4)
+            if constexpr(IP_VER == ip_version::v4)
                 addr_out = *reinterpret_cast<sockaddr_in*>(resultlist->ai_addr);
-            else if(ip_ver == ip_version::v6)
+            else if constexpr(IP_VER == ip_version::v6)
                 addr_out = *reinterpret_cast<sockaddr_in6*>(resultlist->ai_addr);
             else
-                ret = -1;
+                static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
         
         if(resultlist != NULL)
@@ -105,7 +105,7 @@ public:
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
-        if(utility::resolve_hostname(conn_addr, port_to, m_family, socket_type::stream, m_peer) != 0)
+        if(utility::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
         if constexpr(IP_VER == ip_version::v4)
@@ -240,7 +240,7 @@ public:
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
-        if(utility::resolve_hostname(bind_addr, port, m_family, socket_type::stream, m_sockaddr) != 0)
+        if(utility::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
         if constexpr(IP_VER == ip_version::v4)
@@ -353,7 +353,7 @@ public:
             throw std::runtime_error {"Failed to set port reuseable."};
 #endif
 
-        if(utility::resolve_hostname(bind_addr, port, m_family, socket_type::datagram, m_sockaddr) != 0)
+        if(utility::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
         if constexpr(IP_VER == ip_version::v4)
@@ -383,7 +383,7 @@ public:
     void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer) const
     {
         std::variant<sockaddr_in, sockaddr_in6> dest;
-        if(utility::resolve_hostname(addr_to, port, m_family, socket_type::datagram, dest) != 0)
+        if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
         if constexpr(IP_VER == ip_version::v4)
