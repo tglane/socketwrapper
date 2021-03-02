@@ -34,6 +34,7 @@ enum class socket_type : uint8_t
 
 namespace utility {
 
+    // TODO Make this a too -> template<ip_version IP_VER>
     int resolve_hostname(std::string_view host_name,
                         uint16_t port,
                         ip_version ip_ver,
@@ -72,6 +73,7 @@ namespace utility {
 
 } // namespace utility
 
+template<ip_version IP_VER>
 class tcp_connection
 {
     enum class connection_status : uint8_t
@@ -88,8 +90,8 @@ public:
     tcp_connection(tcp_connection&&) = default;
     tcp_connection& operator=(tcp_connection&&) = default;
 
-    tcp_connection(ip_version ip_ver, std::string_view conn_addr, uint16_t port_to)
-        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {ip_ver}, m_connection {connection_status::closed}
+    tcp_connection(std::string_view conn_addr, uint16_t port_to)
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}, m_connection {connection_status::closed}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to created socket."};
@@ -106,14 +108,14 @@ public:
         if(utility::resolve_hostname(conn_addr, port_to, m_family, socket_type::stream, m_peer) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
-        if(std::holds_alternative<sockaddr_in>(m_peer))
+        if constexpr(IP_VER == ip_version::v4)
         {
             auto& ref = std::get<sockaddr_in>(m_peer);
             if(auto res = ::connect(m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to connect."};
             m_connection = connection_status::connected;
         }
-        else if(std::holds_alternative<sockaddr_in6>(m_peer))
+        else if constexpr(IP_VER == ip_version::v6)
         {
             auto& ref = std::get<sockaddr_in6>(m_peer);
             if(auto res = ::connect(m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
@@ -122,7 +124,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Invalid family."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
 
@@ -207,10 +209,12 @@ private:
 
     std::variant<sockaddr_in, sockaddr_in6> m_peer = {};
 
+    template<ip_version>
     friend class tcp_acceptor;
 
 };
 
+template<ip_version IP_VER>
 class tcp_acceptor
 {
 public:
@@ -221,8 +225,8 @@ public:
     tcp_acceptor(tcp_acceptor&&) = default;
     tcp_acceptor& operator=(tcp_acceptor&&) = default;
 
-    tcp_acceptor(ip_version ip_ver, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
-        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {ip_ver}
+    tcp_acceptor(std::string_view bind_addr, uint16_t port, size_t backlog = 5)
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
@@ -239,13 +243,13 @@ public:
         if(utility::resolve_hostname(bind_addr, port, m_family, socket_type::stream, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
-        if(std::holds_alternative<sockaddr_in>(m_sockaddr))
+        if constexpr(IP_VER == ip_version::v4)
         {
             auto& sockaddr_ref = std::get<sockaddr_in>(m_sockaddr);
             if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
-        else if(std::holds_alternative<sockaddr_in6>(m_sockaddr))
+        else if constexpr(IP_VER == ip_version::v6)
         {
             auto& sockaddr_ref = std::get<sockaddr_in6>(m_sockaddr);
             if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6)); res != 0)
@@ -253,7 +257,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Invalid family."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
 
         if(auto res = ::listen(m_sockfd, backlog); res != 0)
@@ -265,29 +269,29 @@ public:
         ::close(m_sockfd);
     }
 
-    tcp_connection accept() const
+    tcp_connection<IP_VER> accept() const
     {
-        if(std::holds_alternative<sockaddr_in>(m_sockaddr))
+        if constexpr(IP_VER == ip_version::v4)
         {
             sockaddr_in client;
             socklen_t len = sizeof(sockaddr_in);
             if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
-                return tcp_connection {sock, client};
+                return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
         }
-        else if(std::holds_alternative<sockaddr_in6>(m_sockaddr))
+        else if constexpr(IP_VER == ip_version::v6)
         {
             sockaddr_in6 client;
             socklen_t len = sizeof(sockaddr_in6);
             if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
-                return tcp_connection {sock, client};
+                return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
         }
         else
         {
-            throw std::runtime_error {"Failed to accept."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
 
@@ -313,6 +317,7 @@ private:
 
 };
 
+template<ip_version IP_VER>
 class udp_socket
 {
 
@@ -324,18 +329,17 @@ class udp_socket
 
 public:
 
-    udp_socket() = delete;
     udp_socket(const udp_socket&) = delete;
     udp_socket& operator=(const udp_socket&) = delete;
     udp_socket(udp_socket&&) = default;
     udp_socket& operator=(udp_socket&&) = default;
 
-    udp_socket(ip_version ip_ver)
-        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {ip_ver}, m_mode {socket_mode::non_bound}
+    udp_socket()
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::non_bound}
     {}
 
-    udp_socket(ip_version ip_ver, std::string_view bind_addr, uint16_t port)
-        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {ip_ver}, m_mode {socket_mode::bound}
+    udp_socket(std::string_view bind_addr, uint16_t port)
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::bound}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
@@ -352,13 +356,13 @@ public:
         if(utility::resolve_hostname(bind_addr, port, m_family, socket_type::datagram, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
-        if(std::holds_alternative<sockaddr_in>(m_sockaddr))
+        if constexpr(IP_VER == ip_version::v4)
         {
             auto& sockaddr_ref = std::get<sockaddr_in>(m_sockaddr);
             if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
-        else if(std::holds_alternative<sockaddr_in6>(m_sockaddr))
+        else if constexpr(IP_VER == ip_version::v6)
         {
             auto& sockaddr_ref = std::get<sockaddr_in6>(m_sockaddr);
             if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6)); res != 0)
@@ -366,7 +370,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Invalid family."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
 
@@ -382,13 +386,13 @@ public:
         if(utility::resolve_hostname(addr_to, port, m_family, socket_type::datagram, dest) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
-        if(m_family == ip_version::v4)
+        if constexpr(IP_VER == ip_version::v4)
         {
             auto& dest_ref = std::get<sockaddr_in>(dest);
             if(::sendto(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in)) == -1)
                 throw std::runtime_error {"Failed to write."};
         }
-        else if(m_family == ip_version::v6)
+        else if constexpr(IP_VER == ip_version::v6)
         {
             auto& dest_ref = std::get<sockaddr_in6>(dest);
             if(::sendto(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6)) == -1)
@@ -396,7 +400,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Invalid family."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
 
@@ -409,7 +413,7 @@ public:
         std::vector<T> buffer;
         buffer.resize(size);
 
-        if(m_family == ip_version::v4)
+        if constexpr(IP_VER == ip_version::v4)
         {
             socklen_t flen = sizeof(sockaddr_in);
             sockaddr_in from {};
@@ -417,7 +421,7 @@ public:
                 throw std::runtime_error {"Failed to read."};
             return buffer;
         }
-        else if(m_family == ip_version::v6)
+        else if constexpr(IP_VER == ip_version::v6)
         {
             socklen_t flen = sizeof(sockaddr_in6);
             sockaddr_in6 from {};
@@ -427,7 +431,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Invalid family."};
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
 
