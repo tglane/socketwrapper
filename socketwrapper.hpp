@@ -15,9 +15,6 @@
 #include <netdb.h>
 #include <unistd.h>
 
-#include <iostream>
-#include <cstring>
-
 namespace net {
 
 enum class ip_version : uint8_t
@@ -34,7 +31,6 @@ enum class socket_type : uint8_t
 
 namespace utility {
 
-    // TODO Make this a too -> template<ip_version IP_VER>
     template<ip_version IP_VER>
     int resolve_hostname(std::string_view host_name,
                         uint16_t port,
@@ -316,6 +312,20 @@ private:
     std::variant<sockaddr_in, sockaddr_in6> m_sockaddr {};
 
 };
+
+#ifdef TLS
+template<ip_version IP_VER>
+class tls_connection : public tcp_connection
+{
+
+};
+
+template<ip_version IP_VER>
+class tls_acceptor : public tcp_acceptor
+{
+
+};
+#endif
 
 template<ip_version IP_VER>
 class udp_socket
