@@ -1,3 +1,5 @@
+// #define TLS_ENABLED
+
 #include "../socketwrapper.hpp"
 #include <iostream>
 #include <cstring>
@@ -34,7 +36,8 @@ int main(int argc, char** argv)
     {
         std::cout << "--- Sender ---\n";
         // net::udp_socket<net::ip_version::v4> sock {};
-        // std::vector<char> buffer {'h', 'a', 'l', 'l', 'o'};
+        // // std::vector<char> buffer {'h', 'a', 'l', 'l', 'o'};
+        // std::string_view buffer {"Hello world lololo"};
         // sock.send("127.0.0.1", 4433, buffer);
 
         net::tcp_connection<net::ip_version::v4> sock {"127.0.0.1", 4433};

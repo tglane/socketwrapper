@@ -1,8 +1,16 @@
+/**
+ * Socketwrapper Socket Library
+ * Timo Glane
+ * 2021
+ */
+
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <memory>
 #include <string>
 #include <string_view>
+#include <fstream>
 #include <array>
 #include <vector>
 #include <variant>
@@ -14,6 +22,12 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+
+#ifdef TLS_ENABLED
+// Include ssl header when needed
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#endif
 
 namespace net {
 
@@ -67,6 +81,41 @@ namespace utility {
         return ret;
     }
 
+    std::string read_file(std::string_view path)
+    {
+        std::ifstream ifs {path.data()};
+        std::string out;
+
+        // Reserve memory up front
+        ifs.seekg(0, std::ios::end);
+        out.reserve(ifs.tellg());
+        ifs.seekg(0, std::ios::beg);
+
+        out.assign({std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}});
+        return out;
+    }
+
+#ifdef TLS_ENABLED
+
+    void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, const std::string& cert, const std::string& key, bool server)
+    {
+        ctx = std::shared_ptr<SSL_CTX>(SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()), [](SSL_CTX* ctx) {
+            if(ctx != nullptr) SSL_CTX_free(ctx);
+        });
+        if(!ctx)
+            throw std::runtime_error {"Failed to create TLS context."};
+
+        SSL_CTX_set_mode(ctx.get(), SSL_MODE_AUTO_RETRY);
+        SSL_CTX_set_ecdh_auto(ctx.get(), 1);
+
+        if(SSL_CTX_use_certificate_file(ctx.get(), cert.c_str(), SSL_FILETYPE_PEM) <= 0)
+            throw std::runtime_error {"Failed to set certificate."};
+        if(SSL_CTX_use_PrivateKey_file(ctx.get(), key.c_str(), SSL_FILETYPE_PEM) <= 0)
+            throw std::runtime_error {"Failed to set private key."};
+    }
+
+#endif
+
 } // namespace utility
 
 template<ip_version IP_VER>
@@ -93,11 +142,11 @@ public:
             throw std::runtime_error {"Failed to created socket."};
 
         int reuse = 1;
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) 
             throw std::runtime_error {"Failed to set address reusable."};
     
 #ifdef SO_REUSEPORT
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) 
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
@@ -139,12 +188,12 @@ public:
             throw std::runtime_error {"Failed to send."};
     }
 
-    void send(const std::string& buffer) const
+    void send(std::string_view buffer) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(::send(m_sockfd, buffer.c_str(), buffer.size(), 0) < 0)
+        if(::send(m_sockfd, buffer.data(), buffer.size(), 0) < 0)
             throw std::runtime_error {"Failed to send."};
     }
 
@@ -232,7 +281,7 @@ public:
             throw std::runtime_error {"Failed to set address resusable."};
     
 #ifdef SO_REUSEPORT
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0) 
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
@@ -300,7 +349,7 @@ public:
     
     const int* const get() const
     {
-        return & m_sockfd;
+        return &m_sockfd;
     }
 
 private:
@@ -313,16 +362,164 @@ private:
 
 };
 
-#ifdef TLS
+#ifdef TLS_ENABLED
 template<ip_version IP_VER>
 class tls_connection : public tcp_connection
 {
 
+    static bool ssl_initialized;
+
+public:
+
+    tls_connection() = delete;
+    tls_connection(const tls_connection&) = delete;
+    tls_connection& operator=(const tls_connection&) = delete;
+    tls_connection(tls_connection&&) = default;
+    tls_connection& operator=(tls_connection&&) = default;
+
+    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
+        : tcp_connection {}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
+    {
+        if(!tls_connection::ssl_initialized)
+        {
+            SSL_library_init();
+            SSL_load_error_strings();
+            OpenSSL_add_ssl_algorithms();
+            ERR_load_BIO_strings();
+            ERR_load_SSL_strings();
+
+            tls_connection::ssl_initialized = true;
+        }
+ 
+        // TODO Change configure function to use the cert and key string not the path
+        // configure_ssl_ctx(m_ctx, m_certificate, m_private_key, true);
+        configure_ssl_ctx(m_context, cert_path, key_path, true);
+        
+        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
+            throw std::runtime_error {"Failed to instatiate SSL structure."};
+
+        if(SSL_connect(m_ssl) != 1)
+            throw std::runtime_error {"Failed to connect TLS connection."};
+    }
+
+   ~tls_connection()
+    {
+        if(m_ssl != nullptr)
+        {
+            SSL_shutdown(m_ssl);
+            SSL_free(m_ssl);
+        }
+    } 
+
+private:
+
+    tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
+        : tcp_connection {socketfd, peer_addr}, m_context {std::move(context)}
+    {
+        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
+            throw std::runtime_error {"Failed to instatiate SSL structure."};
+        SSL_set_fd(m_ssl, m_sockfd);
+
+        if(SSL_accept(m_ssl) != 1)
+            throw std::runtime_error {"Failed to accept TLS connection."};
+    }
+
+    tls_connection(int socketfd, const sockaddr_in6& peer_addr, std::shared_ptr<SSL_CTX> context)
+        : tcp_connection {socketfd, peer_addr}, m_context {std::move(context)}
+    {
+        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
+            throw std::runtime_error {"Failed to set up SSL."};
+        SSL_set_fd(m_ssl, m_sockfd);
+
+        if(SSL_accept(m_ssl) != 1)
+            throw std::runtime_error {"Failed to accept TLS connection."};
+    }
+
+    std::shared_ptr<SSL_CTX> m_context;
+    SSL* m_ssl;
+
+    std::string m_certificate;
+    std::string m_private_key;
+
+    template<ip_version>
+    friend class tls_acceptor;
 };
+
+bool tls_connection::ssl_initialized = false;
 
 template<ip_version IP_VER>
 class tls_acceptor : public tcp_acceptor
 {
+public:
+
+    tls_acceptor() = delete;
+    tls_acceptor(const tls_acceptor&) = delete;
+    tls_acceptor operator=(const tls_acceptor&) = delete;
+    tls_acceptor(tls_acceptor&&) = default;
+    tls_acceptor& operator=(tls_acceptor&&) = default;
+
+    tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
+        : tcp_acceptor {bind_addr, port, backlog}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
+    {
+        if(!tls_connection::ssl_initialized)
+        {
+            SSL_library_init();
+            SSL_load_error_strings();
+            OpenSSL_add_ssl_algorithms();
+            ERR_load_BIO_strings();
+            ERR_load_SSL_strings();
+
+            tls_connection::ssl_initialized = true;
+        }
+ 
+        // TODO Change configure function to use the cert and key string not the path
+        // configure_ssl_ctx(m_ctx, m_certificate, m_private_key, true);
+        configure_ssl_ctx(m_context, cert_path, key_path, true);
+    }
+
+    ~tls_acceptor()
+    {
+        if(m_ssl != nullptr)
+        {
+            SSL_shutdown(m_ssl);
+            SSL_free(m_ssl);
+        }
+    }
+
+    tls_connection<IP_VER> accept() const
+    {
+        // TODO Implement
+        if constexpr(IP_VER == ip_version::v4)
+        {
+            sockaddr_in client;
+            socklen_t len = sizeof(sockaddr_in);
+            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+                return tls_connection<IP_VER> {sock, client, m_context};
+            else
+                throw std::runtime_error {"Failed to accept."};
+        }
+        else if constexpr(IP_VER == ip_version::v6)
+        {
+            sockaddr_in6 client;
+            socklen_t len = sizeof(sockaddr_in6);
+            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+                return tls_connection<IP_VER> {sock, client, m_context};
+            else
+                throw std::runtime_error {"Failed to accept."};
+        }
+        else
+        {
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+        } 
+    }
+
+private:
+
+    std::string m_certificate;
+    std::string m_private_key;
+
+    std::shared_ptr<SSL_CTX> m_context;
+    SSL* m_ssl = nullptr;
 
 };
 #endif
@@ -392,26 +589,12 @@ public:
     template<typename T>
     void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer) const
     {
-        std::variant<sockaddr_in, sockaddr_in6> dest;
-        if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
+        write(addr_to, port, buffer.data(), buffer.size());
+    }
 
-        if constexpr(IP_VER == ip_version::v4)
-        {
-            auto& dest_ref = std::get<sockaddr_in>(dest);
-            if(::sendto(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in)) == -1)
-                throw std::runtime_error {"Failed to write."};
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            auto& dest_ref = std::get<sockaddr_in6>(dest);
-            if(::sendto(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6)) == -1)
-                throw std::runtime_error {"Failed to write."};
-        }
-        else
-        {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
-        }
+    void send(std::string_view addr_to, uint16_t port, std::string_view buffer) const
+    {
+        write(addr_to, port, buffer.data(), buffer.size());
     }
 
     template<typename T>
@@ -451,6 +634,30 @@ public:
     }
 
 private:
+
+    void write(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
+    {
+        std::variant<sockaddr_in, sockaddr_in6> dest;
+        if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
+            throw std::runtime_error {"Failed to resolve hostname."};
+
+        if constexpr(IP_VER == ip_version::v4)
+        {
+            auto& dest_ref = std::get<sockaddr_in>(dest);
+            if(::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in)) == -1)
+                throw std::runtime_error {"Failed to write."};
+        }
+        else if constexpr(IP_VER == ip_version::v6)
+        {
+            auto& dest_ref = std::get<sockaddr_in6>(dest);
+            if(::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6)) == -1)
+                throw std::runtime_error {"Failed to write."};
+        }
+        else
+        {
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+        }
+    }
 
     int m_sockfd;
 
