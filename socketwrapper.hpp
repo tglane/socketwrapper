@@ -136,6 +136,7 @@ namespace utility {
 template<ip_version IP_VER>
 class tcp_connection
 {
+protected:
     enum class connection_status : uint8_t
     {
         closed,
@@ -233,6 +234,11 @@ public:
                 return buffer;
         }
     }
+
+    // TODO
+    // template<typename T>
+    // void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    // {}
 
     template<typename T>
     std::vector<T> send_read(const std::string& buffer, size_t size) const
@@ -423,19 +429,42 @@ public:
     template<typename T>
     void send(const std::vector<T>& buffer) const
     {
-        // TODO
+        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+            throw std::runtime_error {"Connection already closed"};
+
+        if(SSL_write(m_ssl, buffer.data(), buffer.size() * sizeof(T)) < 0)
+            throw std::runtime_error {"Failed to write"};
     }
 
     void send(std::string_view buffer) const
     {
-        // TODO
+        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+            throw std::runtime_error {"Connection already closed"};
+
+        if(SSL_write(m_ssl, buffer.data(), buffer.size()) < 0)
+            throw std::runtime_error {"Failed to write"};
     }
 
     template<typename T>
     std::vector<T> read(size_t size) const
     {
-        // TODO
-        return {};
+        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+            throw std::runtime_error {"Connection already closed"};
+
+        std::vector<T> buffer;
+        buffer.resize(size);
+
+        switch(auto ret = SSL_read(m_ssl, buffer.data(), buffer.size() * sizeof(T)); ret)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read."};
+            case 0:
+                this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
+                // Fallthrough to default case
+            default:
+                buffer.resize(ret);
+                return buffer;
+        }
     }
 
 private:
