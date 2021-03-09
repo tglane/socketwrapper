@@ -6,7 +6,7 @@ CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic
 	$(cc) -c $< -o $@ $(CFLAGS)
 
 .PHONY: all
-all: tls_example tcp_example udp_example
+all: tls tcp udp
 
 .PHONY: tls
 tls: tls_example.cpp
