@@ -231,7 +231,7 @@ public:
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
-                // Fallthrough to default case
+                // fall through
             default:
                 buffer.resize(bytes);
                 return buffer;
@@ -264,9 +264,9 @@ public:
     // std::future<std::vector<T>> send_wait(const std::vector<T>& buffer) const
     // {}
 
-    const int* const get() const
+    int get() const
     {
-        return &m_sockfd;
+        return m_sockfd;
     }
 
 protected:
@@ -293,9 +293,9 @@ protected:
 
     ip_version m_family;
 
-    mutable connection_status m_connection;
-
     std::variant<sockaddr_in, sockaddr_in6> m_peer = {};
+
+    mutable connection_status m_connection;
 
     template<ip_version>
     friend class tcp_acceptor;
@@ -390,9 +390,9 @@ public:
     //     });
     // }
     
-    const int* const get() const
+    int get() const
     {
-        return &m_sockfd;
+        return m_sockfd;
     }
 
 protected:
@@ -672,9 +672,9 @@ public:
             throw std::runtime_error {"Failed to read."};
     }
 
-    const int* const get() const
+    int get() const
     {
-        return &m_sockfd;
+        return m_sockfd;
     }
 
 private:
