@@ -24,9 +24,10 @@
 #include <unistd.h>
 
 #ifdef TLS_ENABLED
-// Include ssl header when needed
+    // Include ssl header when needed
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <csignal>
 #endif
 
 namespace net {
@@ -45,30 +46,30 @@ enum class socket_type : uint8_t
 
 namespace utility {
 
-    template<ip_version IP_VER>
-    int resolve_hostname(std::string_view host_name,
-                        uint16_t port,
-                        socket_type type,
-                        std::variant<sockaddr_in, sockaddr_in6>& addr_out)
-    {
-        int ret;
-        addrinfo* resultlist = NULL;
-        addrinfo hints {};
-    
-        hints.ai_family = static_cast<uint8_t>(IP_VER);
-        hints.ai_socktype = static_cast<uint8_t>(type);
-    
-        std::array<char, 5> port_buffer;
-        auto [end_ptr, ec] = std::to_chars(port_buffer.data(), port_buffer.data() + port_buffer.size(), port);
-        if(ec != std::errc())
-            return -1;
-        std::string_view port_str {port_buffer.data(), static_cast<size_t>(end_ptr - port_buffer.data())};
-    
-        ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &resultlist);
-        if(ret == 0)
+        template<ip_version IP_VER>
+        int resolve_hostname(std::string_view host_name,
+                            uint16_t port,
+                            socket_type type,
+                            std::variant<sockaddr_in, sockaddr_in6>& addr_out)
         {
-            if constexpr(IP_VER == ip_version::v4)
-                addr_out = *reinterpret_cast<sockaddr_in*>(resultlist->ai_addr);
+            int ret;
+            addrinfo* resultlist = NULL;
+            addrinfo hints {};
+        
+            hints.ai_family = static_cast<uint8_t>(IP_VER);
+            hints.ai_socktype = static_cast<uint8_t>(type);
+        
+            std::array<char, 5> port_buffer;
+            auto [end_ptr, ec] = std::to_chars(port_buffer.data(), port_buffer.data() + port_buffer.size(), port);
+            if(ec != std::errc())
+                return -1;
+            std::string_view port_str {port_buffer.data(), static_cast<size_t>(end_ptr - port_buffer.data())};
+        
+            ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &resultlist);
+            if(ret == 0)
+            {
+                if constexpr(IP_VER == ip_version::v4)
+                    addr_out = *reinterpret_cast<sockaddr_in*>(resultlist->ai_addr);
             else if constexpr(IP_VER == ip_version::v6)
                 addr_out = *reinterpret_cast<sockaddr_in6*>(resultlist->ai_addr);
             else
@@ -102,6 +103,8 @@ namespace utility {
         static bool initialized = false;
         if(!initialized)
         {
+            signal(SIGPIPE, SIG_IGN);
+
             SSL_library_init();
             SSL_load_error_strings();
             OpenSSL_add_ssl_algorithms();
@@ -200,7 +203,7 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(::send(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0) < 0)
+        if(write_to_socket(buffer.data(), buffer.size()) < 0)
             throw std::runtime_error {"Failed to send."};
     }
 
@@ -209,7 +212,7 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(::send(m_sockfd, buffer.data(), buffer.size(), 0) < 0)
+        if(write_to_socket(buffer.data(), buffer.size()) < 0)
             throw std::runtime_error {"Failed to send."};
     }
 
@@ -222,7 +225,7 @@ public:
         std::vector<T> buffer;
         buffer.resize(size);
 
-        switch(auto bytes = ::recv(m_sockfd, buffer.data(), buffer.size() * sizeof(T), 0); bytes)
+        switch(auto bytes = read_from_socket(buffer.data(), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
                 throw std::runtime_error {"Failed to read."};
@@ -235,16 +238,25 @@ public:
         }
     }
 
-    // TODO
-    // template<typename T>
-    // void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
-    // {}
-
     template<typename T>
-    std::vector<T> send_read(const std::string& buffer, size_t size) const
+    void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
     {
-        send(buffer);
-        return read<T>(size);
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        auto old_size = buffer_to_append.size();
+        buffer_to_append.resize(old_size + size_to_append);
+
+        switch(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T)); bytes)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read."};
+            case 0:
+                m_connection = connection_status::closed;
+                // Fallthrough to default case
+            default:
+                buffer_to_append.resize(old_size + bytes);
+        }
     }
 
     // TODO
@@ -266,6 +278,16 @@ protected:
     tcp_connection(int socket_fd, const sockaddr_in6& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v6}, m_peer {peer_addr}, m_connection {connection_status::connected}
     {}
+
+    virtual int read_from_socket(char* const buffer_to, size_t bytes_to_read) const
+    {
+        return ::recv(m_sockfd, buffer_to, bytes_to_read, 0);
+    }
+
+    virtual int write_to_socket(const char* buffer_from, size_t bytes_to_write) const
+    {
+        return ::send(m_sockfd, buffer_from, bytes_to_write, 0);
+    }
 
     int m_sockfd;
 
@@ -409,7 +431,7 @@ public:
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
 
-        if(auto ret = SSL_connect(m_ssl); ret < 0)
+        if(auto ret = SSL_connect(m_ssl); ret != 1)
         {
             ret = SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
@@ -426,47 +448,6 @@ public:
         }
     } 
 
-    template<typename T>
-    void send(const std::vector<T>& buffer) const
-    {
-        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
-            throw std::runtime_error {"Connection already closed"};
-
-        if(SSL_write(m_ssl, buffer.data(), buffer.size() * sizeof(T)) < 0)
-            throw std::runtime_error {"Failed to write"};
-    }
-
-    void send(std::string_view buffer) const
-    {
-        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
-            throw std::runtime_error {"Connection already closed"};
-
-        if(SSL_write(m_ssl, buffer.data(), buffer.size()) < 0)
-            throw std::runtime_error {"Failed to write"};
-    }
-
-    template<typename T>
-    std::vector<T> read(size_t size) const
-    {
-        if(this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
-            throw std::runtime_error {"Connection already closed"};
-
-        std::vector<T> buffer;
-        buffer.resize(size);
-
-        switch(auto ret = SSL_read(m_ssl, buffer.data(), buffer.size() * sizeof(T)); ret)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
-                // Fallthrough to default case
-            default:
-                buffer.resize(ret);
-                return buffer;
-        }
-    }
-
 private:
 
     tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
@@ -476,7 +457,7 @@ private:
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
 
-        if(auto ret = SSL_accept(m_ssl); ret < 0)
+        if(auto ret = SSL_accept(m_ssl); ret != 1)
         {
             ret = SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
@@ -491,8 +472,18 @@ private:
             throw std::runtime_error {"Failed to set up SSL."};
         SSL_set_fd(m_ssl, this->m_sockfd);
 
-        if(SSL_accept(m_ssl) < 0)
+        if(SSL_accept(m_ssl) != 1)
             throw std::runtime_error {"Failed to accept TLS connection."};
+    }
+
+    int read_from_socket(char* const buffer_to, size_t bytes_to_read) const override
+    {
+        return SSL_read(m_ssl, buffer_to, bytes_to_read);
+    }
+
+    int write_to_socket(const char* buffer_from, size_t bytes_to_write) const override
+    {
+        return SSL_write(m_ssl, buffer_from, bytes_to_write);
     }
 
     std::shared_ptr<SSL_CTX> m_context;
@@ -655,26 +646,30 @@ public:
         std::vector<T> buffer;
         buffer.resize(size);
 
-        if constexpr(IP_VER == ip_version::v4)
+        if(auto bytes = read_from_socket(buffer.data(), size); bytes >= 0)
         {
-            socklen_t flen = sizeof(sockaddr_in);
-            sockaddr_in from {};
-            if(::recvfrom(m_sockfd, buffer.data(), size * sizeof(T), 0, reinterpret_cast<sockaddr*>(&from), &flen) == -1)
-                throw std::runtime_error {"Failed to read."};
-            return buffer;
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            socklen_t flen = sizeof(sockaddr_in6);
-            sockaddr_in6 from {};
-            if(::recvfrom(m_sockfd, buffer.data(), size * sizeof(T), 0, reinterpret_cast<sockaddr*>(&from), &flen) == -1)
-                throw std::runtime_error {"Failed to read."};
+            buffer.resize(bytes);
             return buffer;
         }
         else
         {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+            throw std::runtime_error {"Failed to read."};
         }
+   }
+
+    template<typename T>
+    void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    {
+        if(m_mode != socket_mode::bound)
+            throw std::runtime_error {"Socket was created without being bound to an interface."};
+
+        auto old_size = buffer_to_append.size();
+        buffer_to_append.resize(old_size + size_to_append);
+
+        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append); bytes >= 0)
+            buffer_to_append.resize(old_size + bytes);
+        else
+            throw std::runtime_error {"Failed to read."};
     }
 
     const int* const get() const
@@ -683,6 +678,26 @@ public:
     }
 
 private:
+
+    int read_from_socket(char* const buffer, size_t size) const
+    {
+        if constexpr(IP_VER == ip_version::v4)
+        {
+            socklen_t flen = sizeof(sockaddr_in);
+            sockaddr_in from {};
+            return ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+        }
+        else if constexpr(IP_VER == ip_version::v6)
+        {
+            socklen_t flen = sizeof(sockaddr_in6);
+            sockaddr_in6 from {};
+            return ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+        }
+        else
+        {
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+        }
+    }
 
     void write(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
     {

@@ -22,7 +22,7 @@ int main(int argc, char** argv)
         std::cout << "Waiting for accept\n";
         auto sock = acceptor.accept();
         std::cout << "Accepted\n";
-        
+
         while(true)
         {
             std::vector<char> buffer = sock.read<char>(1024);
