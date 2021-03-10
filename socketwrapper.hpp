@@ -7,6 +7,8 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <iostream>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -46,39 +48,41 @@ enum class socket_type : uint8_t
 
 namespace utility {
 
-        template<ip_version IP_VER>
-        int resolve_hostname(std::string_view host_name,
-                            uint16_t port,
-                            socket_type type,
-                            std::variant<sockaddr_in, sockaddr_in6>& addr_out)
+    template<ip_version IP_VER>
+    int resolve_hostname(std::string_view host_name,
+                        uint16_t port,
+                        socket_type type,
+                        std::variant<sockaddr_in, sockaddr_in6>& addr_out)
+    {
+        int ret;
+
+        addrinfo hints {};
+        hints.ai_family = static_cast<uint8_t>(IP_VER);
+        hints.ai_socktype = static_cast<uint8_t>(type);
+        
+        std::array<char, 6> port_buffer {0, 0, 0, 0, 0, '\0'};
+        auto [end_ptr, ec] = std::to_chars(port_buffer.begin(), port_buffer.end(), port);
+        if(ec != std::errc())
+            return -1;
+
+        std::string_view port_str {port_buffer.begin(), std::distance(port_buffer.begin(), port_buffer.end())};
+
+        std::unique_ptr<addrinfo, decltype(&::freeaddrinfo)> resultlist_owner {nullptr, &::freeaddrinfo};
+        addrinfo* tmp_resultlist = resultlist_owner.get();
+        ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &tmp_resultlist);
+        resultlist_owner.reset(tmp_resultlist);
+
+        if(ret == 0)
         {
-            int ret;
-            addrinfo* resultlist = NULL;
-            addrinfo hints {};
-        
-            hints.ai_family = static_cast<uint8_t>(IP_VER);
-            hints.ai_socktype = static_cast<uint8_t>(type);
-        
-            std::array<char, 5> port_buffer;
-            auto [end_ptr, ec] = std::to_chars(port_buffer.data(), port_buffer.data() + port_buffer.size(), port);
-            if(ec != std::errc())
-                return -1;
-            std::string_view port_str {port_buffer.data(), static_cast<size_t>(end_ptr - port_buffer.data())};
-        
-            ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &resultlist);
-            if(ret == 0)
-            {
-                if constexpr(IP_VER == ip_version::v4)
-                    addr_out = *reinterpret_cast<sockaddr_in*>(resultlist->ai_addr);
+            if constexpr(IP_VER == ip_version::v4) {
+                addr_out = *reinterpret_cast<sockaddr_in*>(resultlist_owner->ai_addr);
+            }
             else if constexpr(IP_VER == ip_version::v6)
-                addr_out = *reinterpret_cast<sockaddr_in6*>(resultlist->ai_addr);
+                addr_out = *reinterpret_cast<sockaddr_in6*>(resultlist_owner->ai_addr);
             else
                 static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
-        
-        if(resultlist != NULL)
-            ::freeaddrinfo(resultlist);
-    
+
         return ret;
     }
 
