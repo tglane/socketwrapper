@@ -211,6 +211,16 @@ public:
             throw std::runtime_error {"Failed to send."};
     }
 
+    template<typename T, size_t size>
+    void send(const std::array<T, size>& buffer) const
+    {
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        if(write_to_socket(buffer.data(), buffer.size()) < 0)
+            throw std::runtime_error {"Failed to send."};
+    }
+
     void send(std::string_view buffer) const
     {
         if(m_connection == connection_status::closed)
@@ -632,6 +642,12 @@ public:
 
     template<typename T>
     void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer) const
+    {
+        write(addr_to, port, buffer.data(), buffer.size());
+    }
+
+    template<typename T, size_t size>
+    void send(std::string_view addr_to, uint16_t port, const std::array<T, size>& buffer) const
     {
         write(addr_to, port, buffer.data(), buffer.size());
     }
