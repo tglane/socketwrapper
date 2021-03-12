@@ -12,7 +12,8 @@ int main(int argc, char** argv)
         std::cout << "--- Receiver ---\n";
 
         net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
-        auto buffer = sock.read<char>(512);
+        auto [buffer, peer]  = sock.read<char>(512);
+        std::cout << "Peer addr: " << peer.addr << "; Peer port: " << peer.port << '\n';
         std::cout << std::string_view {buffer.data(), buffer.size() } << '\n';
    }
     else if(strcmp(argv[1], "s") == 0)

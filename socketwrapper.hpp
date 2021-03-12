@@ -7,8 +7,6 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#include <iostream>
-
 #include <memory>
 #include <string>
 #include <string_view>
@@ -18,6 +16,7 @@
 #include <variant>
 #include <stdexcept>
 #include <charconv>
+#include <utility>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -44,6 +43,12 @@ enum class socket_type : uint8_t
 {
     stream = SOCK_STREAM,
     datagram = SOCK_DGRAM
+};
+
+struct connection_tuple
+{
+    std::string addr;
+    uint16_t port;
 };
 
 namespace utility {
@@ -84,6 +89,41 @@ namespace utility {
         }
 
         return ret;
+    }
+
+    template<ip_version IP_VER>
+    connection_tuple resolve_addrinfo(sockaddr* addr_in)
+    {
+        // TODO
+        connection_tuple peer {};
+        if constexpr(IP_VER == ip_version::v4)
+        {
+            peer.addr.resize(INET_ADDRSTRLEN);
+            std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
+            port_str.resize(6);
+
+            if(getnameinfo(addr_in, sizeof(sockaddr_in), peer.addr.data(), peer.addr.capacity(), port_str.data(), port_str.capacity(), 0) != 0)
+                throw std::runtime_error {"Failed to resolve addrinfo."};
+            peer.port = std::stoi(port_str);
+            
+            return peer;
+        }
+        else if constexpr(IP_VER == ip_version::v6)
+        {
+            peer.addr.resize(INET6_ADDRSTRLEN);
+            std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
+            port_str.resize(6);
+
+            if(getnameinfo(addr_in, sizeof(sockaddr_in), peer.addr.data(), peer.addr.capacity(), port_str.data(), port_str.capacity(), 0) != 0)
+                throw std::runtime_error {"Failed to resolve addrinfo."};
+            peer.port = std::stoi(port_str);
+
+            return peer;
+        }
+        else
+        {
+            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+        }
     }
 
     std::string read_file(std::string_view path)
@@ -658,18 +698,21 @@ public:
     }
 
     template<typename T>
-    std::vector<T> read(size_t size) const
+    std::pair<std::vector<T>, connection_tuple> read(size_t size) const
     {
         if(m_mode != socket_mode::bound)
             throw std::runtime_error {"Socket was created without being bound to an interface."};
 
-        std::vector<T> buffer;
+        std::pair<std::vector<T>, connection_tuple> ret;
+        std::vector<T>& buffer = ret.first;
         buffer.resize(size);
 
-        if(auto bytes = read_from_socket(buffer.data(), size); bytes >= 0)
+        connection_tuple& peer = ret.second;
+
+        if(auto bytes = read_from_socket(buffer.data(), size, peer); bytes >= 0)
         {
             buffer.resize(bytes);
-            return buffer;
+            return ret;
         }
         else
         {
@@ -678,7 +721,7 @@ public:
    }
 
     template<typename T>
-    void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    connection_tuple read(std::vector<T>& buffer_to_append, size_t size_to_append) const
     {
         if(m_mode != socket_mode::bound)
             throw std::runtime_error {"Socket was created without being bound to an interface."};
@@ -686,10 +729,17 @@ public:
         auto old_size = buffer_to_append.size();
         buffer_to_append.resize(old_size + size_to_append);
 
-        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append); bytes >= 0)
+        connection_tuple peer {};
+
+        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append, peer); bytes >= 0)
+        {
             buffer_to_append.resize(old_size + bytes);
+            return peer;
+        }
         else
+        {
             throw std::runtime_error {"Failed to read."};
+        }
     }
 
     int get() const
@@ -699,13 +749,17 @@ public:
 
 private:
 
-    int read_from_socket(char* const buffer, size_t size) const
+    int read_from_socket(char* const buffer, size_t size, connection_tuple& peer_data) const
     {
         if constexpr(IP_VER == ip_version::v4)
         {
             socklen_t flen = sizeof(sockaddr_in);
             sockaddr_in from {};
-            return ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+
+            peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
+
+            return bytes;
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
