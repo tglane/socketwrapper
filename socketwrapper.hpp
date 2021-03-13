@@ -292,6 +292,26 @@ public:
         }
     }
 
+    template<typename T, size_t SIZE>
+    std::array<T, SIZE> read() const
+    {
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        std::array<T, SIZE> buffer;
+
+        switch(auto bytes = read_from_socket(buffer.data(), SIZE * sizeof(T)); bytes)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read."};
+            case 0:
+                m_connection = connection_status::closed;
+                // fall through
+            default:
+                return buffer;
+        }
+    }
+
     template<typename T>
     void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
     {
@@ -730,7 +750,7 @@ public:
 
         connection_tuple& peer = ret.second;
 
-        if(auto bytes = read_from_socket(buffer.data(), size, peer); bytes >= 0)
+        if(auto bytes = read_from_socket(buffer.data(), size * sizeof(T), peer); bytes >= 0)
         {
             buffer.resize(bytes);
             return ret;
@@ -739,7 +759,23 @@ public:
         {
             throw std::runtime_error {"Failed to read."};
         }
-   }
+    }
+
+    template<typename T, size_t SIZE>
+    std::pair<std::array<T, SIZE>, connection_tuple> read() const
+    {
+        if(m_mode != socket_mode::bound)
+            throw std::runtime_error {"Socket was created without being bound to an interface."};
+
+        std::pair<std::array<T, SIZE>, connection_tuple> ret;
+        std::array<T, SIZE>& buffer = ret.first;
+        connection_tuple& peer = ret.second;
+
+        if(auto bytes = read_from_socket(buffer.data(), SIZE * sizeof(T), peer); bytes >= 0)
+            return ret;
+        else
+            throw std::runtime_error {"Failed to read."};
+    }
 
     template<typename T>
     connection_tuple read(std::vector<T>& buffer_to_append, size_t size_to_append) const
@@ -753,7 +789,7 @@ public:
 
         connection_tuple peer {};
 
-        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append, peer); bytes >= 0)
+        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T), peer); bytes >= 0)
         {
             buffer_to_append.resize(old_size + bytes);
             return peer;
@@ -770,7 +806,7 @@ public:
         static_assert(SIZE <= size_to_append);
 
         connection_tuple peer {};
-        if(read_from_socket(buffer_to_append.data(), size_to_append, peer) >= 0)
+        if(read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T), peer) >= 0)
             return peer;
         else
             throw std::runtime_error {"Failed to read."};
