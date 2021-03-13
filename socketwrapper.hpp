@@ -102,10 +102,10 @@ namespace utility {
             std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
             port_str.resize(6);
 
-            if(getnameinfo(addr_in, sizeof(sockaddr_in), peer.addr.data(), peer.addr.capacity(), port_str.data(), port_str.capacity(), 0) != 0)
+            if(inet_ntop(AF_INET, &(reinterpret_cast<sockaddr_in*>(addr_in)->sin_addr), peer.addr.data(), peer.addr.capacity()) == nullptr)
                 throw std::runtime_error {"Failed to resolve addrinfo."};
-            peer.port = std::stoi(port_str);
-            
+            peer.port = ntohs(reinterpret_cast<sockaddr_in*>(addr_in)->sin_port);
+
             return peer;
         }
         else if constexpr(IP_VER == ip_version::v6)
@@ -114,9 +114,9 @@ namespace utility {
             std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
             port_str.resize(6);
 
-            if(getnameinfo(addr_in, sizeof(sockaddr_in), peer.addr.data(), peer.addr.capacity(), port_str.data(), port_str.capacity(), 0) != 0)
+            if(inet_ntop(AF_INET, &(reinterpret_cast<sockaddr_in6*>(addr_in)->sin6_addr), peer.addr.data(), peer.addr.capacity()) == nullptr)
                 throw std::runtime_error {"Failed to resolve addrinfo."};
-            peer.port = std::stoi(port_str);
+            peer.port = ntohs(reinterpret_cast<sockaddr_in6*>(addr_in)->sin6_port);
 
             return peer;
         }
