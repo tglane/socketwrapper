@@ -54,7 +54,7 @@ struct connection_tuple
 namespace utility {
 
     template<ip_version IP_VER>
-    int resolve_hostname(std::string_view host_name,
+    inline int resolve_hostname(std::string_view host_name,
                         uint16_t port,
                         socket_type type,
                         std::variant<sockaddr_in, sockaddr_in6>& addr_out)
@@ -92,7 +92,7 @@ namespace utility {
     }
 
     template<ip_version IP_VER>
-    connection_tuple resolve_addrinfo(sockaddr* addr_in)
+    inline connection_tuple resolve_addrinfo(sockaddr* addr_in)
     {
         // TODO
         connection_tuple peer {};
@@ -126,7 +126,7 @@ namespace utility {
         }
     }
 
-    std::string read_file(std::string_view path)
+    inline std::string read_file(std::string_view path)
     {
         std::ifstream ifs {path.data()};
         std::string out;
@@ -142,7 +142,7 @@ namespace utility {
 
 #ifdef TLS_ENABLED
 
-    void init_ssl_system()
+    inline void init_ssl_system()
     {
         static bool initialized = false;
         if(!initialized)
@@ -159,7 +159,7 @@ namespace utility {
         }
     }
 
-    void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view cert, std::string_view key, bool server)
+    inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view cert, std::string_view key, bool server)
     {
         ctx = std::shared_ptr<SSL_CTX>(SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()), [](SSL_CTX* ctx) {
             if(ctx) SSL_CTX_free(ctx);
