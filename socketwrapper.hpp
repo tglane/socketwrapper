@@ -7,6 +7,8 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#define TLS_ENABLED
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -251,13 +253,23 @@ public:
             throw std::runtime_error {"Failed to send."};
     }
 
-    template<typename T, size_t size>
-    void send(const std::array<T, size>& buffer) const
+    template<typename T>
+    void send(const std::vector<T>& buffer, size_t size) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(write_to_socket(buffer.data(), buffer.size()) < 0)
+        if(write_to_socket(buffer.data(), size) < 0)
+            throw std::runtime_error {"Failed to send."};
+    }
+
+    template<typename T, size_t SIZE>
+    void send(const std::array<T, SIZE>& buffer, size_t size = SIZE) const
+    {
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        if(write_to_socket(buffer.data(), size) < 0)
             throw std::runtime_error {"Failed to send."};
     }
 
@@ -727,10 +739,16 @@ public:
         write(addr_to, port, buffer.data(), buffer.size());
     }
 
-    template<typename T, size_t size>
-    void send(std::string_view addr_to, uint16_t port, const std::array<T, size>& buffer) const
+    template<typename T>
+    void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer, size_t size) const
     {
-        write(addr_to, port, buffer.data(), buffer.size());
+        write(addr_to, port, buffer.data(), size);
+    }
+
+    template<typename T, size_t SIZE>
+    void send(std::string_view addr_to, uint16_t port, const std::array<T, SIZE>& buffer, size_t size = SIZE) const
+    {
+        write(addr_to, port, buffer.data(), size);
     }
 
     void send(std::string_view addr_to, uint16_t port, std::string_view buffer) const
