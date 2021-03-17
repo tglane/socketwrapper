@@ -325,7 +325,7 @@ public:
     }
 
     template<typename T>
-    void read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    size_t read(std::vector<T>& buffer_to_append, size_t size_to_append) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
@@ -340,11 +340,14 @@ public:
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
+                // fall through
+            default:
+                return bytes;
         }
     }
 
     template<typename T, size_t SIZE>
-    void read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
+    size_t read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
@@ -357,11 +360,14 @@ public:
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
+                // fall through
+            default:
+                return bytes;
         }
     }
 
     template<typename T>
-    void read(T* buffer_to_append, size_t size_to_append) const
+    size_t read(T* buffer_to_append, size_t size_to_append) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
@@ -375,7 +381,7 @@ public:
                 m_connection = connection_status::closed;
                 // fall through
             default:
-                return;
+                return bytes;
         }
     }
 
@@ -809,7 +815,7 @@ public:
     }
 
     template<typename T>
-    connection_tuple read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    std::pair<size_t, connection_tuple> read(std::vector<T>& buffer_to_append, size_t size_to_append) const
     {
         if(m_mode != socket_mode::bound)
             throw std::runtime_error {"Socket was created without being bound to an interface."};
@@ -821,29 +827,29 @@ public:
         connection_tuple peer {};
 
         if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T), peer); bytes >= 0)
-            return peer;
+            return std::pair<size_t, connection_tuple> {bytes, peer};
         else
             throw std::runtime_error {"Failed to read."};
     }
 
     template<typename T, size_t SIZE>
-    connection_tuple read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
+    std::pair<size_t, connection_tuple> read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
     {
         static_assert(SIZE <= size_to_append);
 
         connection_tuple peer {};
-        if(read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T), peer) >= 0)
-            return peer;
+        if(size_t bytes = read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T), peer); bytes >= 0)
+            return std::pair<size_t, connection_tuple> {bytes, peer};
         else
             throw std::runtime_error {"Failed to read."};
     }
 
     template<typename T>
-    connection_tuple read(T* buffer_to_append, size_t size_to_append) const
+    std::pair<size_t, connection_tuple> read(T* buffer_to_append, size_t size_to_append) const
     {
         connection_tuple peer {};
-        if(read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T), peer) >= 0)
-            return peer;
+        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T), peer); bytes >= 0)
+            return std::pair<size_t, connection_tuple> {bytes, peer};
         else
             throw std::runtime_error {"Failed to read."};
     }
