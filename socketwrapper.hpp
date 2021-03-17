@@ -332,7 +332,7 @@ public:
 
         auto old_size = buffer_to_append.size();
         if(buffer_to_append.capacity() - old_size < size_to_append)
-            buffer_to_append.reserve(old_size + size_to_append);
+            buffer_to_append.resize(old_size + size_to_append);
 
         switch(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T)); bytes)
         {
@@ -340,9 +340,6 @@ public:
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
-                // Fallthrough to default case
-            default:
-                buffer_to_append.resize(old_size + size_to_append);
         }
     }
 
@@ -360,7 +357,23 @@ public:
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
-                // Fallthrough to default case
+        }
+    }
+
+    template<typename T>
+    void read(T* buffer_to_append, size_t size_to_append) const
+    {
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+
+        switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T)); bytes)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read."};
+            case 0:
+                m_connection = connection_status::closed;
+                // fall through
             default:
                 return;
         }
@@ -808,14 +821,9 @@ public:
         connection_tuple peer {};
 
         if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T), peer); bytes >= 0)
-        {
-            buffer_to_append.resize(old_size + bytes);
             return peer;
-        }
         else
-        {
             throw std::runtime_error {"Failed to read."};
-        }
     }
 
     template<typename T, size_t SIZE>
@@ -825,6 +833,16 @@ public:
 
         connection_tuple peer {};
         if(read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T), peer) >= 0)
+            return peer;
+        else
+            throw std::runtime_error {"Failed to read."};
+    }
+
+    template<typename T>
+    connection_tuple read(T* buffer_to_append, size_t size_to_append) const
+    {
+        connection_tuple peer {};
+        if(read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T), peer) >= 0)
             return peer;
         else
             throw std::runtime_error {"Failed to read."};
