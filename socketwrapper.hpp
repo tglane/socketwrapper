@@ -57,27 +57,33 @@ template<typename T>
 class span
 {
 public:
+    span() = delete;
+    span(const span&) noexcept = default;
+    span& operator=(const span&) noexcept = default;
+    span(span&&) noexcept = default;
+    span& operator=(span&&) noexcept = default;
+    ~span() noexcept = default;
 
-    span(T* start, size_t length)
+    span(T* start, size_t length) noexcept
         : m_start {start}, m_size {length}
     {}
 
-    span(T* start, T* end)
+    span(T* start, T* end) noexcept
         : m_start {start}, m_size(std::distance(start, end))
     {}
 
     template<size_t S>
-    span(T (&buffer)[S])
+    span(T (&buffer)[S]) noexcept
         : m_start {buffer}, m_size {S}
     {}
 
     template<typename ITER>
-    span(ITER start, ITER end)
+    span(ITER start, ITER end) noexcept
         : m_start {&(*start)}, m_size(std::distance(&(*start), &(*end)))
     {}
 
     template<typename CONTAINER>
-    span(const CONTAINER& con)
+    span(const CONTAINER& con) noexcept
         : m_start {const_cast<T*>(con.data())}, m_size {con.size()}
     {}
 
