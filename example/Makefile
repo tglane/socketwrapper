@@ -20,3 +20,7 @@ tcp: tcp_example.cpp
 udp: udp_example.cpp
 	$(cc) -o udp_example $^ $(CFLAGS)
 
+.PHONY: span
+span: span_example.cpp
+	$(cc) -o span_example $^ $(CFLAGS)
+

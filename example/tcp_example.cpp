@@ -16,6 +16,10 @@ int main(int argc, char**argv)
         auto sock = acceptor.accept();
         std::cout << "Accepted\n";
 
+        std::vector<char> buffer;
+        sock.read<char>(buffer, 40);
+        std::cout << std::string_view{buffer.data(), buffer.size()} << '\n';
+        return 0;
         while(true)
         {
             std::vector<char> buffer = sock.read<char>(1024);

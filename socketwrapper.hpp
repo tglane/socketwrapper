@@ -53,6 +53,61 @@ struct connection_tuple
     uint16_t port;
 };
 
+template<typename T>
+class span
+{
+public:
+
+    span(T* start, size_t length)
+        : m_start{start}, m_size{length}
+    {}
+
+    span(T* start, T* end)
+        : m_start{start}, m_size(std::distance(start, end))
+    {}
+
+    template<size_t S>
+    span(T (&buffer)[S])
+        : m_start{buffer}, m_size{S}
+    {}
+
+    template<typename ITER>
+    span(ITER start, ITER end)
+        : m_start{&(*start)}, m_size(std::distance(&(*start), &(*end)))
+    {}
+
+    T* get() const
+    {
+        return m_start;
+    }
+
+    constexpr size_t size() const
+    {
+        return m_size;
+    }
+
+    constexpr T& operator[](size_t index) const
+    {
+        return m_start[index];
+    }
+
+    constexpr T& operator[](size_t index)
+    {
+        return m_start[index];
+    }
+
+    // TODO front, back, begin, end
+
+    constexpr bool empty() const
+    {
+        return m_size > 0;
+    }
+
+private:
+    T* m_start;
+    size_t m_size;
+};
+
 namespace utility {
 
     template<ip_version IP_VER>
