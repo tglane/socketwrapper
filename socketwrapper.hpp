@@ -59,49 +59,42 @@ class span
 public:
 
     span(T* start, size_t length)
-        : m_start{start}, m_size{length}
+        : m_start {start}, m_size {length}
     {}
 
     span(T* start, T* end)
-        : m_start{start}, m_size(std::distance(start, end))
+        : m_start {start}, m_size(std::distance(start, end))
     {}
 
     template<size_t S>
     span(T (&buffer)[S])
-        : m_start{buffer}, m_size{S}
+        : m_start {buffer}, m_size {S}
     {}
 
     template<typename ITER>
     span(ITER start, ITER end)
-        : m_start{&(*start)}, m_size(std::distance(&(*start), &(*end)))
+        : m_start {&(*start)}, m_size(std::distance(&(*start), &(*end)))
     {}
 
-    T* get() const
-    {
-        return m_start;
-    }
+    template<typename CONTAINER>
+    span(const CONTAINER& con)
+        : m_start {const_cast<T*>(con.data())}, m_size {con.size()}
+    {}
 
-    constexpr size_t size() const
-    {
-        return m_size;
-    }
+    T* get() const { return m_start; }
 
-    constexpr T& operator[](size_t index) const
-    {
-        return m_start[index];
-    }
+    constexpr size_t size() const { return m_size; }
 
-    constexpr T& operator[](size_t index)
-    {
-        return m_start[index];
-    }
+    constexpr bool empty() const { return m_size > 0; }
 
-    // TODO front, back, begin, end
+    constexpr T& operator[](size_t index) { return m_start[index]; }
+    constexpr const T& operator[](size_t index) const { return m_start[index]; }
 
-    constexpr bool empty() const
-    {
-        return m_size > 0;
-    }
+    constexpr T* begin() const { return m_start; }
+    constexpr T* end() const { return &(m_start[m_size]); }
+
+    constexpr T& front() const { return m_start[0]; }
+    constexpr T& back() const { return m_start[m_size - 1]; }
 
 private:
     T* m_start;
