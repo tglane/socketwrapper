@@ -71,7 +71,7 @@ public:
     {}
 
     span(T* start, T* end) noexcept
-        : m_start {start}, m_size(std::distance(start, end))
+        : m_start {start}, m_size {static_cast<size_t>(std::distance(start, end) + 1)}
     {}
 
     template<size_t S>
@@ -81,12 +81,12 @@ public:
 
     template<typename ITER>
     span(ITER start, ITER end) noexcept
-        : m_start {&(*start)}, m_size(std::distance(&(*start), &(*end)))
+        : m_start {&(*start)}, m_size {static_cast<size_t>(std::distance(&(*start), &(*end)))}
     {}
 
     template<typename CONTAINER>
-    span(const CONTAINER& con) noexcept
-        : m_start {const_cast<T*>(con.data())}, m_size {con.size()}
+    span(CONTAINER&& con) noexcept
+        : m_start {con.data()}, m_size {con.size()}
     {}
 
     T* get() const { return m_start; }
