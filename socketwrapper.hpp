@@ -47,12 +47,14 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
+// Struct containing connection data including a string representation of peers ip address and port
 struct connection_tuple
 {
     std::string addr;
     uint16_t port;
 };
 
+// Generic non-owning buffer type inspirated by golangs slices
 template<typename T>
 class span
 {
@@ -106,6 +108,19 @@ private:
     T* m_start;
     size_t m_size;
 };
+
+// Deduction guides for class span
+template<typename ITER>
+span(ITER, ITER) -> span<typename std::iterator_traits<ITER>::value_type>;
+
+template<typename CONTAINER>
+span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::declval<CONTAINER>().front())>::type>;
+
+// Begin and end functions for span class
+template<typename T>
+inline constexpr T* begin(const span<T>& buffer) noexcept { return buffer.begin(); }
+template<typename T>
+inline constexpr T* end(const span<T>& buffer) noexcept { return buffer.end(); }
 
 namespace utility {
 
@@ -439,10 +454,18 @@ public:
         }
     }
 
-    // TODO
-    // template<typename T>
-    // std::future<std::vector<T>> send_wait(const std::vector<T>& buffer) const
-    // {}
+    template<typename T>
+    void send(span<T>&& buffer) const
+    {
+        // TODO
+    }
+
+    template<typename T>
+    size_t read(const span<T>& buffer) const
+    {
+        // TODO
+        return 0;
+    }
 
     int get() const
     {
