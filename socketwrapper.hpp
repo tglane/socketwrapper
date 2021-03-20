@@ -89,7 +89,8 @@ public:
         : m_start {con.data()}, m_size {con.size()}
     {}
 
-    T* get() const { return m_start; }
+    constexpr T* get() const { return m_start; }
+    constexpr T* data() const { return m_start; }
 
     constexpr size_t size() const { return m_size; }
 
@@ -121,6 +122,8 @@ template<typename T>
 inline constexpr T* begin(const span<T>& buffer) noexcept { return buffer.begin(); }
 template<typename T>
 inline constexpr T* end(const span<T>& buffer) noexcept { return buffer.end(); }
+
+// TODO Maybe add some sort of const_span to use in all send functions to also send string_views as CONTAINERs
 
 namespace utility {
 
@@ -313,161 +316,34 @@ public:
     }
 
     template<typename T>
-    void send(const std::vector<T>& buffer) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        if(write_to_socket(buffer.data(), buffer.size()) < 0)
-            throw std::runtime_error {"Failed to send."};
-    }
-
-    template<typename T>
-    void send(const std::vector<T>& buffer, size_t size) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        if(write_to_socket(buffer.data(), size) < 0)
-            throw std::runtime_error {"Failed to send."};
-    }
-
-    template<typename T, size_t SIZE>
-    void send(const std::array<T, SIZE>& buffer, size_t size = SIZE) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        if(write_to_socket(buffer.data(), size) < 0)
-            throw std::runtime_error {"Failed to send."};
-    }
-
-    void send(std::string_view buffer) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        if(write_to_socket(buffer.data(), buffer.size()) < 0)
-            throw std::runtime_error {"Failed to send."};
-    }
-
-    template<typename T>
-    std::vector<T> read(size_t size) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        std::vector<T> buffer;
-        buffer.resize(size);
-
-        switch(auto bytes = read_from_socket(buffer.data(), buffer.size() * sizeof(T)); bytes)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                buffer.resize(bytes);
-                return buffer;
-        }
-    }
-
-    template<typename T, size_t SIZE>
-    std::array<T, SIZE> read() const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        std::array<T, SIZE> buffer;
-
-        switch(auto bytes = read_from_socket(buffer.data(), SIZE * sizeof(T)); bytes)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                return buffer;
-        }
-    }
-
-    template<typename T>
-    size_t read(std::vector<T>& buffer_to_append, size_t size_to_append) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        auto old_size = buffer_to_append.size();
-        if(buffer_to_append.capacity() - old_size < size_to_append)
-            buffer_to_append.resize(old_size + size_to_append);
-
-        switch(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T)); bytes)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                return bytes;
-        }
-    }
-
-    template<typename T, size_t SIZE>
-    size_t read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-        static_assert(buffer_to_append.size() <= size_to_append);
-
-        switch(auto bytes = read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T)); bytes)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                return bytes;
-        }
-    }
-
-    template<typename T>
-    size_t read(T* buffer_to_append, size_t size_to_append) const
-    {
-        if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
-
-
-        switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T)); bytes)
-        {
-            case -1:
-                throw std::runtime_error {"Failed to read."};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                return bytes;
-        }
-    }
-
-    template<typename T>
     void send(span<T>&& buffer) const
     {
-        // TODO
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        if(write_to_socket(buffer.get(), buffer.size()) < 0)
+            throw std::runtime_error {"Failed to send."};
     }
 
     template<typename T>
     size_t read(const span<T>& buffer) const
     {
-        // TODO
-        return 0;
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+        switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read."};
+            case 0:
+                m_connection = connection_status::closed;
+                // fall through
+            default:
+                return bytes / sizeof(T);
+        }
     }
 
-    int get() const
+    constexpr int get() const
     {
         return m_sockfd;
     }
@@ -830,103 +706,25 @@ public:
     }
 
     template<typename T>
-    void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer) const
+    void send(std::string_view addr, uint16_t port, span<T>&& buffer) const
     {
-        write(addr_to, port, buffer.data(), buffer.size());
+        write(addr, port, buffer.get(), buffer.size());
     }
 
     template<typename T>
-    void send(std::string_view addr_to, uint16_t port, const std::vector<T>& buffer, size_t size) const
+    size_t read(span<T>&& buffer) const
     {
-        write(addr_to, port, buffer.data(), size);
-    }
-
-    template<typename T, size_t SIZE>
-    void send(std::string_view addr_to, uint16_t port, const std::array<T, SIZE>& buffer, size_t size = SIZE) const
-    {
-        write(addr_to, port, buffer.data(), size);
-    }
-
-    void send(std::string_view addr_to, uint16_t port, std::string_view buffer) const
-    {
-        write(addr_to, port, buffer.data(), buffer.size());
-    }
-
-    template<typename T>
-    std::pair<std::vector<T>, connection_tuple> read(size_t size) const
-    {
-        if(m_mode != socket_mode::bound)
-            throw std::runtime_error {"Socket was created without being bound to an interface."};
-
-        std::pair<std::vector<T>, connection_tuple> ret;
-        std::vector<T>& buffer = ret.first;
-        buffer.resize(size);
-
-        connection_tuple& peer = ret.second;
-
-        if(auto bytes = read_from_socket(buffer.data(), size * sizeof(T), peer); bytes >= 0)
-        {
-            buffer.resize(bytes);
-            return ret;
-        }
-        else
-        {
-            throw std::runtime_error {"Failed to read."};
-        }
-    }
-
-    template<typename T, size_t SIZE>
-    std::pair<std::array<T, SIZE>, connection_tuple> read() const
-    {
-        if(m_mode != socket_mode::bound)
-            throw std::runtime_error {"Socket was created without being bound to an interface."};
-
-        std::pair<std::array<T, SIZE>, connection_tuple> ret;
-        std::array<T, SIZE>& buffer = ret.first;
-        connection_tuple& peer = ret.second;
-
-        if(auto bytes = read_from_socket(buffer.data(), SIZE * sizeof(T), peer); bytes >= 0)
-            return ret;
+        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size()); bytes >= 0)
+            return bytes / sizeof(T);
         else
             throw std::runtime_error {"Failed to read."};
     }
 
     template<typename T>
-    std::pair<size_t, connection_tuple> read(std::vector<T>& buffer_to_append, size_t size_to_append) const
+    size_t read(span<T>&& buffer, connection_tuple& peer) const
     {
-        if(m_mode != socket_mode::bound)
-            throw std::runtime_error {"Socket was created without being bound to an interface."};
-
-        auto old_size = buffer_to_append.size();
-        if(buffer_to_append.capacity() - old_size < size_to_append)
-            buffer_to_append.resize(old_size + size_to_append);
-
-        connection_tuple peer {};
-
-        if(auto bytes = read_from_socket(buffer_to_append.data() + old_size, size_to_append * sizeof(T), peer); bytes >= 0)
-            return std::pair<size_t, connection_tuple> {bytes, peer};
-        else
-            throw std::runtime_error {"Failed to read."};
-    }
-
-    template<typename T, size_t SIZE>
-    std::pair<size_t, connection_tuple> read(std::array<T, SIZE>& buffer_to_append, size_t size_to_append) const
-    {
-        static_assert(SIZE <= size_to_append);
-
-        connection_tuple peer {};
-        if(size_t bytes = read_from_socket(buffer_to_append.data(), size_to_append * sizeof(T), peer); bytes >= 0)
-            return std::pair<size_t, connection_tuple> {bytes, peer};
-        else
-            throw std::runtime_error {"Failed to read."};
-    }
-
-    template<typename T>
-    std::pair<size_t, connection_tuple> read(T* buffer_to_append, size_t size_to_append) const
-    {
-        connection_tuple peer {};
-        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer_to_append), size_to_append * sizeof(T), peer); bytes >= 0)
-            return std::pair<size_t, connection_tuple> {bytes, peer};
+        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &peer); bytes >= 0)
+            return bytes / sizeof(T);
         else
             throw std::runtime_error {"Failed to read."};
     }
@@ -935,10 +733,10 @@ public:
     {
         return m_sockfd;
     }
-
+ 
 private:
 
-    int read_from_socket(char* const buffer, size_t size, connection_tuple& peer_data) const
+    int read_from_socket(char* const buffer, size_t size, connection_tuple* peer_data = nullptr) const
     {
         if constexpr(IP_VER == ip_version::v4)
         {
@@ -946,7 +744,8 @@ private:
             sockaddr_in from {};
             auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
 
-            peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
+            if(peer_data)
+                *peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
 
             return bytes;
         }
@@ -954,7 +753,12 @@ private:
         {
             socklen_t flen = sizeof(sockaddr_in6);
             sockaddr_in6 from {};
-            return ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+
+            if(peer_data)
+                *peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
+
+            return bytes;
         }
         else
         {
