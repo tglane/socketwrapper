@@ -326,7 +326,7 @@ public:
     }
 
     template<typename T>
-    size_t read(const span<T>& buffer) const
+    size_t read(span<T>&& buffer) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
