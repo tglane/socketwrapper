@@ -22,5 +22,7 @@ int main()
         std::cout << it << '\n';
 
     net::span s_five {&(ix[0]), &(ix[4])};
+
+    net::span s_six {str};
 }
 
