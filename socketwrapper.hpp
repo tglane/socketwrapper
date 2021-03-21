@@ -168,7 +168,6 @@ namespace utility {
     template<ip_version IP_VER>
     inline connection_tuple resolve_addrinfo(sockaddr* addr_in)
     {
-        // TODO
         connection_tuple peer {};
         if constexpr(IP_VER == ip_version::v4)
         {
@@ -462,13 +461,6 @@ public:
         }
     }
 
-    // TODO
-    // std::thread async_accept(std::function<void (tcp_connection&&)> accept_handler) const
-    // {
-    //     return std::thread([this, callback = std::move(accept_handler)]() {
-    //     });
-    // }
-    
     int get() const
     {
         return m_sockfd;
