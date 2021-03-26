@@ -706,7 +706,7 @@ public:
     template<typename T>
     size_t read(span<T>&& buffer) const
     {
-        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size()); bytes >= 0)
+        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size()); bytes >= 0)
             return bytes / sizeof(T);
         else
             throw std::runtime_error {"Failed to read."};
@@ -715,7 +715,7 @@ public:
     template<typename T>
     size_t read(span<T>&& buffer, connection_tuple& peer) const
     {
-        if(size_t bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &peer); bytes >= 0)
+        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &peer); bytes >= 0)
             return bytes / sizeof(T);
         else
             throw std::runtime_error {"Failed to read."};
