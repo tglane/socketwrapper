@@ -7,8 +7,6 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#define TLS_ENABLED
-
 #include <memory>
 #include <string>
 #include <string_view>
@@ -75,7 +73,7 @@ public:
     {}
 
     template<size_t S>
-    span(T (&buffer)[S]) noexcept
+    explicit span(T (&buffer)[S]) noexcept
         : m_start {buffer}, m_size {S}
     {}
 
@@ -85,7 +83,7 @@ public:
     {}
 
     template<typename CONTAINER>
-    span(CONTAINER&& con) noexcept
+    explicit span(CONTAINER&& con) noexcept
         : m_start {con.data()}, m_size {con.size()}
     {}
 
@@ -128,10 +126,7 @@ inline constexpr T* end(const span<T>& buffer) noexcept { return buffer.end(); }
 namespace utility {
 
     template<ip_version IP_VER>
-    inline int resolve_hostname(std::string_view host_name,
-                        uint16_t port,
-                        socket_type type,
-                        std::variant<sockaddr_in, sockaddr_in6>& addr_out)
+    inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
     {
         int ret;
 
@@ -268,8 +263,8 @@ public:
     tcp_connection() = delete;
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
-    tcp_connection(tcp_connection&&) = default;
-    tcp_connection& operator=(tcp_connection&&) = default;
+    tcp_connection(tcp_connection&&) noexcept = default;
+    tcp_connection& operator=(tcp_connection&&) noexcept = default;
 
     tcp_connection(std::string_view conn_addr, uint16_t port_to)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}, m_connection {connection_status::closed}
@@ -388,8 +383,8 @@ public:
     tcp_acceptor() = delete;
     tcp_acceptor(const tcp_acceptor&) = delete;
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
-    tcp_acceptor(tcp_acceptor&&) = default;
-    tcp_acceptor& operator=(tcp_acceptor&&) = default;
+    tcp_acceptor(tcp_acceptor&&) noexcept = default;
+    tcp_acceptor& operator=(tcp_acceptor&&) noexcept = default;
 
     tcp_acceptor(std::string_view bind_addr, uint16_t port, size_t backlog = 5)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}
@@ -439,7 +434,7 @@ public:
     {
         if constexpr(IP_VER == ip_version::v4)
         {
-            sockaddr_in client;
+            sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
             if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tcp_connection<IP_VER> {sock, client};
@@ -448,7 +443,7 @@ public:
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
-            sockaddr_in6 client;
+            sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
             if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tcp_connection<IP_VER> {sock, client};
@@ -486,8 +481,8 @@ public:
     tls_connection() = delete;
     tls_connection(const tls_connection&) = delete;
     tls_connection& operator=(const tls_connection&) = delete;
-    tls_connection(tls_connection&&) = default;
-    tls_connection& operator=(tls_connection&&) = default;
+    tls_connection(tls_connection&&) noexcept = default;
+    tls_connection& operator=(tls_connection&&) noexcept = default;
 
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
         : tcp_connection<IP_VER> {conn_addr, port}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
@@ -530,7 +525,7 @@ private:
 
         if(auto ret = SSL_accept(m_ssl); ret != 1)
         {
-            ret = SSL_get_error(m_ssl, ret);
+            SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
             throw std::runtime_error {"Failed to accept TLS connection."};
         }
@@ -575,8 +570,8 @@ public:
     tls_acceptor() = delete;
     tls_acceptor(const tls_acceptor&) = delete;
     tls_acceptor operator=(const tls_acceptor&) = delete;
-    tls_acceptor(tls_acceptor&&) = default;
-    tls_acceptor& operator=(tls_acceptor&&) = default;
+    tls_acceptor(tls_acceptor&&) noexcept = default;
+    tls_acceptor& operator=(tls_acceptor&&) noexcept = default;
 
     tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
         : tcp_acceptor<IP_VER> {bind_addr, port, backlog}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
@@ -601,7 +596,7 @@ public:
     {
         if constexpr(IP_VER == ip_version::v4)
         {
-            sockaddr_in client;
+            sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
             if(int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tls_connection<IP_VER> {sock, client, m_context};
@@ -610,7 +605,7 @@ public:
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
-            sockaddr_in6 client;
+            sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
             if(int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tls_connection<IP_VER> {sock, client, m_context};
@@ -649,8 +644,8 @@ public:
 
     udp_socket(const udp_socket&) = delete;
     udp_socket& operator=(const udp_socket&) = delete;
-    udp_socket(udp_socket&&) = default;
-    udp_socket& operator=(udp_socket&&) = default;
+    udp_socket(udp_socket&&) noexcept = default;
+    udp_socket& operator=(udp_socket&&) noexcept = default;
 
     udp_socket()
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::non_bound}
@@ -795,4 +790,3 @@ private:
 } // namespace net
 
 #endif // SOCKETWRAPPER_HPP
-
