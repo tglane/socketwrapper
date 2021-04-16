@@ -45,14 +45,15 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
-// Struct containing connection data including a string representation of peers ip address and port
-struct connection_tuple
+/// Struct containing connection data including a string representation of peers ip address and port
+struct connection_info
 {
     std::string addr;
     uint16_t port;
 };
 
-// Generic non-owning buffer type inspirated by golangs slices
+/// Generic non-owning buffer type inspired by golangs slices
+/// Used as a generic buffer class to send data from and receive data to
 template<typename T>
 class span
 {
@@ -133,7 +134,7 @@ namespace utility {
         addrinfo hints {};
         hints.ai_family = static_cast<uint8_t>(IP_VER);
         hints.ai_socktype = static_cast<uint8_t>(type);
-        
+
         std::array<char, 6> port_buffer {0, 0, 0, 0, 0, '\0'};
         auto [end_ptr, ec] = std::to_chars(port_buffer.begin(), port_buffer.end(), port);
         if(ec != std::errc())
@@ -161,9 +162,9 @@ namespace utility {
     }
 
     template<ip_version IP_VER>
-    inline connection_tuple resolve_addrinfo(sockaddr* addr_in)
+    inline connection_info resolve_addrinfo(sockaddr* addr_in)
     {
-        connection_tuple peer {};
+        connection_info peer {};
         if constexpr(IP_VER == ip_version::v4)
         {
             peer.addr.resize(INET_ADDRSTRLEN);
@@ -273,11 +274,11 @@ public:
             throw std::runtime_error {"Failed to created socket."};
 
         int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
             throw std::runtime_error {"Failed to set address reusable."};
-    
+
 #ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
@@ -309,13 +310,20 @@ public:
         ::close(m_sockfd);
     }
 
+    int get() const
+    {
+        return m_sockfd;
+    }
+
     template<typename T>
-    void send(span<T>&& buffer) const
+    size_t send(span<T>&& buffer) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(write_to_socket(buffer.get(), buffer.size()) < 0)
+        if(auto bytes = write_to_socket(buffer.get(), buffer.size()); bytes >= 0)
+            return bytes / sizeof(T);
+        else
             throw std::runtime_error {"Failed to send."};
     }
 
@@ -337,20 +345,19 @@ public:
         }
     }
 
-    constexpr int get() const
-    {
-        return m_sockfd;
-    }
-
 protected:
 
     tcp_connection(int socket_fd, const sockaddr_in& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v4}, m_peer {peer_addr}, m_connection {connection_status::connected}
-    {}
+    {
+        static_assert(IP_VER == ip_version::v4);
+    }
 
     tcp_connection(int socket_fd, const sockaddr_in6& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v6}, m_peer {peer_addr}, m_connection {connection_status::connected}
-    {}
+    {
+        static_assert(IP_VER == ip_version::v6);
+    }
 
     virtual int read_from_socket(char* const buffer_to, size_t bytes_to_read) const
     {
@@ -391,13 +398,13 @@ public:
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
-     
+
         int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
             throw std::runtime_error {"Failed to set address resusable."};
-    
+
 #ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0) 
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0)
             throw std::runtime_error {"Failed to set port reusable."};
 #endif
 
@@ -430,6 +437,11 @@ public:
         ::close(m_sockfd);
     }
 
+    int get() const
+    {
+        return m_sockfd;
+    }
+
     tcp_connection<IP_VER> accept() const
     {
         if constexpr(IP_VER == ip_version::v4)
@@ -454,11 +466,6 @@ public:
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
-    }
-
-    int get() const
-    {
-        return m_sockfd;
     }
 
 protected:
@@ -492,7 +499,7 @@ public:
         // TODO Change configure function to use the cert and key string not the path
         // utility::configure_ssl_ctx(m_ctx, m_certificate, m_private_key, false);
         utility::configure_ssl_ctx(m_context, cert_path, key_path, false);
-        
+
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
@@ -512,13 +519,15 @@ public:
             SSL_shutdown(m_ssl);
             SSL_free(m_ssl);
         }
-    } 
+    }
 
 private:
 
     tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
         : tcp_connection<IP_VER> {socketfd, peer_addr}, m_context {std::move(context)}
     {
+        static_assert(IP_VER == ip_version::v4);
+
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
@@ -534,6 +543,8 @@ private:
     tls_connection(int socketfd, const sockaddr_in6& peer_addr, std::shared_ptr<SSL_CTX> context)
         : tcp_connection<IP_VER> {socketfd, peer_addr}, m_context {std::move(context)}
     {
+        static_assert(IP_VER == ip_version::v6);
+
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
             throw std::runtime_error {"Failed to set up SSL."};
         SSL_set_fd(m_ssl, this->m_sockfd);
@@ -577,7 +588,7 @@ public:
         : tcp_acceptor<IP_VER> {bind_addr, port, backlog}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
     {
         utility::init_ssl_system();
- 
+
         // TODO Change configure function to use the cert and key string not the path
         // configure_ssl_ctx(m_ctx, m_certificate, m_private_key, true);
         utility::configure_ssl_ctx(m_context, cert_path, key_path, true);
@@ -615,7 +626,7 @@ public:
         else
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
-        } 
+        }
     }
 
 private:
@@ -692,38 +703,38 @@ public:
         ::close(m_sockfd);
     }
 
-    template<typename T>
-    void send(std::string_view addr, uint16_t port, span<T>&& buffer) const
-    {
-        write(addr, port, buffer.get(), buffer.size());
-    }
-
-    template<typename T>
-    size_t read(span<T>&& buffer) const
-    {
-        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size()); bytes >= 0)
-            return bytes / sizeof(T);
-        else
-            throw std::runtime_error {"Failed to read."};
-    }
-
-    template<typename T>
-    size_t read(span<T>&& buffer, connection_tuple& peer) const
-    {
-        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &peer); bytes >= 0)
-            return bytes / sizeof(T);
-        else
-            throw std::runtime_error {"Failed to read."};
-    }
-
     int get() const
     {
         return m_sockfd;
     }
- 
+
+    template<typename T>
+    size_t send(std::string_view addr, uint16_t port, span<T>&& buffer) const
+    {
+        if(auto elements = write(addr, port, buffer.get(), buffer.size()); elements >= 0)
+            return elements / sizeof(T);
+        else
+            throw std::runtime_error {"Failed to send."};
+    }
+
+    template<typename T>
+    std::pair<size_t, connection_info> read(span<T>&& buffer) const
+    {
+        std::pair<size_t, connection_info> pair {};
+        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
+        {
+            pair.first = bytes / sizeof(T);
+            return pair;
+        }
+        else
+        {
+            throw std::runtime_error {"Failed to read."};
+        }
+    }
+
 private:
 
-    int read_from_socket(char* const buffer, size_t size, connection_tuple* peer_data = nullptr) const
+    int read_from_socket(char* const buffer, size_t size, connection_info* peer_data = nullptr) const
     {
         if constexpr(IP_VER == ip_version::v4)
         {
@@ -753,7 +764,7 @@ private:
         }
     }
 
-    void write(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
+    int write(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
     {
         std::variant<sockaddr_in, sockaddr_in6> dest;
         if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
@@ -762,14 +773,12 @@ private:
         if constexpr(IP_VER == ip_version::v4)
         {
             auto& dest_ref = std::get<sockaddr_in>(dest);
-            if(::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in)) == -1)
-                throw std::runtime_error {"Failed to write."};
+            return ::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in));
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             auto& dest_ref = std::get<sockaddr_in6>(dest);
-            if(::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6)) == -1)
-                throw std::runtime_error {"Failed to write."};
+            return ::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6));
         }
         else
         {

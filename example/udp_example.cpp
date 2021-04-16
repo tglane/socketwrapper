@@ -13,8 +13,9 @@ int main(int argc, char** argv)
 
         net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
         std::array<char, 1024> buffer;
-        net::connection_tuple peer;
-        size_t bytes_read = sock.read(net::span {buffer}, peer);
+        // net::connection_info peer;
+        // size_t bytes_read = sock.read(net::span {buffer}, peer);
+        auto [bytes_read, peer] = sock.read(net::span {buffer});
         std::cout << "Peer addr: " << peer.addr << "; Peer port: " << peer.port << "; Bytes read: " << bytes_read << '\n';
         std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
    }
@@ -27,4 +28,3 @@ int main(int argc, char** argv)
         std::cout << "All messages sent." << std::endl;
     }
 }
-
