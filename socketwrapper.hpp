@@ -321,10 +321,16 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        if(auto bytes = write_to_socket(buffer.get(), buffer.size()); bytes >= 0)
-            return bytes / sizeof(T);
-        else
-            throw std::runtime_error {"Failed to send."};
+        switch(auto bytes = write_to_socket(buffer.get(), buffer.size()); bytes)
+        {
+            case -1:
+                throw std::runtime_error {"Failed to read"};
+            case 0:
+                m_connection = connection_status::closed;
+                // fall through
+            default:
+                return bytes / sizeof(T);
+        }
     }
 
     template<typename T>
