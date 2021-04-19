@@ -14,21 +14,24 @@
 #include <array>
 #include <vector>
 #include <variant>
+#include <optional>
+#include <chrono>
 #include <stdexcept>
 #include <charconv>
 #include <utility>
+#include <csignal>
 
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 
 #ifdef TLS_ENABLED
-    // Include ssl header when needed
+// Include ssl header only when needed
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include <csignal>
 #endif
 
 namespace net {
@@ -118,9 +121,16 @@ span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::decl
 
 // Begin and end functions for span class
 template<typename T>
-inline constexpr T* begin(const span<T>& buffer) noexcept { return buffer.begin(); }
+inline constexpr T* begin(const span<T>& buffer) noexcept
+{
+    return buffer.begin();
+}
+
 template<typename T>
-inline constexpr T* end(const span<T>& buffer) noexcept { return buffer.end(); }
+inline constexpr T* end(const span<T>& buffer) noexcept
+{
+    return buffer.end();
+}
 
 // TODO Maybe add some sort of const_span to use in all send functions to also send string_views as CONTAINERs
 
@@ -209,6 +219,17 @@ namespace utility {
         return out;
     }
 
+    inline void init_socket_system()
+    {
+        static bool initialized = false;
+        if(!initialized)
+        {
+            std::signal(SIGPIPE, SIG_IGN);
+
+            initialized = true;
+        }
+    }
+
 #ifdef TLS_ENABLED
 
     inline void init_ssl_system()
@@ -216,8 +237,6 @@ namespace utility {
         static bool initialized = false;
         if(!initialized)
         {
-            signal(SIGPIPE, SIG_IGN);
-
             SSL_library_init();
             SSL_load_error_strings();
             OpenSSL_add_ssl_algorithms();
@@ -253,6 +272,7 @@ template<ip_version IP_VER>
 class tcp_connection
 {
 protected:
+
     enum class connection_status : uint8_t
     {
         closed,
@@ -270,6 +290,8 @@ public:
     tcp_connection(std::string_view conn_addr, uint16_t port_to)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}, m_connection {connection_status::closed}
     {
+        utility::init_socket_system();
+
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to created socket."};
 
@@ -321,16 +343,24 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        switch(auto bytes = write_to_socket(buffer.get(), buffer.size()); bytes)
+        size_t total = 0;
+        while(total < buffer.size())
         {
-            case -1:
-                throw std::runtime_error {"Failed to read"};
-            case 0:
-                m_connection = connection_status::closed;
-                // fall through
-            default:
-                return bytes / sizeof(T);
+            switch(auto bytes = write_to_socket(buffer.get() + total, buffer.size() - total); bytes)
+            {
+                case -1:
+                    // TODO Check for errors that must be handled
+                    throw std::runtime_error {"Failed to read."};
+                case 0:
+                    m_connection = connection_status::closed;
+                    total += bytes;
+                    break;
+                default:
+                    total += bytes;
+            }
         }
+
+        return total / sizeof(T);
     }
 
     template<typename T>
@@ -349,6 +379,35 @@ public:
             default:
                 return bytes / sizeof(T);
         }
+    }
+
+    template<typename T>
+    size_t read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
+    {
+        if(m_connection == connection_status::closed)
+            throw std::runtime_error {"Connection already closed."};
+
+
+        timeval time_val {0, delay.count() * 1000};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds);
+
+        if(auto fd_ready = ::select(m_sockfd + 1, &fds, NULL, NULL, &time_val); fd_ready > 0)
+        {
+            switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
+            {
+                case -1:
+                    throw std::runtime_error {"Failed to read."};
+                case 0:
+                    m_connection = connection_status::closed;
+                    // fall through
+                default:
+                    return bytes / sizeof(T);
+            }
+        }
+
+        return 0;
     }
 
 protected:
@@ -472,6 +531,11 @@ public:
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
+    }
+
+    tcp_connection<IP_VER> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    {
+        // TODO use select to wait for accept for a given time <delay> in ms
     }
 
 protected:
@@ -717,10 +781,16 @@ public:
     template<typename T>
     size_t send(std::string_view addr, uint16_t port, span<T>&& buffer) const
     {
-        if(auto elements = write(addr, port, buffer.get(), buffer.size()); elements >= 0)
-            return elements / sizeof(T);
-        else
-            throw std::runtime_error {"Failed to send."};
+        size_t total = 0;
+        while(total < buffer.size())
+        {
+            if(auto bytes = write(addr, port, buffer.get(), buffer.size()); bytes >= 0)
+                total += bytes;
+            else
+                throw std::runtime_error {"Failed to send."};
+        }
+
+        return total / sizeof(T);
     }
 
     template<typename T>
@@ -736,6 +806,31 @@ public:
         {
             throw std::runtime_error {"Failed to read."};
         }
+    }
+
+    template<typename T>
+    std::pair<size_t, std::optional<connection_info>> read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
+    {
+        timeval time_val {0, delay.count() * 1000};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds);
+
+        if(auto fd_ready = ::select(m_sockfd + 1, &fds, NULL, NULL, &time_val); fd_ready > 0)
+        {
+            std::pair<size_t, connection_info> pair {};
+            if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
+            {
+                pair.first = bytes / sizeof(T);
+                return pair;
+            }
+            else
+            {
+                throw std::runtime_error {"Failed to read."};
+            }
+        }
+
+        return {0, std::nullopt};
     }
 
 private:
