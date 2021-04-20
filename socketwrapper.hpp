@@ -7,6 +7,8 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <iostream>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -27,6 +29,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <errno.h>
 
 #ifdef TLS_ENABLED
 // Include ssl header only when needed
@@ -350,6 +353,7 @@ public:
             {
                 case -1:
                     // TODO Check for errors that must be handled
+                    std::cout << "Error: " << errno << std::endl;
                     throw std::runtime_error {"Failed to read."};
                 case 0:
                     m_connection = connection_status::closed;
@@ -372,6 +376,7 @@ public:
         switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
+                std::cout << "Error read no delay: " << errno << std::endl;
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
@@ -387,13 +392,12 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-
         timeval time_val {0, delay.count() * 1000};
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds);
 
-        if(auto fd_ready = ::select(m_sockfd + 1, &fds, NULL, NULL, &time_val); fd_ready > 0)
+        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
         {
             switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
             {
@@ -513,7 +517,7 @@ public:
         {
             sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
-            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
                 return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -522,7 +526,7 @@ public:
         {
             sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
-            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
                 return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -533,9 +537,22 @@ public:
         }
     }
 
-    tcp_connection<IP_VER> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::unique_ptr<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    // std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
-        // TODO use select to wait for accept for a given time <delay> in ms
+        timeval time_val {0, delay.count() * 1000};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_sockfd, &fds);
+
+        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
+        {
+            return std::unique_ptr<tcp_connection<IP_VER>>{new tcp_connection<IP_VER>{accept()}};
+            // return std::optional<tcp_connection<IP_VER>>{accept()};
+        }
+        else
+            return std::unique_ptr<tcp_connection<IP_VER>>{nullptr};
+            // return std::nullopt;
     }
 
 protected:
@@ -699,6 +716,19 @@ public:
         }
     }
 
+    std::unique_ptr<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    {
+        timeval time_val {0, delay.count() * 1000};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(this->m_sockfd, &fds);
+
+        if(auto fd_ready = ::select(this->m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
+            return std::unique_ptr<tls_connection<IP_VER>>{new tls_connection<IP_VER>{accept()}};
+        else
+            return std::unique_ptr<tls_connection<IP_VER>>{nullptr};
+    }
+
 private:
 
     std::string m_certificate;
@@ -816,7 +846,7 @@ public:
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds);
 
-        if(auto fd_ready = ::select(m_sockfd + 1, &fds, NULL, NULL, &time_val); fd_ready > 0)
+        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
         {
             std::pair<size_t, connection_info> pair {};
             if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)

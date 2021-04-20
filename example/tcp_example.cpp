@@ -12,23 +12,38 @@ int main(int argc, char**argv)
     {
         std::cout << "--- Receiver ---\n";
 
+        std::array<char, 1024> buffer;
         net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
         auto sock = acceptor.accept();
         std::cout << "Accepted\n";
 
-        std::array<char, 1024> buffer;
         try {
             size_t bytes_read = sock.read(net::span {buffer});
             std::cout << "Received: " << bytes_read << '\n'
                 << std::string_view {buffer.data(), bytes_read} << '\n';
         } catch(std::runtime_error&) {}
 
-        auto sock2 = acceptor.accept();
-        std::cout << "Accepted Again\n";
-        size_t bytes_read = sock2.read(net::span {buffer}, std::chrono::milliseconds(3000));
-        std::cout << "Received: " << bytes_read << '\n'
-            << std::string_view {buffer.data(), bytes_read} << '\n';
+        if(auto sock2 = acceptor.accept(std::chrono::milliseconds(6000)); sock2)
+        {
+            std::cout << "Accepted Again\n";
+            size_t bytes_read = sock2->read(net::span {buffer}, std::chrono::milliseconds(4000));
+            // size_t bytes_read = sock2->read(net::span {buffer});
+            std::cout << "Received: " << bytes_read << '\n'
+                << std::string_view {buffer.data(), bytes_read} << '\n';
+        }
+        else
+        {
+            std::cout << "No accepted connection\n";
+        }
+
+        // auto sock2 = acceptor.accept();
+        // std::cout << "Accepted Again\n";
+        // size_t bytes_read = sock2.read(net::span {buffer}, std::chrono::milliseconds(4000));
+        // // size_t bytes_read = sock2->read(net::span {buffer});
+        // std::cout << "Received: " << bytes_read << '\n'
+        //     << std::string_view {buffer.data(), bytes_read} << '\n';
+
     }
     else if(strcmp(argv[1], "s") == 0)
     {
@@ -44,6 +59,7 @@ int main(int argc, char**argv)
 
         std::cout << "Sent\n";
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
         net::tcp_connection<net::ip_version::v4> sock2 {"127.0.0.1", 4433};
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         sock2.send(net::span {std::string {"LulWWW"}});
