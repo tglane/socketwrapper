@@ -287,8 +287,27 @@ public:
     tcp_connection() = delete;
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
-    tcp_connection(tcp_connection&&) noexcept = default;
-    tcp_connection& operator=(tcp_connection&&) noexcept = default;
+
+    tcp_connection(tcp_connection&& rhs) noexcept
+    {
+        *this = std::move(rhs);
+    }
+
+    tcp_connection& operator=(tcp_connection&& rhs) noexcept
+    {
+        // Provide custom move assginment operator to prevent the moved socket from closing the underlying file descriptor
+        if(this != &rhs)
+        {
+            m_sockfd = rhs.m_sockfd;
+            m_family = rhs.m_family;
+            m_peer = std::move(rhs.m_peer);
+            m_connection = rhs.m_connection;
+
+            rhs.m_sockfd = -1;
+            rhs.m_connection = connection_status::closed;
+        }
+        return *this;
+    }
 
     tcp_connection(std::string_view conn_addr, uint16_t port_to)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}, m_connection {connection_status::closed}
@@ -332,7 +351,8 @@ public:
 
     ~tcp_connection()
     {
-        ::close(m_sockfd);
+        if(m_connection != connection_status::closed && m_sockfd > 0)
+            ::close(m_sockfd);
     }
 
     int get() const
@@ -459,8 +479,25 @@ public:
     tcp_acceptor() = delete;
     tcp_acceptor(const tcp_acceptor&) = delete;
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
-    tcp_acceptor(tcp_acceptor&&) noexcept = default;
-    tcp_acceptor& operator=(tcp_acceptor&&) noexcept = default;
+
+    tcp_acceptor(tcp_acceptor&& rhs) noexcept
+    {
+        *this = std::move(rhs);
+    }
+
+    tcp_acceptor& operator=(tcp_acceptor&& rhs) noexcept
+    {
+        // Provide a custom move assginment operator to prevent the moved object from closing the underlying file descriptor
+        if(this != &rhs)
+        {
+            m_sockfd = rhs.m_sockfd;
+            m_family = rhs.m_family;
+            m_sockaddr = std::move(rhs.m_sockaddr);
+
+            rhs.m_sockfd = -1;
+        }
+        return *this;
+    }
 
     tcp_acceptor(std::string_view bind_addr, uint16_t port, size_t backlog = 5)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}
@@ -503,7 +540,8 @@ public:
 
     ~tcp_acceptor()
     {
-        ::close(m_sockfd);
+        if(m_sockfd > 0)
+            ::close(m_sockfd);
     }
 
     int get() const
@@ -537,8 +575,8 @@ public:
         }
     }
 
-    std::unique_ptr<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
-    // std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    // std::unique_ptr<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         timeval time_val {0, delay.count() * 1000};
         fd_set fds;
@@ -547,12 +585,12 @@ public:
 
         if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
         {
-            return std::unique_ptr<tcp_connection<IP_VER>>{new tcp_connection<IP_VER>{accept()}};
-            // return std::optional<tcp_connection<IP_VER>>{accept()};
+            // return std::unique_ptr<tcp_connection<IP_VER>> {new tcp_connection<IP_VER>{accept()}};
+            return std::optional<tcp_connection<IP_VER>> {accept()};
         }
         else
-            return std::unique_ptr<tcp_connection<IP_VER>>{nullptr};
-            // return std::nullopt;
+            // return std::unique_ptr<tcp_connection<IP_VER>> {nullptr};
+            return std::nullopt;
     }
 
 protected:
@@ -575,8 +613,28 @@ public:
     tls_connection() = delete;
     tls_connection(const tls_connection&) = delete;
     tls_connection& operator=(const tls_connection&) = delete;
-    tls_connection(tls_connection&&) noexcept = default;
-    tls_connection& operator=(tls_connection&&) noexcept = default;
+
+    tls_connection(tls_connection&& rhs) noexcept
+    {
+        *this = std::move(rhs);
+    }
+
+    tls_connection& operator=(tls_connection&& rhs) noexcept
+    {
+        // Provide custom move assginment operator to prevent moved object from deleting SSL context pointers
+        if(this != &rhs)
+        {
+            static_cast<tcp_connection<IP_VER>&>(*this) = std::move(rhs);
+
+            m_context = std::move(rhs.m_context);
+            m_ssl = rhs.m_ssl;
+            m_certificate = std::move(rhs.m_certificate);
+            m_private_key = std::move(rhs.m_private_key);
+
+            rhs.m_ssl = nullptr;
+        }
+        return *this;
+    }
 
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
         : tcp_connection<IP_VER> {conn_addr, port}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
@@ -668,8 +726,28 @@ public:
     tls_acceptor() = delete;
     tls_acceptor(const tls_acceptor&) = delete;
     tls_acceptor operator=(const tls_acceptor&) = delete;
-    tls_acceptor(tls_acceptor&&) noexcept = default;
-    tls_acceptor& operator=(tls_acceptor&&) noexcept = default;
+
+    tls_acceptor(tls_acceptor& rhs) noexcept
+    {
+        *this = std::move(rhs);
+    }
+
+    tls_acceptor& operator=(tls_acceptor&& rhs) noexcept
+    {
+        // Provide custom move assginment operator to prevent moved object from deleting underlying SSL context
+        if(this != &rhs)
+        {
+            static_cast<tcp_acceptor<IP_VER>&>(*this) = std::move(rhs);
+
+            m_certificate = std::move(rhs.m_certificate);
+            m_private_key = std::move(rhs.m_private_key);
+            m_context = std::move(rhs.m_context);
+            m_ssl = rhs.m_ssl;
+
+            rhs.m_ssl = nullptr;
+        }
+        return *this;
+    }
 
     tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
         : tcp_acceptor<IP_VER> {bind_addr, port, backlog}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
@@ -755,12 +833,30 @@ public:
 
     udp_socket(const udp_socket&) = delete;
     udp_socket& operator=(const udp_socket&) = delete;
-    udp_socket(udp_socket&&) noexcept = default;
-    udp_socket& operator=(udp_socket&&) noexcept = default;
 
     udp_socket()
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::non_bound}
     {}
+
+    udp_socket(udp_socket&& rhs) noexcept
+    {
+        *this = std::move(rhs);
+    }
+
+    udp_socket& operator=(udp_socket&& rhs) noexcept
+    {
+        // Provide custom move assginment operator to prevent moved object from closing underlying file descriptor
+        if(this != &rhs)
+        {
+            m_sockfd = rhs.m_sockfd;
+            m_family = rhs.m_family;
+            m_mode = rhs.m_mode;
+            m_sockaddr = std::move(rhs.m_sockaddr);
+
+            rhs.m_sockfd = -1;
+        }
+        return *this;
+    }
 
     udp_socket(std::string_view bind_addr, uint16_t port)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::bound}
@@ -800,7 +896,8 @@ public:
 
     ~udp_socket()
     {
-        ::close(m_sockfd);
+        if(m_sockfd > 0)
+            ::close(m_sockfd);
     }
 
     int get() const
