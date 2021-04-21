@@ -575,7 +575,6 @@ public:
         }
     }
 
-    // std::unique_ptr<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         timeval time_val {0, delay.count() * 1000};
@@ -585,11 +584,9 @@ public:
 
         if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
         {
-            // return std::unique_ptr<tcp_connection<IP_VER>> {new tcp_connection<IP_VER>{accept()}};
             return std::optional<tcp_connection<IP_VER>> {accept()};
         }
         else
-            // return std::unique_ptr<tcp_connection<IP_VER>> {nullptr};
             return std::nullopt;
     }
 
@@ -794,7 +791,7 @@ public:
         }
     }
 
-    std::unique_ptr<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::optional<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         timeval time_val {0, delay.count() * 1000};
         fd_set fds;
@@ -802,9 +799,9 @@ public:
         FD_SET(this->m_sockfd, &fds);
 
         if(auto fd_ready = ::select(this->m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
-            return std::unique_ptr<tls_connection<IP_VER>>{new tls_connection<IP_VER>{accept()}};
+            return std::optional<tls_connection<IP_VER>> {accept()};
         else
-            return std::unique_ptr<tls_connection<IP_VER>>{nullptr};
+            return std::nullopt;
     }
 
 private:
