@@ -284,7 +284,6 @@ protected:
 
 public:
 
-    tcp_connection() = delete;
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
 
@@ -435,6 +434,8 @@ public:
     }
 
 protected:
+
+    tcp_connection() = default;
 
     tcp_connection(int socket_fd, const sockaddr_in& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v4}, m_peer {peer_addr}, m_connection {connection_status::connected}
