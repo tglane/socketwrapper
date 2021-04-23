@@ -122,19 +122,6 @@ span(ITER, ITER) -> span<typename std::iterator_traits<ITER>::value_type>;
 template<typename CONTAINER>
 span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::declval<CONTAINER>().front())>::type>;
 
-// Begin and end functions for span class
-template<typename T>
-inline constexpr T* begin(const span<T>& buffer) noexcept
-{
-    return buffer.begin();
-}
-
-template<typename T>
-inline constexpr T* end(const span<T>& buffer) noexcept
-{
-    return buffer.end();
-}
-
 // TODO Maybe add some sort of const_span to use in all send functions to also send string_views as CONTAINERs
 
 namespace utility {
