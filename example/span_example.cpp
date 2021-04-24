@@ -17,7 +17,7 @@ int main()
 
     std::vector<char> vec {'H', 'e', 'l', 'l', 'o'};
     net::span s_four {vec};
-    std::cout << *std::prev(end(s_four)) << '\n' << std::endl;
+    std::cout << *std::prev(std::end(s_four)) << '\n' << std::endl;
     for(const auto& it : s_four)
         std::cout << it << '\n';
 
@@ -25,4 +25,3 @@ int main()
 
     net::span s_six {str};
 }
-
