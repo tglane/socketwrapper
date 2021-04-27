@@ -1,6 +1,7 @@
 cc = g++
 
 CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic
+LDFLAGS = -lpthread
 
 %.o: %.cpp
 	$(cc) -c $< -o $@ $(CFLAGS)
@@ -10,19 +11,19 @@ all: tls tcp udp span
 
 .PHONY: tls
 tls: tls_example.cpp
-	$(cc) -o tls_example $^ $(CFLAGS) -lssl -lcrypto
+	$(cc) -o tls_example $^ $(CFLAGS) $(LDFLAGS) -lssl -lcrypto
 
 .PHONY: tcp
 tcp: tcp_example.cpp
-	$(cc) -o tcp_example $^ $(CFLAGS)
+	$(cc) -o tcp_example $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: udp
 udp: udp_example.cpp
-	$(cc) -o udp_example $^ $(CFLAGS)
+	$(cc) -o udp_example $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: span
 span: span_example.cpp
-	$(cc) -o span_example $^ $(CFLAGS)
+	$(cc) -o span_example $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: clean
 clean:
@@ -30,4 +31,3 @@ clean:
 	rm tcp_example
 	rm udp_example
 	rm span_example
-

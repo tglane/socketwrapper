@@ -7,17 +7,20 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#include <iostream>
-
 #include <memory>
 #include <string>
 #include <string_view>
 #include <fstream>
 #include <array>
 #include <vector>
+#include <unordered_map>
 #include <variant>
 #include <optional>
 #include <chrono>
+#include <future>
+#include <condition_variable>
+#include <mutex>
+#include <functional> // TODO Remove if not needed
 #include <stdexcept>
 #include <charconv>
 #include <utility>
@@ -25,6 +28,7 @@
 
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -125,6 +129,108 @@ span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::decl
 // TODO Maybe add some sort of const_span to use in all send functions to also send string_views as CONTAINERs
 
 namespace utility {
+
+    class message_notifier
+    {
+    public:
+
+        static message_notifier& instance()
+        {
+            static message_notifier notifier;
+            return notifier;
+        }
+
+        bool add(int sock_fd, std::condition_variable* cv)
+        {
+            if(auto [inserted, success] = m_store.emplace(sock_fd, std::pair<std::condition_variable*, epoll_event> {cv, epoll_event {}}); success)
+            {
+                auto& ev = inserted->second.second;
+
+                ev.events = EPOLLIN;
+                ev.data.fd = sock_fd;
+                ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev);
+                return true;
+            }
+            return false;
+        }
+
+        bool remove(int sock_fd)
+        {
+            if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+            {
+                auto& ev = it->second.second;
+
+                ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, &ev);
+                m_store.erase(it);
+                return true;
+            }
+            return false;
+        }
+
+    private:
+
+        message_notifier()
+        {
+            if(m_epfd = ::epoll_create(1); m_epfd == -1)
+                throw std::runtime_error {"Failed to create epoll instance when instantiating message_notifier."};
+
+            // Create pipe to stop select and add it to m_fds
+            if(::pipe(m_pipe_fds.data()) < 0)
+                throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
+
+            // Add the pipe to the epoll monitoring set
+            m_pipe_event.events = EPOLLIN;
+            m_pipe_event.data.fd = m_pipe_fds[0];
+            ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &m_pipe_event);
+
+            m_future = std::async(std::launch::async, [this]() {
+
+                std::array<epoll_event, 64> ready_set;
+
+                while(true)
+                {
+                    // TODO Other way to set max events and timeout
+                    int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 1000);
+                    for(int i = 0; i < num_ready; ++i)
+                    {
+                        if(ready_set[i].data.fd == this->m_pipe_fds[0])
+                        {
+                            // Stop signal via destructor
+                            return;
+                        }
+                        else if(ready_set[i].events & EPOLLIN)
+                        {
+                            // Data ready to read on socket -> notify
+                            if(const auto& it = this->m_store.find(ready_set[i].data.fd); it != this->m_store.end() && it->second.first != nullptr)
+                                it->second.first->notify_one();
+                        }
+                    }
+                }
+            });
+        }
+
+        ~message_notifier()
+        {
+            // Send stop signal to epoll loop to exit background task
+            char stop_byte = 0;
+            ::write(m_pipe_fds[1], &stop_byte, 1);
+
+            m_future.get();
+
+            ::close(m_pipe_fds[0]);
+            ::close(m_pipe_fds[1]);
+        }
+
+        int m_epfd;
+
+        epoll_event m_pipe_event;
+        std::array<int, 2> m_pipe_fds;
+
+        std::future<void> m_future;
+
+        std::unordered_map<int, std::pair<std::condition_variable*, epoll_event>> m_store;
+
+    };
 
     template<ip_version IP_VER>
     inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
@@ -346,6 +452,20 @@ public:
         return m_sockfd;
     }
 
+    void wait_for_data() const
+    {
+        auto& notififer = utility::message_notifier::instance();
+
+        std::condition_variable cv;
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        notififer.add(m_sockfd, &cv);
+
+        cv.wait(lock);
+
+        notififer.remove(m_sockfd);
+    }
+
     template<typename T>
     size_t send(span<T>&& buffer) const
     {
@@ -359,7 +479,6 @@ public:
             {
                 case -1:
                     // TODO Check for errors that must be handled
-                    std::cout << "Error: " << errno << std::endl;
                     throw std::runtime_error {"Failed to read."};
                 case 0:
                     m_connection = connection_status::closed;
@@ -382,7 +501,6 @@ public:
         switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
-                std::cout << "Error read no delay: " << errno << std::endl;
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
@@ -896,7 +1014,7 @@ public:
         size_t total = 0;
         while(total < buffer.size())
         {
-            if(auto bytes = write(addr, port, buffer.get(), buffer.size()); bytes >= 0)
+            if(auto bytes = write_to_socket(addr, port, buffer.get(), buffer.size()); bytes >= 0)
                 total += bytes;
             else
                 throw std::runtime_error {"Failed to send."};
@@ -977,7 +1095,7 @@ private:
         }
     }
 
-    int write(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
+    int write_to_socket(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
     {
         std::variant<sockaddr_in, sockaddr_in6> dest;
         if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)

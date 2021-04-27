@@ -12,13 +12,17 @@ int main(int argc, char**argv)
     {
         std::cout << "--- Receiver ---\n";
 
-        std::array<char, 1024> buffer;
+        std::array<char, 10000> buffer;
         net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
         auto sock = acceptor.accept();
         std::cout << "Accepted\n";
 
         try {
+            std::cout << "Wait for data ...\n";
+            sock.wait_for_data();
+            std::cout << "Data av!\n";
+
             size_t bytes_read = sock.read(net::span {buffer});
             std::cout << "Received: " << bytes_read << '\n'
                 << std::string_view {buffer.data(), bytes_read} << '\n';
@@ -54,6 +58,7 @@ int main(int argc, char**argv)
         // sock.send(net::span {vec});
         // sock.send(net::span {std::string {"Hello World"}});
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
         std::string_view buffer {"Hello String_view-World"};
         sock.send(net::span {buffer.begin(), buffer.end()});
 
