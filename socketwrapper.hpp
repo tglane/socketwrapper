@@ -134,6 +134,11 @@ namespace utility {
     {
     public:
 
+        message_notifier(const message_notifier&) = delete;
+        message_notifier& operator=(const message_notifier&) = delete;
+        message_notifier(message_notifier&&) = delete;
+        message_notifier& operator=(const message_notifier&&) = delete;
+
         static message_notifier& instance()
         {
             static message_notifier notifier;
