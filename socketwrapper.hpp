@@ -84,7 +84,7 @@ public:
     {}
 
     template<size_t S>
-    explicit span(T (&buffer)[S]) noexcept
+    span(T (&buffer)[S]) noexcept
         : m_start {buffer}, m_size {S}
     {}
 
@@ -94,7 +94,7 @@ public:
     {}
 
     template<typename CONTAINER>
-    explicit span(CONTAINER&& con) noexcept
+    span(CONTAINER&& con) noexcept
         : m_start {con.data()}, m_size {con.size()}
     {}
 
@@ -130,6 +130,7 @@ span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::decl
 
 namespace utility {
 
+    /// Notifies on receive event of a socket via a given std::condition_variable
     class message_notifier
     {
     public:
@@ -194,8 +195,7 @@ namespace utility {
 
                 while(true)
                 {
-                    // TODO Other way to set max events and timeout
-                    int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 1000);
+                    int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 100);
                     for(int i = 0; i < num_ready; ++i)
                     {
                         if(ready_set[i].data.fd == this->m_pipe_fds[0])
@@ -235,6 +235,110 @@ namespace utility {
 
         std::unordered_map<int, std::pair<std::condition_variable*, epoll_event>> m_store;
 
+    };
+
+    /// Class to handle callbacks on sockets data data receiving
+    class callback_handler
+    {
+
+        /// Base class for callback types with different parameter list
+        struct base_callback
+        {
+            virtual ~base_callback() = default;
+        };
+
+        /// Callback representation that takes one generic parameter
+        // TODO Make this a variadic template
+        template<typename ARG, typename DUMMY = void>
+        struct callback : public base_callback
+        {
+            callback(const std::function<void(ARG)>& func)
+                : m_func {func}
+            {}
+
+            void operator()(ARG arg) const
+            {
+                m_func(arg);
+            }
+
+            std::function<void(ARG)> m_func;
+        };
+
+        /// Callback specialization that takes zero parameters
+        template<typename DUMMY>
+        struct callback<void, DUMMY> : public base_callback
+        {
+            callback(const std::function<void()>& func)
+                : m_func {func}
+            {}
+
+            void operator()() const
+            {
+                m_func();
+            }
+
+            std::function<void()> m_func;
+        };
+
+    public:
+
+        static callback_handler& instance()
+        {
+            static callback_handler handler;
+            return handler;
+        }
+
+        void add(int sockfd, const std::function<void()>& func)
+        {
+            m_store.emplace(sockfd, std::make_unique<callback<void>>(func));
+        }
+
+        template<typename ARG>
+        void add(int sockfd, const std::function<void(ARG)>& func)
+        {
+            m_store.emplace(sockfd, std::make_unique<callback<ARG>>(func));
+        }
+
+        void remove(int sockfd)
+        {
+            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
+                m_store.erase(cb_it);
+        }
+
+        void call(int sockfd) const
+        {
+            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
+            {
+                auto& func = dynamic_cast<callback<void>&>(*(cb_it->second));
+                func();
+            }
+        }
+
+        template<typename ARG>
+        void call(int sockfd, ARG&& arg) const
+        {
+            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
+            {
+                auto& func = dynamic_cast<callback<ARG>&>(*(cb_it->second));
+                // func(std::forward<ARG>(arg));
+                func(static_cast<ARG&&>(arg));
+            }
+        }
+
+    private:
+
+        std::unordered_map<int, std::unique_ptr<base_callback>> m_store;
+
+    };
+
+    class async_socket_manager
+    {
+        // TODO
+        static async_socket_manager& instance()
+        {
+            static async_socket_manager manager;
+            return manager;
+        }
     };
 
     template<ip_version IP_VER>
@@ -457,6 +561,7 @@ public:
         return m_sockfd;
     }
 
+    // Test function
     void wait_for_data() const
     {
         auto& notififer = utility::message_notifier::instance();
@@ -470,6 +575,28 @@ public:
 
         notififer.remove(m_sockfd);
     }
+
+    // template<typename T, typename CALLBACK_TYPE>
+    // void async_write(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    // {
+    //     // TODO
+    //     // Problematic: CALLBACK_TYPE is always different .. how to store this?
+    //     auto& handler = utility::callback_handler::instance();
+
+    //     handler.register_callback(this, utility::callback_mode::write,
+    //         std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
+    // }
+
+    // template<typename T, typename CALLBACK_TYPE>
+    // void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    // {
+    //     // TODO
+    //     utility::async_socket_manager::instance()
+    //         .add(this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
+
+    //     // handler.register_callback(this, utility::callback_mode::read,
+    //     //     std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
+    // }
 
     template<typename T>
     size_t send(span<T>&& buffer) const
