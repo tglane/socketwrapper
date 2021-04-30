@@ -331,16 +331,6 @@ namespace utility {
 
     };
 
-    class async_socket_manager
-    {
-        // TODO
-        static async_socket_manager& instance()
-        {
-            static async_socket_manager manager;
-            return manager;
-        }
-    };
-
     template<ip_version IP_VER>
     inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
     {
@@ -473,6 +463,132 @@ namespace utility {
 
 } // namespace utility
 
+/// Class to manage all asynchronous socket io operations
+class async_context
+{
+public:
+
+    static async_context& instance()
+    {
+        static async_context handler;
+        return handler;
+    }
+
+    async_context(const async_context&) = delete;
+    async_context& operator=(async_context&) = delete;
+    async_context(async_context&&) = delete;
+    async_context& operator=(async_context&&) = delete;
+
+    // void run() const
+    void keep_alive() const
+    {
+        // TODO Keep the background thread alive until all events are removed from the context
+    }
+
+    template<typename CALLBACK_TYPE>
+    bool add(int sock_fd, CALLBACK_TYPE&& callback)
+    {
+        if(auto [inserted, success] = m_store.emplace(sock_fd, epoll_event{}); success)
+        {
+            auto& ev = inserted->second;
+            ev.events = EPOLLIN;
+            ev.data.fd = sock_fd;
+            ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev);
+
+            // m_handler.add(sock_fd, std::forward<CALLBACK_TYPE>(callback));
+            m_handler.add(sock_fd, static_cast<CALLBACK_TYPE&&>(callback));
+
+            return true;
+        }
+        return false;
+    }
+
+    bool remove(int sock_fd)
+    {
+        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+        {
+            auto& ev = it->second;
+            ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, &ev);
+            m_store.erase(it);
+
+            m_handler.remove(sock_fd);
+
+            return true;
+        }
+        return false;
+    }
+
+private:
+
+    async_context()
+    {
+        if(m_epfd = ::epoll_create(1); m_epfd == -1)
+            throw std::runtime_error {"Failed to create epoll instance when instantiating message_notifier."};
+
+        // Create pipe to stop select and add it to m_fds
+        if(::pipe(m_pipe_fds.data()) < 0)
+            throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
+
+        // Add the pipe to the epoll monitoring set
+        auto [pipe_event, success] = m_store.emplace(m_pipe_fds[0], epoll_event {});
+        pipe_event->second.events = EPOLLIN;
+        pipe_event->second.data.fd = m_pipe_fds[0];
+        ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_event->second));
+
+        m_future = std::async(std::launch::async, [this]() {
+
+            std::array<epoll_event, 64> ready_set;
+
+            while(true)
+            {
+                int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 100);
+                for(int i = 0; i < num_ready; ++i)
+                {
+                    if(ready_set[i].data.fd == this->m_pipe_fds[0])
+                    {
+                        // Stop signal to end the loop from the destructor
+                        return;
+                    }
+                    else if(ready_set[i].events & EPOLLIN)
+                    {
+                        // Run callback on receiving socket and deregister this socket from context afterwards
+                        if(const auto& ev_it = this->m_store.find(ready_set[i].data.fd); ev_it != this->m_store.end())
+                        {
+                            // TODO Run callback async
+                            this->m_handler.call(ev_it->first);
+                            this->remove(ev_it->first);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    ~async_context()
+    {
+        // Send stop signal to epoll loop to exit background task
+        char stop_byte = 0;
+        ::write(m_pipe_fds[1], &stop_byte, 1);
+
+        m_future.get();
+
+        ::close(m_pipe_fds[0]);
+        ::close(m_pipe_fds[1]);
+    }
+
+    int m_epfd;
+
+    std::array<int, 2> m_pipe_fds;
+
+    std::future<void> m_future;
+
+    std::unordered_map<int, epoll_event> m_store;
+
+    utility::callback_handler m_handler;
+
+};
+
+
 template<ip_version IP_VER>
 class tcp_connection
 {
@@ -587,16 +703,12 @@ public:
     //         std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
     // }
 
-    // template<typename T, typename CALLBACK_TYPE>
-    // void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
-    // {
-    //     // TODO
-    //     utility::async_socket_manager::instance()
-    //         .add(this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
-
-    //     // handler.register_callback(this, utility::callback_mode::read,
-    //     //     std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
-    // }
+    template<typename CALLBACK_TYPE>
+    void async_handle(CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance()
+            .add(m_sockfd, std::forward<CALLBACK_TYPE>(callback));
+    }
 
     template<typename T>
     size_t send(span<T>&& buffer) const

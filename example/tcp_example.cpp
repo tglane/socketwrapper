@@ -19,6 +19,17 @@ int main(int argc, char**argv)
         std::cout << "Accepted\n";
 
         try {
+            std::array<char, 1024> buffer;
+            sock.async_handle([&sock, &buffer]() {
+                std::cout << "Received data!\n";
+                size_t br = sock.read(net::span {buffer});
+                std::cout << "Bytes read: " << br << " - Data: " << std::string_view {buffer.begin(), br} << std::endl;
+            });
+            std::cout << "Waiting...\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+            std::cout << "Finished waiting. Close\n";
+            return 0;
+
             std::cout << "Wait for data ...\n";
             sock.wait_for_data();
             std::cout << "Data av!\n";
