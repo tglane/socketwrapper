@@ -7,6 +7,8 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <iostream>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,9 +16,11 @@
 #include <array>
 #include <vector>
 #include <unordered_map>
+#include <queue>
 #include <variant>
 #include <optional>
 #include <chrono>
+#include <thread>
 #include <future>
 #include <condition_variable>
 #include <mutex>
@@ -461,11 +465,96 @@ namespace utility {
 
 #endif
 
+/// Thread pool
+class thread_pool
+{
+public:
+
+    thread_pool(size_t size = std::thread::hardware_concurrency())
+        : m_workers {std::vector<std::thread>(size)}
+    {}
+
+    ~thread_pool()
+    {
+        if(m_running)
+            stop();
+    }
+
+    void start()
+    {
+        if(m_running)
+            return;
+
+        for(auto& worker : m_workers)
+        {
+            worker = std::thread {&thread_pool::loop, this};
+        }
+
+        m_running = true;
+    }
+
+    void stop()
+    {
+        if(!m_running)
+            return;
+
+        std::lock_guard<std::mutex> lock {m_mutex};
+        m_cv.notify_all();
+
+        for(auto& worker : m_workers)
+            worker.join();
+
+        m_running = false;
+    }
+
+    void add_job(std::function<void()>&& func)
+    {
+        {
+            const std::lock_guard<std::mutex> lock {m_mutex};
+            m_queue.push(std::move(func));
+        }
+        m_cv.notify_one();
+    }
+
+private:
+
+    void loop()
+    {
+        std::function<void()> func;
+
+        while(true)
+        {
+            {
+                std::unique_lock<std::mutex> lock {m_mutex};
+                m_cv.wait(lock, [this]() { return !this->m_queue.empty(); });
+
+                func = m_queue.front();
+                m_queue.pop();
+            }
+
+            func();
+        }
+    }
+
+    bool m_running = false;
+
+    std::vector<std::thread> m_workers;
+
+    std::queue<std::function<void()>> m_queue;
+
+    std::mutex m_mutex;
+
+    std::condition_variable m_cv;
+
+};
+
+
 } // namespace utility
 
 /// Class to manage all asynchronous socket io operations
 class async_context
 {
+
 public:
 
     static async_context& instance()
@@ -478,12 +567,6 @@ public:
     async_context& operator=(async_context&) = delete;
     async_context(async_context&&) = delete;
     async_context& operator=(async_context&&) = delete;
-
-    // void run() const
-    void keep_alive() const
-    {
-        // TODO Keep the background thread alive until all events are removed from the context
-    }
 
     template<typename CALLBACK_TYPE>
     bool add(int sock_fd, CALLBACK_TYPE&& callback)
@@ -535,45 +618,57 @@ private:
         pipe_event->second.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_event->second));
 
-        m_future = std::async(std::launch::async, [this]() {
+        m_future = std::async(std::launch::async, &async_context::context_loop, this);
 
-            std::array<epoll_event, 64> ready_set;
-
-            while(true)
-            {
-                int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 100);
-                for(int i = 0; i < num_ready; ++i)
-                {
-                    if(ready_set[i].data.fd == this->m_pipe_fds[0])
-                    {
-                        // Stop signal to end the loop from the destructor
-                        return;
-                    }
-                    else if(ready_set[i].events & EPOLLIN)
-                    {
-                        // Run callback on receiving socket and deregister this socket from context afterwards
-                        if(const auto& ev_it = this->m_store.find(ready_set[i].data.fd); ev_it != this->m_store.end())
-                        {
-                            // TODO Run callback async
-                            this->m_handler.call(ev_it->first);
-                            this->remove(ev_it->first);
-                        }
-                    }
-                }
-            }
-        });
+        m_pool.start();
     }
 
     ~async_context()
     {
         // Send stop signal to epoll loop to exit background task
-        char stop_byte = 0;
+        char stop_byte = 1;
         ::write(m_pipe_fds[1], &stop_byte, 1);
 
         m_future.get();
 
         ::close(m_pipe_fds[0]);
         ::close(m_pipe_fds[1]);
+
+        // Stopping thread pool with all running thread pools results in blocking
+        m_pool.stop();
+    }
+
+    void context_loop()
+    {
+        std::array<epoll_event, 64> ready_set;
+
+        while(true)
+        {
+            int num_ready = ::epoll_wait(m_epfd, ready_set.data(), 64, -1);
+            for(int i = 0; i < num_ready; ++i)
+            {
+                if(ready_set[i].data.fd == m_pipe_fds[0])
+                {
+                    // Stop signal to end the loop from the destructor
+                    return;
+                }
+                else if(ready_set[i].events & EPOLLIN)
+                {
+                    // Run callback on receiving socket and deregister this socket from context afterwards
+                    if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
+                    {
+                        // TODO Run callback async in a thread pool and not in detached thread
+                        m_pool.add_job([this, ev_it]() -> void {
+                            this->m_handler.call(ev_it->first);
+                            this->remove(ev_it->first);
+                        });
+
+                        // this->m_handler.call(ev_it->first);
+                        // this->m_handler.remove(ev_it->first);
+                    }
+                }
+            }
+        }
     }
 
     int m_epfd;
@@ -585,6 +680,8 @@ private:
     std::unordered_map<int, epoll_event> m_store;
 
     utility::callback_handler m_handler;
+
+    utility::thread_pool m_pool;
 
 };
 
