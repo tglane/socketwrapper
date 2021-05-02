@@ -7,15 +7,13 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#include <iostream>
-
 #include <memory>
 #include <string>
 #include <string_view>
 #include <fstream>
 #include <array>
 #include <vector>
-#include <unordered_map>
+#include <map>
 #include <queue>
 #include <variant>
 #include <optional>
@@ -24,7 +22,7 @@
 #include <future>
 #include <condition_variable>
 #include <mutex>
-#include <functional> // TODO Remove if not needed
+#include <functional>
 #include <stdexcept>
 #include <charconv>
 #include <utility>
@@ -237,7 +235,7 @@ namespace utility {
 
         std::future<void> m_future;
 
-        std::unordered_map<int, std::pair<std::condition_variable*, epoll_event>> m_store;
+        std::map<int, std::pair<std::condition_variable*, epoll_event>> m_store;
 
     };
 
@@ -331,7 +329,7 @@ namespace utility {
 
     private:
 
-        std::unordered_map<int, std::unique_ptr<base_callback>> m_store;
+        std::map<int, std::unique_ptr<base_callback>> m_store;
 
     };
 
@@ -471,8 +469,9 @@ class thread_pool
 public:
 
     thread_pool(size_t size = std::thread::hardware_concurrency())
-        : m_workers {std::vector<std::thread>(size)}
-    {}
+    {
+        m_workers.resize(size);
+    }
 
     ~thread_pool()
     {
@@ -486,9 +485,7 @@ public:
             return;
 
         for(auto& worker : m_workers)
-        {
             worker = std::thread {&thread_pool::loop, this};
-        }
 
         m_running = true;
     }
@@ -497,20 +494,18 @@ public:
     {
         if(!m_running)
             return;
+        m_running = false;
 
-        std::lock_guard<std::mutex> lock {m_mutex};
         m_cv.notify_all();
 
         for(auto& worker : m_workers)
             worker.join();
-
-        m_running = false;
     }
 
-    void add_job(std::function<void()>&& func)
+    void add_job(std::function<void()> func)
     {
         {
-            const std::lock_guard<std::mutex> lock {m_mutex};
+            const std::lock_guard<std::mutex> lock {m_qmutex};
             m_queue.push(std::move(func));
         }
         m_cv.notify_one();
@@ -522,11 +517,15 @@ private:
     {
         std::function<void()> func;
 
-        while(true)
+        while(m_running)
         {
             {
-                std::unique_lock<std::mutex> lock {m_mutex};
-                m_cv.wait(lock, [this]() { return !this->m_queue.empty(); });
+                std::unique_lock<std::mutex> lock {m_qmutex};
+                m_cv.wait(lock, [this]() { return (!m_queue.empty() || !m_running); });
+                if(!m_running && m_queue.empty())
+                    return;
+                else if(m_queue.empty())
+                    continue;
 
                 func = m_queue.front();
                 m_queue.pop();
@@ -542,7 +541,7 @@ private:
 
     std::queue<std::function<void()>> m_queue;
 
-    std::mutex m_mutex;
+    std::mutex m_qmutex;
 
     std::condition_variable m_cv;
 
@@ -568,6 +567,11 @@ public:
     async_context(async_context&&) = delete;
     async_context& operator=(async_context&&) = delete;
 
+    void run() const
+    {
+        // TODO Keep async context alive (block here) until all registered callbacks are handled and m_store is empty
+    }
+
     template<typename CALLBACK_TYPE>
     bool add(int sock_fd, CALLBACK_TYPE&& callback)
     {
@@ -578,7 +582,6 @@ public:
             ev.data.fd = sock_fd;
             ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev);
 
-            // m_handler.add(sock_fd, std::forward<CALLBACK_TYPE>(callback));
             m_handler.add(sock_fd, static_cast<CALLBACK_TYPE&&>(callback));
 
             return true;
@@ -657,31 +660,30 @@ private:
                     // Run callback on receiving socket and deregister this socket from context afterwards
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
-                        // TODO Run callback async in a thread pool and not in detached thread
-                        m_pool.add_job([this, ev_it]() -> void {
+                        // Temporarily disable event until callback is finished to keep the iterator but do not receive more events
+                        ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, ev_it->first, &(ev_it->second));
+
+                        m_pool.add_job([this, ev_it]() {
                             this->m_handler.call(ev_it->first);
                             this->remove(ev_it->first);
                         });
-
-                        // this->m_handler.call(ev_it->first);
-                        // this->m_handler.remove(ev_it->first);
                     }
                 }
             }
         }
     }
 
-    int m_epfd;
+    int m_epfd {};
 
-    std::array<int, 2> m_pipe_fds;
+    std::array<int, 2> m_pipe_fds {};
 
-    std::future<void> m_future;
+    std::future<void> m_future {};
 
-    std::unordered_map<int, epoll_event> m_store;
+    std::map<int, epoll_event> m_store {};
 
-    utility::callback_handler m_handler;
+    utility::callback_handler m_handler {};
 
-    utility::thread_pool m_pool;
+    utility::thread_pool m_pool {};
 
 };
 
