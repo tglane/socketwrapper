@@ -468,9 +468,16 @@ class thread_pool
 {
 public:
 
-    thread_pool(size_t size = std::thread::hardware_concurrency())
+    thread_pool()
+        : m_pool_size {std::thread::hardware_concurrency()}
     {
-        m_workers.resize(size);
+        m_workers.reserve(m_pool_size);
+    }
+
+    thread_pool(size_t size)
+        : m_pool_size {size}
+    {
+        m_workers.reserve(m_pool_size);
     }
 
     ~thread_pool()
@@ -484,8 +491,8 @@ public:
         if(m_running)
             return;
 
-        for(auto& worker : m_workers)
-            worker = std::thread {&thread_pool::loop, this};
+        for(size_t i = 0; i < m_pool_size; ++i)
+            m_workers.emplace_back(&thread_pool::loop, this);
 
         m_running = true;
     }
@@ -500,6 +507,7 @@ public:
 
         for(auto& worker : m_workers)
             worker.join();
+        m_workers.clear();
     }
 
     void add_job(std::function<void()> func)
@@ -536,6 +544,8 @@ private:
     }
 
     bool m_running = false;
+
+    size_t m_pool_size;
 
     std::vector<std::thread> m_workers;
 
