@@ -7,9 +7,6 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#include <iostream>
-#include <errno.h>
-
 #include <memory>
 #include <string>
 #include <string_view>
@@ -295,14 +292,12 @@ namespace utility {
         template<typename ... ARG>
         void add(int sockfd, const std::function<void(ARG...)>& func)
         {
-            std::cout << "Copy add\n";
             m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(func));
         }
 
         template<typename ... ARG>
         void add(int sockfd, std::function<void(ARG...)>&& func)
         {
-            std::cout << "Move add\n";
             m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(std::move(func)));
         }
 
@@ -322,7 +317,7 @@ namespace utility {
                 try {
                     auto& func = dynamic_cast<callback<ARG...>&>(*(cb_it->second));
                     func(static_cast<ARG&&>(arg)...);
-                } catch(std::bad_cast&) { std::cout << "Bad cast\n"; }
+                } catch(std::bad_cast&) {}
             }
         }
 
@@ -868,7 +863,7 @@ public:
         switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
-                std::cout << errno << '\n';
+                // TODO Maybe handle errno to get some error code?
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
