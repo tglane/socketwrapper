@@ -7,6 +7,9 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <iostream>
+#include <errno.h>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -242,6 +245,7 @@ namespace utility {
     /// Class to handle callbacks on sockets data data receiving
     class callback_handler
     {
+        // TODO Improve: Try to not use dynamic_cast here
 
         /// Base class for callback types with different parameter list
         struct base_callback
@@ -249,37 +253,25 @@ namespace utility {
             virtual ~base_callback() = default;
         };
 
-        /// Callback representation that takes one generic parameter
-        // TODO Make this a variadic template
-        template<typename ARG, typename DUMMY = void>
+        /// Callback representation that takes variadic list of parameters
+        template<typename ... ARG>
         struct callback : public base_callback
         {
-            callback(const std::function<void(ARG)>& func)
+            callback(const std::function<void(ARG...)>& func)
                 : m_func {func}
             {}
 
-            void operator()(ARG arg) const
+            void operator()(const ARG& ... arg) const
             {
-                m_func(arg);
+                m_func(arg...);
             }
 
-            std::function<void(ARG)> m_func;
-        };
+            // void operator()(ARG&& ... arg) const
+            // {
+            //     m_func(static_cast<ARG&&>(arg)...);
+            // }
 
-        /// Callback specialization that takes zero parameters
-        template<typename DUMMY>
-        struct callback<void, DUMMY> : public base_callback
-        {
-            callback(const std::function<void()>& func)
-                : m_func {func}
-            {}
-
-            void operator()() const
-            {
-                m_func();
-            }
-
-            std::function<void()> m_func;
+            std::function<void(ARG...)> m_func;
         };
 
     public:
@@ -292,13 +284,26 @@ namespace utility {
 
         void add(int sockfd, const std::function<void()>& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<void>>(func));
+            m_store.emplace(sockfd, std::make_unique<callback<>>(func));
         }
 
-        template<typename ARG>
-        void add(int sockfd, const std::function<void(ARG)>& func)
+        void add(int sockfd, std::function<void()>&& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<ARG>>(func));
+            m_store.emplace(sockfd, std::make_unique<callback<>>(std::move(func)));
+        }
+
+        template<typename ... ARG>
+        void add(int sockfd, const std::function<void(ARG...)>& func)
+        {
+            std::cout << "Copy add\n";
+            m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(func));
+        }
+
+        template<typename ... ARG>
+        void add(int sockfd, std::function<void(ARG...)>&& func)
+        {
+            std::cout << "Move add\n";
+            m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(std::move(func)));
         }
 
         void remove(int sockfd)
@@ -307,23 +312,17 @@ namespace utility {
                 m_store.erase(cb_it);
         }
 
-        void call(int sockfd) const
+        template<typename ... ARG>
+        void call(int sockfd, ARG&& ... arg) const
         {
             if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
             {
-                auto& func = dynamic_cast<callback<void>&>(*(cb_it->second));
-                func();
-            }
-        }
-
-        template<typename ARG>
-        void call(int sockfd, ARG&& arg) const
-        {
-            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
-            {
-                auto& func = dynamic_cast<callback<ARG>&>(*(cb_it->second));
-                // func(std::forward<ARG>(arg));
-                func(static_cast<ARG&&>(arg));
+                // TODO Try to not use dynamic_cast here ... try non-dynamic implementation of callbacks
+                // TODO Remove try catch ... user should be responsible for calling this with right parameter list
+                try {
+                    auto& func = dynamic_cast<callback<ARG...>&>(*(cb_it->second));
+                    func(static_cast<ARG&&>(arg)...);
+                } catch(std::bad_cast&) { std::cout << "Bad cast\n"; }
             }
         }
 
@@ -812,11 +811,26 @@ public:
     //         std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
     // }
 
+    // Temporary function for development purpose
     template<typename CALLBACK_TYPE>
     void async_handle(CALLBACK_TYPE&& callback) const
     {
         async_context::instance()
             .add(m_sockfd, std::forward<CALLBACK_TYPE>(callback));
+    }
+
+    template<typename T, typename CALLBACK_TYPE>
+    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
+            {
+                // Ok to create new span because its a cheap type containing only a view to the real buffer
+                size_t br = read(span<T> {buffer});
+                func(span<T> {buffer}, br);
+            }
+        );
     }
 
     template<typename T>
@@ -854,6 +868,7 @@ public:
         switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
+                std::cout << errno << '\n';
                 throw std::runtime_error {"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;

@@ -19,15 +19,25 @@ int main(int argc, char**argv)
         std::cout << "Accepted\n";
 
         try {
+            // TODO Create seperate example for async tcp
             std::array<char, 1024> buffer;
-            sock.async_handle([&sock, &buffer]() {
-                std::cout << "Received data!\n";
-                size_t br = sock.read(net::span {buffer});
-                std::cout << "Bytes read: " << br << " - Data: " << std::string_view {buffer.begin(), br} << std::endl;
+
+            // sock.async_handle([&sock, &buffer]() {
+            //     std::cout << "Received data!\n";
+            //     size_t br = sock.read(net::span {buffer});
+            //     std::cout << "Bytes read: " << br << " - Data: " << std::string_view {buffer.begin(), br} << std::endl;
+            // });
+            // std::cout << "Waiting...\n";
+            // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+            // std::cout << "Finished waiting. Close\n";
+            // return 0;
+
+            sock.async_read(net::span<char> {buffer}, [](net::span<char>&& view, size_t br) {
+                std::cout << "Receive: " << br << " - " << std::string_view {view.begin(), br} << '\n';
             });
             std::cout << "Waiting...\n";
             std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-            std::cout << "Finished waiting. Close\n";
+            std::cout << "Finished\n";
             return 0;
 
             std::cout << "Wait for data ...\n";
