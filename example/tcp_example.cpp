@@ -32,8 +32,8 @@ int main(int argc, char**argv)
             // std::cout << "Finished waiting. Close\n";
             // return 0;
 
-            sock.async_read(net::span<char> {buffer}, [](net::span<char>&& view, size_t br) {
-                std::cout << "Receive: " << br << " - " << std::string_view {view.begin(), br} << '\n';
+            sock.async_read(net::span<char> {buffer}, [&buffer](size_t br) {
+                std::cout << "Receive: " << br << " - " << std::string_view {buffer.data(), br} << '\n';
             });
             std::cout << "Waiting...\n";
             std::this_thread::sleep_for(std::chrono::milliseconds(10000));
@@ -84,6 +84,7 @@ int main(int argc, char**argv)
         sock.send(net::span {buffer.begin(), buffer.end()});
 
         std::cout << "Sent\n";
+        return 0;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(4000));
         net::tcp_connection<net::ip_version::v4> sock2 {"127.0.0.1", 4433};

@@ -17,6 +17,10 @@ tls: tls_example.cpp
 tcp: tcp_example.cpp
 	$(cc) -o tcp_example $^ $(CFLAGS) $(LDFLAGS)
 
+.PHONY: async_tcp
+async_tcp: async_tcp_example.cpp
+	$(cc) -o async_tcp_example $^ $(CFLAGS) $(LDFLAGS)
+
 .PHONY: udp
 udp: udp_example.cpp
 	$(cc) -o udp_example $^ $(CFLAGS) $(LDFLAGS)

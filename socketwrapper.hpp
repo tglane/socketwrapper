@@ -28,6 +28,7 @@
 #include <utility>
 #include <csignal>
 
+// Linux specific includes
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/epoll.h>
@@ -466,12 +467,16 @@ public:
         : m_pool_size {std::thread::hardware_concurrency()}
     {
         m_workers.reserve(m_pool_size);
+        for(size_t i = 0; i < m_pool_size; ++i)
+            m_workers.emplace_back(&thread_pool::loop, this);
     }
 
     thread_pool(size_t size)
         : m_pool_size {size}
     {
         m_workers.reserve(m_pool_size);
+        for(size_t i = 0; i < m_pool_size; ++i)
+            m_workers.emplace_back(&thread_pool::loop, this);
     }
 
     ~thread_pool()
@@ -480,15 +485,9 @@ public:
             stop();
     }
 
-    void start()
+    size_t pool_size() const
     {
-        if(m_running)
-            return;
-
-        for(size_t i = 0; i < m_pool_size; ++i)
-            m_workers.emplace_back(&thread_pool::loop, this);
-
-        m_running = true;
+        return m_pool_size;
     }
 
     void stop()
@@ -519,7 +518,7 @@ private:
     {
         std::function<void()> func;
 
-        while(m_running)
+        while(m_running || !m_queue.empty())
         {
             {
                 std::unique_lock<std::mutex> lock {m_qmutex};
@@ -537,7 +536,7 @@ private:
         }
     }
 
-    bool m_running = false;
+    bool m_running = true;
 
     size_t m_pool_size;
 
@@ -557,6 +556,11 @@ private:
 /// Class to manage all asynchronous socket io operations
 class async_context
 {
+
+    enum context_control {
+        EXIT_LOOP = 1,
+        RELOAD_FD_SET = 2
+    };
 
 public:
 
@@ -582,11 +586,19 @@ public:
         if(auto [inserted, success] = m_store.emplace(sock_fd, epoll_event{}); success)
         {
             auto& ev = inserted->second;
-            ev.events = EPOLLIN;
+            ev.events = EPOLLIN | EPOLLET;
             ev.data.fd = sock_fd;
-            ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev);
+            if(::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev) == -1)
+            {
+                m_store.erase(inserted);
+                return false;
+            }
 
             m_handler.add(sock_fd, static_cast<CALLBACK_TYPE&&>(callback));
+
+            // Restart loop with updated fd set
+            uint8_t control_byte = RELOAD_FD_SET;
+            ::write(m_pipe_fds[1], &control_byte, 1);
 
             return true;
         }
@@ -598,10 +610,15 @@ public:
         if(const auto& it = m_store.find(sock_fd); it != m_store.end())
         {
             auto& ev = it->second;
-            ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, &ev);
-            m_store.erase(it);
+            if(::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, &ev) == -1)
+                return false;
 
+            m_store.erase(it);
             m_handler.remove(sock_fd);
+
+            // Restart loop with updated fd set
+            uint8_t control_byte = RELOAD_FD_SET;
+            ::write(m_pipe_fds[1], &control_byte, 1);
 
             return true;
         }
@@ -626,22 +643,21 @@ private:
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_event->second));
 
         m_future = std::async(std::launch::async, &async_context::context_loop, this);
-
-        m_pool.start();
     }
 
     ~async_context()
     {
         // Send stop signal to epoll loop to exit background task
-        char stop_byte = 1;
+        uint8_t stop_byte = EXIT_LOOP;
         ::write(m_pipe_fds[1], &stop_byte, 1);
 
         m_future.get();
 
         ::close(m_pipe_fds[0]);
         ::close(m_pipe_fds[1]);
+        ::close(m_epfd);
 
-        // Stopping thread pool with all running thread pools results in blocking
+        // Stopping thread pool results in blocking until all running callbacks are completed
         m_pool.stop();
     }
 
@@ -652,12 +668,18 @@ private:
         while(true)
         {
             int num_ready = ::epoll_wait(m_epfd, ready_set.data(), 64, -1);
+            if(num_ready < 0)
+                continue;
+
             for(int i = 0; i < num_ready; ++i)
             {
                 if(ready_set[i].data.fd == m_pipe_fds[0])
                 {
                     // Stop signal to end the loop from the destructor
-                    return;
+                    uint8_t byte {0};
+                    ::read(ready_set[i].data.fd, &byte, 1);
+                    if(byte == EXIT_LOOP)
+                        return;
                 }
                 else if(ready_set[i].events & EPOLLIN)
                 {
@@ -665,12 +687,18 @@ private:
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
                         // Temporarily disable event until callback is finished to keep the iterator but do not receive more events
-                        ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, ev_it->first, &(ev_it->second));
+                        // ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, ev_it->first, &(ev_it->second));
 
+                        // TODO Check how to reuse the callback and not remove it after it was called
                         m_pool.add_job([this, ev_it]() {
                             this->m_handler.call(ev_it->first);
-                            this->remove(ev_it->first);
+                            // this->remove(ev_it->first);
                         });
+                        // ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, ev_it->first, &(ev_it->second));
+                    }
+                    else if(ready_set[i].events & EPOLLOUT)
+                    {
+                        // TODO Handle async writing here
                     }
                 }
             }
@@ -795,39 +823,6 @@ public:
         notififer.remove(m_sockfd);
     }
 
-    // template<typename T, typename CALLBACK_TYPE>
-    // void async_write(span<T>&& buffer, CALLBACK_TYPE&& callback) const
-    // {
-    //     // TODO
-    //     // Problematic: CALLBACK_TYPE is always different .. how to store this?
-    //     auto& handler = utility::callback_handler::instance();
-
-    //     handler.register_callback(this, utility::callback_mode::write,
-    //         std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
-    // }
-
-    // Temporary function for development purpose
-    template<typename CALLBACK_TYPE>
-    void async_handle(CALLBACK_TYPE&& callback) const
-    {
-        async_context::instance()
-            .add(m_sockfd, std::forward<CALLBACK_TYPE>(callback));
-    }
-
-    template<typename T, typename CALLBACK_TYPE>
-    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
-    {
-        async_context::instance().add(
-            m_sockfd,
-            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                // Ok to create new span because its a cheap type containing only a view to the real buffer
-                size_t br = read(span<T> {buffer});
-                func(span<T> {buffer}, br);
-            }
-        );
-    }
-
     template<typename T>
     size_t send(span<T>&& buffer) const
     {
@@ -853,6 +848,19 @@ public:
 
         return total / sizeof(T);
     }
+
+    // template<typename T, typename CALLBACK_TYPE>
+    // void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    // {
+    //     // TODO Add another parameter to differentiate between async read and write ops
+    //     async_context::instance().add(
+    //         m_sockfd,
+    //         [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]() {
+    //             size_t bytes_written = send(std::move(buffer));
+    //             func(bytes_written);
+    //         }
+    //     );
+    // }
 
     template<typename T>
     size_t read(span<T>&& buffer) const
@@ -899,6 +907,20 @@ public:
         }
 
         return 0;
+    }
+
+    template<typename T, typename CALLBACK_TYPE>
+    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
+            {
+                // Ok to create new span because its a cheap type containing only a view to the real buffer
+                size_t br = read(span<T> {buffer});
+                func(br);
+            }
+        );
     }
 
 protected:
@@ -1057,6 +1079,18 @@ public:
         }
         else
             return std::nullopt;
+    }
+
+    template<typename CALLBACK_TYPE>
+    void async_accept(CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            [this, func = std::forward<CALLBACK_TYPE>(callback)]()
+            {
+                func(accept());
+            }
+        );
     }
 
 protected:
