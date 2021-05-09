@@ -84,6 +84,9 @@ int main(int argc, char**argv)
         sock.send(net::span {buffer.begin(), buffer.end()});
 
         std::cout << "Sent\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        sock.send(net::span {buffer.begin(), buffer.end()});
+        std::cout << "Sent again\n";
         return 0;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(4000));

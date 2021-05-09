@@ -79,11 +79,13 @@ public:
     ~span() noexcept = default;
 
     span(T* start, size_t length) noexcept
-        : m_start {start}, m_size {length}
+        : m_start {start},
+          m_size {length}
     {}
 
     span(T* start, T* end) noexcept
-        : m_start {start}, m_size {static_cast<size_t>(std::distance(start, end) + 1)}
+        : m_start {start},
+          m_size {static_cast<size_t>(std::distance(start, end) + 1)}
     {}
 
     template<size_t S>
@@ -93,12 +95,14 @@ public:
 
     template<typename ITER>
     span(ITER start, ITER end) noexcept
-        : m_start {&(*start)}, m_size {static_cast<size_t>(std::distance(&(*start), &(*end)))}
+        : m_start {&(*start)},
+          m_size {static_cast<size_t>(std::distance(&(*start), &(*end)))}
     {}
 
     template<typename CONTAINER>
     span(CONTAINER&& con) noexcept
-        : m_start {con.data()}, m_size {con.size()}
+        : m_start {con.data()},
+          m_size {con.size()}
     {}
 
     constexpr T* get() const { return m_start; }
@@ -758,7 +762,8 @@ public:
     }
 
     tcp_connection(std::string_view conn_addr, uint16_t port_to)
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}, m_connection {connection_status::closed}
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER},
+          m_connection {connection_status::closed}
     {
         utility::init_socket_system();
 
@@ -800,7 +805,11 @@ public:
     ~tcp_connection()
     {
         if(m_connection != connection_status::closed && m_sockfd > 0)
+        {
+            // TODO only do this when the socket is still in the async context
+            async_context::instance().remove(m_sockfd);
             ::close(m_sockfd);
+        }
     }
 
     int get() const
@@ -918,6 +927,8 @@ public:
             {
                 // Ok to create new span because its a cheap type containing only a view to the real buffer
                 size_t br = read(span<T> {buffer});
+                if(br == 0)
+                    async_context::instance().remove(m_sockfd);
                 func(br);
             }
         );
@@ -991,7 +1002,8 @@ public:
     }
 
     tcp_acceptor(std::string_view bind_addr, uint16_t port, size_t backlog = 5)
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER}
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)},
+          m_family {IP_VER}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
@@ -1137,7 +1149,9 @@ public:
     }
 
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
-        : tcp_connection<IP_VER> {conn_addr, port}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
+        : tcp_connection<IP_VER> {conn_addr, port},
+          m_certificate {utility::read_file(cert_path)},
+          m_private_key {utility::read_file(key_path)}
     {
         utility::init_ssl_system();
 
@@ -1250,7 +1264,9 @@ public:
     }
 
     tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
-        : tcp_acceptor<IP_VER> {bind_addr, port, backlog}, m_certificate {utility::read_file(cert_path)}, m_private_key {utility::read_file(key_path)}
+        : tcp_acceptor<IP_VER> {bind_addr, port, backlog},
+          m_certificate {utility::read_file(cert_path)},
+          m_private_key {utility::read_file(key_path)}
     {
         utility::init_ssl_system();
 
@@ -1335,7 +1351,9 @@ public:
     udp_socket& operator=(const udp_socket&) = delete;
 
     udp_socket()
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::non_bound}
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)},
+          m_family {IP_VER},
+          m_mode {socket_mode::non_bound}
     {}
 
     udp_socket(udp_socket&& rhs) noexcept
