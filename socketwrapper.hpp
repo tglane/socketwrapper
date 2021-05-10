@@ -926,10 +926,10 @@ public:
             [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
             {
                 // Ok to create new span because its a cheap type containing only a view to the real buffer
-                size_t br = read(span<T> {buffer});
-                if(br == 0)
+                size_t bytes_read = read(span<T> {buffer});
+                if(bytes_read == 0)
                     async_context::instance().remove(m_sockfd);
-                func(br);
+                func(bytes_read);
             }
         );
     }
@@ -1377,7 +1377,9 @@ public:
     }
 
     udp_socket(std::string_view bind_addr, uint16_t port)
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)}, m_family {IP_VER}, m_mode {socket_mode::bound}
+        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)},
+          m_family {IP_VER},
+          m_mode {socket_mode::bound}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
@@ -1415,7 +1417,11 @@ public:
     ~udp_socket()
     {
         if(m_sockfd > 0)
+        {
+            // TODO only do this when the socket is still in the async context
+            async_context::instance().remove(m_sockfd);
             ::close(m_sockfd);
+        }
     }
 
     int get() const
@@ -1437,6 +1443,20 @@ public:
 
         return total / sizeof(T);
     }
+
+    // template<typename T, typename CALLBACK_TYPE>
+    // void async_send(std::string_view addr, uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    // {
+    //     // TODO Add another parameter to differentiate between async read and write ops
+    //     async_context::instance().add(
+    //         m_sockfd,
+    //         [this, addr, port, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
+    //         {
+    //             size_t bytes_written = send(addr, port, std::move(buffer));
+    //             func(bytes_written);
+    //         }
+    //     );
+    // }
 
     template<typename T>
     std::pair<size_t, connection_info> read(span<T>&& buffer) const
@@ -1476,6 +1496,19 @@ public:
         }
 
         return {0, std::nullopt};
+    }
+
+    template<typename T, typename CALLBACK_TYPE>
+    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
+            {
+                auto [bytes_read, connection] = read(span {buffer});
+                func(bytes_read);
+            }
+        );
     }
 
 private:

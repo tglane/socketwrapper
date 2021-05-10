@@ -25,6 +25,10 @@ async_tcp: async_tcp_example.cpp
 udp: udp_example.cpp
 	$(cc) -o udp_example $^ $(CFLAGS) $(LDFLAGS)
 
+.PHONY: async_udp
+async_udp: async_udp_example.cpp
+	$(cc) -o async_udp_example $^ $(CFLAGS) $(LDFLAGS)
+
 .PHONY: span
 span: span_example.cpp
 	$(cc) -o span_example $^ $(CFLAGS) $(LDFLAGS)

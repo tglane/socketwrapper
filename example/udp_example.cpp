@@ -31,7 +31,7 @@ int main(int argc, char** argv)
         {
             std::cout << "No message received :(\n";
         }
-   }
+    }
     else if(strcmp(argv[1], "s") == 0)
     {
         std::cout << "--- Sender ---\n";
