@@ -587,7 +587,7 @@ public:
     template<typename CALLBACK_TYPE>
     bool add(int sock_fd, CALLBACK_TYPE&& callback)
     {
-        if(auto [inserted, success] = m_store.emplace(sock_fd, epoll_event{}); success)
+        if(auto [inserted, success] = m_store.insert_or_assign(sock_fd, epoll_event{}); success)
         {
             auto& ev = inserted->second;
             ev.events = EPOLLIN | EPOLLET;
