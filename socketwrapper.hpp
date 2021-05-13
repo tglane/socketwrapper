@@ -286,24 +286,24 @@ namespace utility {
 
         void add(int sockfd, const std::function<void()>& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<>>(func));
+            m_store.insert_or_assign(sockfd, std::make_unique<callback<>>(func));
         }
 
         void add(int sockfd, std::function<void()>&& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<>>(std::move(func)));
+            m_store.insert_or_assign(sockfd, std::make_unique<callback<>>(std::move(func)));
         }
 
         template<typename ... ARG>
         void add(int sockfd, const std::function<void(ARG...)>& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(func));
+            m_store.insert_or_assign(sockfd, std::make_unique<callback<ARG...>>(func));
         }
 
         template<typename ... ARG>
         void add(int sockfd, std::function<void(ARG...)>&& func)
         {
-            m_store.emplace(sockfd, std::make_unique<callback<ARG...>>(std::move(func)));
+            m_store.insert_or_assign(sockfd, std::make_unique<callback<ARG...>>(std::move(func)));
         }
 
         void remove(int sockfd)
