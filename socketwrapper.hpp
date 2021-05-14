@@ -839,9 +839,10 @@ public:
             throw std::runtime_error {"Connection already closed."};
 
         size_t total = 0;
-        while(total < buffer.size())
+        size_t bytes_to_send = buffer.size() * sizeof(T);
+        while(total < bytes_to_send)
         {
-            switch(auto bytes = write_to_socket(buffer.get() + total, buffer.size() - total); bytes)
+            switch(auto bytes = write_to_socket(reinterpret_cast<char*>(buffer.get()) + total, bytes_to_send - total); bytes)
             {
                 case -1:
                     // TODO Check for errors that must be handled
@@ -1433,9 +1434,11 @@ public:
     size_t send(std::string_view addr, uint16_t port, span<T>&& buffer) const
     {
         size_t total = 0;
-        while(total < buffer.size())
+        size_t bytes_to_send = buffer.size() * sizeof(T);
+        while(total < bytes_to_send)
         {
-            if(auto bytes = write_to_socket(addr, port, buffer.get(), buffer.size()); bytes >= 0)
+            if(auto bytes = write_to_socket(addr, port, reinterpret_cast<char*>(buffer.get()) + total,
+                bytes_to_send - total); bytes >= 0)
                 total += bytes;
             else
                 throw std::runtime_error {"Failed to send."};
