@@ -842,7 +842,7 @@ public:
         size_t bytes_to_send = buffer.size() * sizeof(T);
         while(total < bytes_to_send)
         {
-            switch(auto bytes = write_to_socket(reinterpret_cast<char*>(buffer.get()) + total, bytes_to_send - total); bytes)
+            switch(auto bytes = write_to_socket(reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total); bytes)
             {
                 case -1:
                     // TODO Check for errors that must be handled
@@ -1437,7 +1437,7 @@ public:
         size_t bytes_to_send = buffer.size() * sizeof(T);
         while(total < bytes_to_send)
         {
-            if(auto bytes = write_to_socket(addr, port, reinterpret_cast<char*>(buffer.get()) + total,
+            if(auto bytes = write_to_socket(addr, port, reinterpret_cast<const char*>(buffer.get()) + total,
                 bytes_to_send - total); bytes >= 0)
                 total += bytes;
             else

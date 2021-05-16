@@ -18,53 +18,18 @@ int main(int argc, char**argv)
         auto sock = acceptor.accept();
         std::cout << "Accepted\n";
 
-        try {
-            // TODO Create seperate example for async tcp
-            std::array<char, 1024> buffer;
+        std::cout << "Wait for data ...\n";
+        size_t bytes_read = sock.read(net::span {buffer});
+        std::cout << "Received: " << bytes_read << '\n'
+            << std::string_view {buffer.data(), bytes_read} << '\n';
 
-            // sock.async_handle([&sock, &buffer]() {
-            //     std::cout << "Received data!\n";
-            //     size_t br = sock.read(net::span {buffer});
-            //     std::cout << "Bytes read: " << br << " - Data: " << std::string_view {buffer.begin(), br} << std::endl;
-            // });
-            // std::cout << "Waiting...\n";
-            // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-            // std::cout << "Finished waiting. Close\n";
-            // return 0;
-
-            sock.async_read(net::span<char> {buffer}, [&buffer](size_t br) {
-                std::cout << "Receive: " << br << " - " << std::string_view {buffer.data(), br} << '\n';
-            });
-            std::cout << "Waiting...\n";
-            std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-            std::cout << "Finished\n";
-            return 0;
-
-            std::cout << "Wait for data ...\n";
-            sock.wait_for_data();
-            std::cout << "Data av!\n";
-
-            size_t bytes_read = sock.read(net::span {buffer});
-            std::cout << "Received: " << bytes_read << '\n'
-                << std::string_view {buffer.data(), bytes_read} << '\n';
-        } catch(std::runtime_error&) {}
-
-        if(auto sock2 = acceptor.accept(std::chrono::milliseconds(6000)); sock2)
-        {
-            std::cout << "Accepted Again\n";
-            size_t bytes_read = sock2->read(net::span {buffer}, std::chrono::milliseconds(4000));
-            // size_t bytes_read = sock2->read(net::span {buffer});
-            std::cout << "Received: " << bytes_read << '\n'
-                << std::string_view {buffer.data(), bytes_read} << '\n';
-        }
-        else
-        {
-            std::cout << "No accepted connection\n";
-        }
+        bytes_read = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
+        std::cout << "Received: " << bytes_read << '\n'
+            << std::string_view {buffer.data(), bytes_read} << '\n';
 
         // auto sock2 = acceptor.accept();
         // std::cout << "Accepted Again\n";
-        // size_t bytes_read = sock2.read(net::span {buffer}, std::chrono::milliseconds(4000));
+        // bytes_read = sock2.read(net::span {buffer}, std::chrono::milliseconds(4000));
         // // size_t bytes_read = sock2->read(net::span {buffer});
         // std::cout << "Received: " << bytes_read << '\n'
         //     << std::string_view {buffer.data(), bytes_read} << '\n';
@@ -80,10 +45,11 @@ int main(int argc, char**argv)
         // sock.send(net::span {std::string {"Hello World"}});
 
         std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-        std::string_view buffer {"Hello String_view-World"};
-        sock.send(net::span {buffer.begin(), buffer.end()});
+        sock.send(net::span {vec.begin(), vec.end()});
 
         std::cout << "Sent\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::string_view buffer {"Hello String_view-World"};
         std::this_thread::sleep_for(std::chrono::milliseconds(400));
         sock.send(net::span {buffer.begin(), buffer.end()});
         std::cout << "Sent again\n";

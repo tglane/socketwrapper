@@ -7,7 +7,7 @@ LDFLAGS = -lpthread
 	$(cc) -c $< -o $@ $(CFLAGS)
 
 .PHONY: all
-all: tls tcp udp span
+all: tls tcp async_tcp udp async_udp span
 
 .PHONY: tls
 tls: tls_example.cpp
@@ -37,5 +37,7 @@ span: span_example.cpp
 clean:
 	rm tls_example
 	rm tcp_example
+	rm async_tcp_example
 	rm udp_example
+	rm async_udp_example
 	rm span_example

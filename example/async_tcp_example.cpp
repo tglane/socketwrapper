@@ -18,12 +18,16 @@ int main(int argc, char**argv)
 
         net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
-        acceptor.async_accept([](net::tcp_connection<net::ip_version::v4>&& conn) {
+        std::vector<net::tcp_connection<net::ip_version::v4>> conns;
+        acceptor.async_accept([&conns](net::tcp_connection<net::ip_version::v4>&& conn) {
             std::array<char, 1024> buffer;
             std::cout << "Accepted\n";
 
-            auto br = conn.read(net::span {buffer});
-            std::cout << "Received: " << br << " - " << std::string_view {buffer.data(), br} << '\n';
+            conns.push_back(std::move(conn));
+            auto& sock = conns.back();
+            sock.async_read(net::span {buffer}, [&buffer](size_t br){
+                std::cout << "Received: " << br << " - " << std::string_view {buffer.data(), br} << '\n';
+            });
         });
 
         std::cout << "Wait for data ...\n";
