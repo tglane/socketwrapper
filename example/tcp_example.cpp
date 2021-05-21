@@ -20,20 +20,12 @@ int main(int argc, char**argv)
 
         std::cout << "Wait for data ...\n";
         size_t bytes_read = sock.read(net::span {buffer});
-        std::cout << "Received: " << bytes_read << '\n'
+        std::cout << "Received: " << bytes_read << " - "
             << std::string_view {buffer.data(), bytes_read} << '\n';
 
         bytes_read = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
-        std::cout << "Received: " << bytes_read << '\n'
+        std::cout << "Received: " << bytes_read << " - "
             << std::string_view {buffer.data(), bytes_read} << '\n';
-
-        // auto sock2 = acceptor.accept();
-        // std::cout << "Accepted Again\n";
-        // bytes_read = sock2.read(net::span {buffer}, std::chrono::milliseconds(4000));
-        // // size_t bytes_read = sock2->read(net::span {buffer});
-        // std::cout << "Received: " << bytes_read << '\n'
-        //     << std::string_view {buffer.data(), bytes_read} << '\n';
-
     }
     else if(strcmp(argv[1], "s") == 0)
     {
@@ -50,15 +42,8 @@ int main(int argc, char**argv)
         std::cout << "Sent\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         std::string_view buffer {"Hello String_view-World"};
-        std::this_thread::sleep_for(std::chrono::milliseconds(400));
         sock.send(net::span {buffer.begin(), buffer.end()});
         std::cout << "Sent again\n";
         return 0;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
-        net::tcp_connection<net::ip_version::v4> sock2 {"127.0.0.1", 4433};
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        sock2.send(net::span {std::string {"LulWWW"}});
-        std::cout << "Sent again\n";
     }
 }

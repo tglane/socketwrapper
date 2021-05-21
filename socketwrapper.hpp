@@ -817,21 +817,6 @@ public:
         return m_sockfd;
     }
 
-    // Test function
-    void wait_for_data() const
-    {
-        auto& notififer = utility::message_notifier::instance();
-
-        std::condition_variable cv;
-        std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
-        notififer.add(m_sockfd, &cv);
-
-        cv.wait(lock);
-
-        notififer.remove(m_sockfd);
-    }
-
     template<typename T>
     size_t send(span<T>&& buffer) const
     {
@@ -897,26 +882,20 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        timeval time_val {0, delay.count() * 1000};
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(m_sockfd, &fds);
+        auto& notifier = utility::message_notifier::instance();
+        std::condition_variable cv;
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        notifier.add(m_sockfd, &cv);
 
-        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
-        {
-            switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
-            {
-                case -1:
-                    throw std::runtime_error {"Failed to read."};
-                case 0:
-                    m_connection = connection_status::closed;
-                    // fall through
-                default:
-                    return bytes / sizeof(T);
-            }
-        }
+        // Wait for given delay
+        bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        notifier.remove(m_sockfd);
 
-        return 0;
+        if(ready)
+            return read(span {buffer});
+        else
+            return 0;
     }
 
     template<typename T, typename CALLBACK_TYPE>
@@ -1479,26 +1458,20 @@ public:
     template<typename T>
     std::pair<size_t, std::optional<connection_info>> read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
     {
-        timeval time_val {0, delay.count() * 1000};
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(m_sockfd, &fds);
+        auto& notifier = utility::message_notifier::instance();
+        std::condition_variable cv;
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        notifier.add(m_sockfd, &cv);
 
-        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
-        {
-            std::pair<size_t, connection_info> pair {};
-            if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
-            {
-                pair.first = bytes / sizeof(T);
-                return pair;
-            }
-            else
-            {
-                throw std::runtime_error {"Failed to read."};
-            }
-        }
+        // Wait for given delay
+        bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        notifier.remove(m_sockfd);
 
-        return {0, std::nullopt};
+        if(ready)
+            return read(span {buffer});
+        else
+            return {0, std::nullopt};
     }
 
     template<typename T, typename CALLBACK_TYPE>
