@@ -15,7 +15,14 @@ int main(int argc, char**argv)
         std::array<char, 10000> buffer;
         net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
-        auto sock = acceptor.accept();
+        // auto sock = acceptor.accept();
+        auto opt = acceptor.accept(std::chrono::milliseconds(5000));
+        if(!opt)
+        {
+            std::cout << "No acception\n";
+            return 0;
+        }
+        const auto& sock = opt.value();
         std::cout << "Accepted\n";
 
         std::cout << "Wait for data ...\n";

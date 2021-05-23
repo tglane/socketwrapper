@@ -1062,15 +1062,18 @@ public:
 
     std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
-        const timeval time_val {0, delay.count() * 1000};
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(m_sockfd, &fds);
+        auto& notifier = utility::message_notifier::instance();
+        std::condition_variable cv;
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        notifier.add(m_sockfd, &cv);
 
-        if(const auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
-        {
+        // Wait for given delay
+        const bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        notifier.remove(m_sockfd);
+
+        if(ready)
             return std::optional<tcp_connection<IP_VER>> {accept()};
-        }
         else
             return std::nullopt;
     }
@@ -1295,12 +1298,17 @@ public:
 
     std::optional<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
-        timeval time_val {0, delay.count() * 1000};
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(this->m_sockfd, &fds);
+        auto& notifier = utility::message_notifier::instance();
+        std::condition_variable cv;
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        notifier.add(this->m_sockfd, &cv);
 
-        if(const auto fd_ready = ::select(this->m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
+        // Wait for given delay
+        const bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        notifier.remove(this->m_sockfd);
+
+        if(ready)
             return std::optional<tls_connection<IP_VER>> {accept()};
         else
             return std::nullopt;
