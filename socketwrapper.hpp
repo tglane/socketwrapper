@@ -561,12 +561,19 @@ private:
 class async_context
 {
 
-    enum context_control {
+    enum context_control
+    {
         EXIT_LOOP = 1,
         RELOAD_FD_SET = 2
     };
 
 public:
+
+    enum event_type
+    {
+        READ = EPOLLIN,
+        WRITE = EPOLLOUT
+    };
 
     static async_context& instance()
     {
@@ -585,12 +592,12 @@ public:
     }
 
     template<typename CALLBACK_TYPE>
-    bool add(int sock_fd, CALLBACK_TYPE&& callback)
+    bool add(const int sock_fd, const event_type type, const CALLBACK_TYPE&& callback)
     {
-        if(auto [inserted, success] = m_store.insert_or_assign(sock_fd, epoll_event{}); success)
+        if(const auto [inserted, success] = m_store.insert_or_assign(sock_fd, epoll_event{}); success)
         {
             auto& ev = inserted->second;
-            ev.events = EPOLLIN | EPOLLET;
+            ev.events = type | EPOLLET;
             ev.data.fd = sock_fd;
             if(::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev) == -1)
             {
@@ -598,10 +605,10 @@ public:
                 return false;
             }
 
-            m_handler.add(sock_fd, static_cast<CALLBACK_TYPE&&>(callback));
+            m_handler.add(sock_fd, static_cast<const CALLBACK_TYPE&&>(callback));
 
             // Restart loop with updated fd set
-            uint8_t control_byte = RELOAD_FD_SET;
+            const uint8_t control_byte = RELOAD_FD_SET;
             ::write(m_pipe_fds[1], &control_byte, 1);
 
             return true;
@@ -609,7 +616,7 @@ public:
         return false;
     }
 
-    bool remove(int sock_fd)
+    bool remove(const int sock_fd)
     {
         if(const auto& it = m_store.find(sock_fd); it != m_store.end())
         {
@@ -621,7 +628,7 @@ public:
             m_handler.remove(sock_fd);
 
             // Restart loop with updated fd set
-            uint8_t control_byte = RELOAD_FD_SET;
+            const uint8_t control_byte = RELOAD_FD_SET;
             ::write(m_pipe_fds[1], &control_byte, 1);
 
             return true;
@@ -652,7 +659,7 @@ private:
     ~async_context()
     {
         // Send stop signal to epoll loop to exit background task
-        uint8_t stop_byte = EXIT_LOOP;
+        const uint8_t stop_byte = EXIT_LOOP;
         ::write(m_pipe_fds[1], &stop_byte, 1);
 
         m_future.get();
@@ -671,7 +678,7 @@ private:
 
         while(true)
         {
-            int num_ready = ::epoll_wait(m_epfd, ready_set.data(), 64, -1);
+            const int num_ready = ::epoll_wait(m_epfd, ready_set.data(), 64, -1);
             if(num_ready < 0)
                 continue;
 
@@ -685,24 +692,18 @@ private:
                     if(byte == EXIT_LOOP)
                         return;
                 }
-                else if(ready_set[i].events & EPOLLIN)
+                else if(ready_set[i].events & EPOLLIN || ready_set[i].events & EPOLLOUT)
                 {
                     // Run callback on receiving socket and deregister this socket from context afterwards
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
-                        // Temporarily disable event until callback is finished to keep the iterator but do not receive more events
+                        // Disable event until callback is finished to keep the iterator but do not receive more events
                         // ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, ev_it->first, &(ev_it->second));
 
-                        // TODO Check how to reuse the callback and not remove it after it was called
                         m_pool.add_job([this, ev_it]() {
                             this->m_handler.call(ev_it->first);
                             // this->remove(ev_it->first);
                         });
-                        // ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, ev_it->first, &(ev_it->second));
-                    }
-                    else if(ready_set[i].events & EPOLLOUT)
-                    {
-                        // TODO Handle async writing here
                     }
                 }
             }
@@ -761,7 +762,7 @@ public:
         return *this;
     }
 
-    tcp_connection(std::string_view conn_addr, uint16_t port_to)
+    tcp_connection(const std::string_view conn_addr, const uint16_t port_to)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)}, m_family {IP_VER},
           m_connection {connection_status::closed}
     {
@@ -770,7 +771,7 @@ public:
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to created socket."};
 
-        int reuse = 1;
+        const int reuse = 1;
         if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
             throw std::runtime_error {"Failed to set address reusable."};
 
@@ -824,10 +825,10 @@ public:
             throw std::runtime_error {"Connection already closed."};
 
         size_t total = 0;
-        size_t bytes_to_send = buffer.size() * sizeof(T);
+        const size_t bytes_to_send = buffer.size() * sizeof(T);
         while(total < bytes_to_send)
         {
-            switch(auto bytes = write_to_socket(reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total); bytes)
+            switch(const auto bytes = write_to_socket(reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total); bytes)
             {
                 case -1:
                     // TODO Check for errors that must be handled
@@ -844,18 +845,18 @@ public:
         return total / sizeof(T);
     }
 
-    // template<typename T, typename CALLBACK_TYPE>
-    // void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
-    // {
-    //     // TODO Add another parameter to differentiate between async read and write ops
-    //     async_context::instance().add(
-    //         m_sockfd,
-    //         [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]() {
-    //             size_t bytes_written = send(std::move(buffer));
-    //             func(bytes_written);
-    //         }
-    //     );
-    // }
+    template<typename T, typename CALLBACK_TYPE>
+    void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            async_context::WRITE,
+            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]() {
+                size_t bytes_written = send(std::move(buffer));
+                func(bytes_written);
+            }
+        );
+    }
 
     template<typename T>
     size_t read(span<T>&& buffer) const
@@ -863,7 +864,7 @@ public:
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        switch(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
+        switch(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
         {
             case -1:
                 // TODO Maybe handle errno to get some error code?
@@ -889,7 +890,7 @@ public:
         notifier.add(m_sockfd, &cv);
 
         // Wait for given delay
-        bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        const bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
         notifier.remove(m_sockfd);
 
         if(ready)
@@ -903,6 +904,7 @@ public:
     {
         async_context::instance().add(
             m_sockfd,
+            async_context::READ,
             [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
             {
                 // Ok to create new span because its a cheap type containing only a view to the real buffer
@@ -918,13 +920,13 @@ protected:
 
     tcp_connection() = default;
 
-    tcp_connection(int socket_fd, const sockaddr_in& peer_addr)
+    tcp_connection(const int socket_fd, const sockaddr_in& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v4}, m_peer {peer_addr}, m_connection {connection_status::connected}
     {
         static_assert(IP_VER == ip_version::v4);
     }
 
-    tcp_connection(int socket_fd, const sockaddr_in6& peer_addr)
+    tcp_connection(const int socket_fd, const sockaddr_in6& peer_addr)
         : m_sockfd {socket_fd}, m_family {ip_version::v6}, m_peer {peer_addr}, m_connection {connection_status::connected}
     {
         static_assert(IP_VER == ip_version::v6);
@@ -981,14 +983,14 @@ public:
         return *this;
     }
 
-    tcp_acceptor(std::string_view bind_addr, uint16_t port, size_t backlog = 5)
+    tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::stream), 0)},
           m_family {IP_VER}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
 
-        int reuse = 1;
+        const int reuse = 1;
         if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
             throw std::runtime_error {"Failed to set address resusable."};
 
@@ -1017,7 +1019,7 @@ public:
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
 
-        if(auto res = ::listen(m_sockfd, backlog); res != 0)
+        if(const auto res = ::listen(m_sockfd, backlog); res != 0)
             throw std::runtime_error {"Failed to initiate listen."};
     }
 
@@ -1038,7 +1040,7 @@ public:
         {
             sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
-            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
+            if(const int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
                 return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -1047,7 +1049,7 @@ public:
         {
             sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
-            if(int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
+            if(const int sock = ::accept(m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
                 return tcp_connection<IP_VER> {sock, client};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -1060,12 +1062,12 @@ public:
 
     std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
     {
-        timeval time_val {0, delay.count() * 1000};
+        const timeval time_val {0, delay.count() * 1000};
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(m_sockfd, &fds);
 
-        if(auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
+        if(const auto fd_ready = ::select(m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
         {
             return std::optional<tcp_connection<IP_VER>> {accept()};
         }
@@ -1078,6 +1080,7 @@ public:
     {
         async_context::instance().add(
             m_sockfd,
+            async_context::READ,
             [this, func = std::forward<CALLBACK_TYPE>(callback)]()
             {
                 func(accept());
@@ -1171,7 +1174,7 @@ private:
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
 
-        if(auto ret = SSL_accept(m_ssl); ret != 1)
+        if(const auto ret = SSL_accept(m_ssl); ret != 1)
         {
             SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
@@ -1192,12 +1195,12 @@ private:
             throw std::runtime_error {"Failed to accept TLS connection."};
     }
 
-    int read_from_socket(char* const buffer_to, size_t bytes_to_read) const override
+    int read_from_socket(char* const buffer_to, const size_t bytes_to_read) const override
     {
         return SSL_read(m_ssl, buffer_to, bytes_to_read);
     }
 
-    int write_to_socket(const char* buffer_from, size_t bytes_to_write) const override
+    int write_to_socket(const char* buffer_from, const size_t bytes_to_write) const override
     {
         return SSL_write(m_ssl, buffer_from, bytes_to_write);
     }
@@ -1270,7 +1273,7 @@ public:
         {
             sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
-            if(int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tls_connection<IP_VER> {sock, client, m_context};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -1279,7 +1282,7 @@ public:
         {
             sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
-            if(int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
                 return tls_connection<IP_VER> {sock, client, m_context};
             else
                 throw std::runtime_error {"Failed to accept."};
@@ -1297,7 +1300,7 @@ public:
         FD_ZERO(&fds);
         FD_SET(this->m_sockfd, &fds);
 
-        if(auto fd_ready = ::select(this->m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
+        if(const auto fd_ready = ::select(this->m_sockfd + 1, &fds, nullptr, nullptr, &time_val); fd_ready > 0)
             return std::optional<tls_connection<IP_VER>> {accept()};
         else
             return std::nullopt;
@@ -1356,7 +1359,7 @@ public:
         return *this;
     }
 
-    udp_socket(std::string_view bind_addr, uint16_t port)
+    udp_socket(const std::string_view bind_addr, const uint16_t port)
         : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)},
           m_family {IP_VER},
           m_mode {socket_mode::bound}
@@ -1364,7 +1367,7 @@ public:
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
 
-        int reuse = 1;
+        const int reuse = 1;
         if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
             throw std::runtime_error {"Failed to set address reuseable."};
 
@@ -1410,10 +1413,10 @@ public:
     }
 
     template<typename T>
-    size_t send(std::string_view addr, uint16_t port, span<T>&& buffer) const
+    size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
     {
         size_t total = 0;
-        size_t bytes_to_send = buffer.size() * sizeof(T);
+        const size_t bytes_to_send = buffer.size() * sizeof(T);
         while(total < bytes_to_send)
         {
             if(auto bytes = write_to_socket(addr, port, reinterpret_cast<const char*>(buffer.get()) + total,
@@ -1426,25 +1429,25 @@ public:
         return total / sizeof(T);
     }
 
-    // template<typename T, typename CALLBACK_TYPE>
-    // void async_send(std::string_view addr, uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
-    // {
-    //     // TODO Add another parameter to differentiate between async read and write ops
-    //     async_context::instance().add(
-    //         m_sockfd,
-    //         [this, addr, port, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-    //         {
-    //             size_t bytes_written = send(addr, port, std::move(buffer));
-    //             func(bytes_written);
-    //         }
-    //     );
-    // }
+    template<typename T, typename CALLBACK_TYPE>
+    void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        async_context::instance().add(
+            m_sockfd,
+            async_context::WRITE,
+            [this, addr, port, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
+            {
+                size_t bytes_written = send(addr, port, span {buffer});
+                func(bytes_written);
+            }
+        );
+    }
 
     template<typename T>
     std::pair<size_t, connection_info> read(span<T>&& buffer) const
     {
         std::pair<size_t, connection_info> pair {};
-        if(auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
+        if(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
         {
             pair.first = bytes / sizeof(T);
             return pair;
@@ -1465,7 +1468,7 @@ public:
         notifier.add(m_sockfd, &cv);
 
         // Wait for given delay
-        bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
+        const bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
         notifier.remove(m_sockfd);
 
         if(ready)
@@ -1479,6 +1482,7 @@ public:
     {
         async_context::instance().add(
             m_sockfd,
+            async_context::READ,
             [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
             {
                 auto [bytes_read, connection] = read(span {buffer});
@@ -1489,13 +1493,13 @@ public:
 
 private:
 
-    int read_from_socket(char* const buffer, size_t size, connection_info* peer_data = nullptr) const
+    int read_from_socket(char* const buffer, const size_t size, connection_info* peer_data = nullptr) const
     {
         if constexpr(IP_VER == ip_version::v4)
         {
             socklen_t flen = sizeof(sockaddr_in);
             sockaddr_in from {};
-            auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            const auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
 
             if(peer_data)
                 *peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
@@ -1506,7 +1510,7 @@ private:
         {
             socklen_t flen = sizeof(sockaddr_in6);
             sockaddr_in6 from {};
-            auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            const auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
 
             if(peer_data)
                 *peer_data = utility::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
@@ -1519,7 +1523,7 @@ private:
         }
     }
 
-    int write_to_socket(std::string_view addr_to, uint16_t port, const char* buffer, size_t length) const
+    int write_to_socket(const std::string_view addr_to, const uint16_t port, const char* buffer, size_t length) const
     {
         std::variant<sockaddr_in, sockaddr_in6> dest;
         if(utility::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
