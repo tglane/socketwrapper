@@ -1,5 +1,5 @@
 /**
- * Socketwrapper Socket Library
+ * Socketwrapper Networking Library
  * Timo Glane
  * 2021
  */
@@ -244,94 +244,6 @@ namespace utility {
 
     };
 
-    /// Class to handle callbacks on sockets data data receiving
-    class callback_handler
-    {
-        // TODO Improve: Try to not use dynamic_cast here
-
-        /// Base class for callback types with different parameter list
-        struct base_callback
-        {
-            virtual ~base_callback() = default;
-        };
-
-        /// Callback representation that takes variadic list of parameters
-        template<typename ... ARG>
-        struct callback : public base_callback
-        {
-            callback(const std::function<void(ARG...)>& func)
-                : m_func {func}
-            {}
-
-            void operator()(const ARG& ... arg) const
-            {
-                m_func(arg...);
-            }
-
-            // void operator()(ARG&& ... arg) const
-            // {
-            //     m_func(static_cast<ARG&&>(arg)...);
-            // }
-
-            std::function<void(ARG...)> m_func;
-        };
-
-    public:
-
-        static callback_handler& instance()
-        {
-            static callback_handler handler;
-            return handler;
-        }
-
-        void add(int sockfd, const std::function<void()>& func)
-        {
-            m_store.insert_or_assign(sockfd, std::make_unique<callback<>>(func));
-        }
-
-        void add(int sockfd, std::function<void()>&& func)
-        {
-            m_store.insert_or_assign(sockfd, std::make_unique<callback<>>(std::move(func)));
-        }
-
-        template<typename ... ARG>
-        void add(int sockfd, const std::function<void(ARG...)>& func)
-        {
-            m_store.insert_or_assign(sockfd, std::make_unique<callback<ARG...>>(func));
-        }
-
-        template<typename ... ARG>
-        void add(int sockfd, std::function<void(ARG...)>&& func)
-        {
-            m_store.insert_or_assign(sockfd, std::make_unique<callback<ARG...>>(std::move(func)));
-        }
-
-        void remove(int sockfd)
-        {
-            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
-                m_store.erase(cb_it);
-        }
-
-        template<typename ... ARG>
-        void call(int sockfd, ARG&& ... arg) const
-        {
-            if(const auto& cb_it = m_store.find(sockfd); cb_it != m_store.end())
-            {
-                // TODO Try to not use dynamic_cast here ... try non-dynamic implementation of callbacks
-                // TODO Remove try catch ... user should be responsible for calling this with right parameter list
-                try {
-                    auto& func = dynamic_cast<callback<ARG...>&>(*(cb_it->second));
-                    func(static_cast<ARG&&>(arg)...);
-                } catch(std::bad_cast&) {}
-            }
-        }
-
-    private:
-
-        std::map<int, std::unique_ptr<base_callback>> m_store;
-
-    };
-
     template<ip_version IP_VER>
     inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
     {
@@ -489,6 +401,11 @@ public:
             stop();
     }
 
+    bool running() const
+    {
+        return m_running;
+    }
+
     size_t pool_size() const
     {
         return m_pool_size;
@@ -567,6 +484,13 @@ class async_context
         RELOAD_FD_SET = 2
     };
 
+    /// Struct to store events and corresponding callbacks before they are handled by the <thread_pool>
+    struct context_item
+    {
+        epoll_event event;
+        std::function<void()> callback;
+    };
+
 public:
 
     enum event_type
@@ -586,26 +510,36 @@ public:
     async_context(async_context&&) = delete;
     async_context& operator=(async_context&&) = delete;
 
-    void run() const
+    void run()
     {
         // TODO Keep async context alive (block here) until all registered callbacks are handled and m_store is empty
+
+        // Wait until the handle store is empty. Condition variable notified in remove(...)
+        // std::mutex mut;
+        // std::unique_lock<std::mutex> lock {mut};
+        // std::cout << "Blocking\n";
+        // m_condition.wait(lock, [this]() { return m_store.size() == 1; });
+        // std::cout << "Unlocked\n";
+
+        // Stop thread pool here to make sure all callbacks are handled before exciting
+        // m_pool.stop();
     }
 
     template<typename CALLBACK_TYPE>
-    bool add(const int sock_fd, const event_type type, const CALLBACK_TYPE&& callback)
+    bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
     {
-        if(const auto [inserted, success] = m_store.insert_or_assign(sock_fd, epoll_event{}); success)
+        if(const auto [inserted, success] = m_store.insert_or_assign(sock_fd, context_item {}); success)
         {
-            auto& ev = inserted->second;
-            ev.events = type | EPOLLET;
-            ev.data.fd = sock_fd;
-            if(::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &ev) == -1)
+            auto& item = inserted->second;
+            item.event.events = type | EPOLLET;
+            item.event.data.fd = sock_fd;
+            if(::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &(item.event)) == -1)
             {
                 m_store.erase(inserted);
                 return false;
             }
 
-            m_handler.add(sock_fd, static_cast<const CALLBACK_TYPE&&>(callback));
+            item.callback = std::forward<CALLBACK_TYPE>(callback);
 
             // Restart loop with updated fd set
             const uint8_t control_byte = RELOAD_FD_SET;
@@ -620,16 +554,17 @@ public:
     {
         if(const auto& it = m_store.find(sock_fd); it != m_store.end())
         {
-            auto& ev = it->second;
-            if(::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, &ev) == -1)
+            if(::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, nullptr) == -1)
                 return false;
 
             m_store.erase(it);
-            m_handler.remove(sock_fd);
 
             // Restart loop with updated fd set
             const uint8_t control_byte = RELOAD_FD_SET;
             ::write(m_pipe_fds[1], &control_byte, 1);
+
+            if(m_store.size() == 1)
+                m_condition.notify_one();
 
             return true;
         }
@@ -648,12 +583,12 @@ private:
             throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
 
         // Add the pipe to the epoll monitoring set
-        auto [pipe_event, success] = m_store.emplace(m_pipe_fds[0], epoll_event {});
-        pipe_event->second.events = EPOLLIN;
-        pipe_event->second.data.fd = m_pipe_fds[0];
-        ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_event->second));
+        auto [pipe_item_it, success] = m_store.emplace(m_pipe_fds[0], context_item {});
+        pipe_item_it->second.event.events = EPOLLIN;
+        pipe_item_it->second.event.data.fd = m_pipe_fds[0];
+        ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_item_it->second.event));
 
-        m_future = std::async(std::launch::async, &async_context::context_loop, this);
+        m_context_holder = std::async(std::launch::async, &async_context::context_loop, this);
     }
 
     ~async_context()
@@ -662,14 +597,15 @@ private:
         const uint8_t stop_byte = EXIT_LOOP;
         ::write(m_pipe_fds[1], &stop_byte, 1);
 
-        m_future.get();
+        m_context_holder.get();
 
         ::close(m_pipe_fds[0]);
         ::close(m_pipe_fds[1]);
         ::close(m_epfd);
 
         // Stopping thread pool results in blocking until all running callbacks are completed
-        m_pool.stop();
+        if(m_pool.running())
+             m_pool.stop();
     }
 
     void context_loop()
@@ -697,13 +633,12 @@ private:
                     // Run callback on receiving socket and deregister this socket from context afterwards
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
-                        // Disable event until callback is finished to keep the iterator but do not receive more events
-                        // ::epoll_ctl(m_epfd, EPOLL_CTL_DEL, ev_it->first, &(ev_it->second));
-
-                        m_pool.add_job([this, ev_it]() {
-                            this->m_handler.call(ev_it->first);
-                            // this->remove(ev_it->first);
+                        // Get the callback registered for the event and remove the event from the context
+                        m_pool.add_job([callback = std::move(ev_it->second.callback)]() {
+                            callback();
                         });
+
+                        this->remove(ev_it->first);
                     }
                 }
             }
@@ -714,13 +649,13 @@ private:
 
     std::array<int, 2> m_pipe_fds {};
 
-    std::future<void> m_future {};
+    std::future<void> m_context_holder {};
 
-    std::map<int, epoll_event> m_store {};
-
-    utility::callback_handler m_handler {};
+    std::map<int, context_item> m_store {};
 
     utility::thread_pool m_pool {};
+
+    std::condition_variable m_condition;
 
 };
 
