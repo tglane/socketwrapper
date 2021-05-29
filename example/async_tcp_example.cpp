@@ -48,8 +48,8 @@ int main(int argc, char**argv)
         });
 
         std::cout << "Wait for data ...\n";
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-        // net::async_context::instance().run();
+        // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+        net::async_context::instance().run();
     }
     else if(strcmp(argv[1], "s") == 0)
     {

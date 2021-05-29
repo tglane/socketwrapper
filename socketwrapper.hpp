@@ -7,6 +7,8 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
+#include <iostream>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -512,17 +514,15 @@ public:
 
     void run()
     {
-        // TODO Keep async context alive (block here) until all registered callbacks are handled and m_store is empty
+        if(m_store.size() == 1)
+            return;
 
         // Wait until the handle store is empty. Condition variable notified in remove(...)
-        // std::mutex mut;
-        // std::unique_lock<std::mutex> lock {mut};
-        // std::cout << "Blocking\n";
-        // m_condition.wait(lock, [this]() { return m_store.size() == 1; });
-        // std::cout << "Unlocked\n";
-
-        // Stop thread pool here to make sure all callbacks are handled before exciting
-        // m_pool.stop();
+        std::mutex mut;
+        std::unique_lock<std::mutex> lock {mut};
+        m_condition.wait(lock, [this]() {
+            return m_store.size() == 1;
+        });
     }
 
     template<typename CALLBACK_TYPE>
@@ -562,9 +562,6 @@ public:
             // Restart loop with updated fd set
             const uint8_t control_byte = RELOAD_FD_SET;
             ::write(m_pipe_fds[1], &control_byte, 1);
-
-            if(m_store.size() == 1)
-                m_condition.notify_one();
 
             return true;
         }
@@ -634,8 +631,11 @@ private:
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
                         // Get the callback registered for the event and remove the event from the context
-                        m_pool.add_job([callback = std::move(ev_it->second.callback)]() {
+                        m_pool.add_job([this, callback = std::move(ev_it->second.callback)]() {
                             callback();
+
+                            if(m_store.size() == 1)
+                                m_condition.notify_one();
                         });
 
                         this->remove(ev_it->first);
@@ -659,6 +659,11 @@ private:
 
 };
 
+/// Free function to easily wait until the async_context runs out of registered events
+void async_run()
+{
+    async_context::instance().run();
+}
 
 template<ip_version IP_VER>
 class tcp_connection
