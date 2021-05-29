@@ -7,8 +7,6 @@
 #ifndef SOCKETWRAPPER_HPP
 #define SOCKETWRAPPER_HPP
 
-#include <iostream>
-
 #include <memory>
 #include <string>
 #include <string_view>
