@@ -135,6 +135,7 @@ span(const CONTAINER&) -> span<typename std::remove_reference<decltype(std::decl
 
 // TODO Maybe add some sort of const_span to use in all send functions to also send string_views as CONTAINERs
 
+/// Namespace utility containing helper functions for internal usage
 namespace utility {
 
     /// Notifies on receive event of a socket via a given std::condition_variable
@@ -374,105 +375,130 @@ namespace utility {
 
 #endif
 
-/// Thread pool
-class thread_pool
-{
-public:
-
-    thread_pool()
-        : m_pool_size {std::thread::hardware_concurrency()}
+    /// Thread pool
+    class thread_pool
     {
-        m_workers.reserve(m_pool_size);
-        for(size_t i = 0; i < m_pool_size; ++i)
-            m_workers.emplace_back(&thread_pool::loop, this);
-    }
+    public:
 
-    thread_pool(size_t size)
-        : m_pool_size {size}
-    {
-        m_workers.reserve(m_pool_size);
-        for(size_t i = 0; i < m_pool_size; ++i)
-            m_workers.emplace_back(&thread_pool::loop, this);
-    }
-
-    ~thread_pool()
-    {
-        if(m_running)
-            stop();
-    }
-
-    bool running() const
-    {
-        return m_running;
-    }
-
-    size_t pool_size() const
-    {
-        return m_pool_size;
-    }
-
-    void stop()
-    {
-        if(!m_running)
-            return;
-        m_running = false;
-
-        m_cv.notify_all();
-
-        for(auto& worker : m_workers)
-            worker.join();
-        m_workers.clear();
-    }
-
-    void add_job(std::function<void()> func)
-    {
+        thread_pool()
+            : m_pool_size {std::thread::hardware_concurrency()}
         {
-            const std::lock_guard<std::mutex> lock {m_qmutex};
-            m_queue.push(std::move(func));
+            m_workers.reserve(m_pool_size);
+            for(size_t i = 0; i < m_pool_size; ++i)
+                m_workers.emplace_back(&thread_pool::loop, this);
         }
-        m_cv.notify_one();
-    }
 
-private:
+        thread_pool(size_t size)
+            : m_pool_size {size}
+        {
+            m_workers.reserve(m_pool_size);
+            for(size_t i = 0; i < m_pool_size; ++i)
+                m_workers.emplace_back(&thread_pool::loop, this);
+        }
 
-    void loop()
-    {
-        std::function<void()> func;
+        ~thread_pool()
+        {
+            if(m_running)
+                stop();
+        }
 
-        while(m_running || !m_queue.empty())
+        bool running() const
+        {
+            return m_running;
+        }
+
+        size_t pool_size() const
+        {
+            return m_pool_size;
+        }
+
+        void stop()
+        {
+            if(!m_running)
+                return;
+            m_running = false;
+
+            m_cv.notify_all();
+
+            for(auto& worker : m_workers)
+                worker.join();
+            m_workers.clear();
+        }
+
+        void add_job(std::function<void()> func)
         {
             {
-                std::unique_lock<std::mutex> lock {m_qmutex};
-                m_cv.wait(lock, [this]() { return (!m_queue.empty() || !m_running); });
-                if(!m_running && m_queue.empty())
-                    return;
-                else if(m_queue.empty())
-                    continue;
-
-                func = m_queue.front();
-                m_queue.pop();
+                const std::lock_guard<std::mutex> lock {m_qmutex};
+                m_queue.push(std::move(func));
             }
-
-            func();
+            m_cv.notify_one();
         }
+
+    private:
+
+        void loop()
+        {
+            std::function<void()> func;
+
+            while(m_running || !m_queue.empty())
+            {
+                {
+                    std::unique_lock<std::mutex> lock {m_qmutex};
+                    m_cv.wait(lock, [this]() { return (!m_queue.empty() || !m_running); });
+                    if(!m_running && m_queue.empty())
+                        return;
+                    else if(m_queue.empty())
+                        continue;
+
+                    func = m_queue.front();
+                    m_queue.pop();
+                }
+
+                func();
+            }
+        }
+
+        bool m_running = true;
+
+        size_t m_pool_size;
+
+        std::vector<std::thread> m_workers;
+
+        std::queue<std::function<void()>> m_queue;
+
+        std::mutex m_qmutex;
+
+        std::condition_variable m_cv;
+
+    };
+
+    template<typename T>
+    constexpr inline T swap_byteorder(T in)
+    {
+        T out;
+        constexpr size_t limit = sizeof(T);
+        uint8_t* in_ptr = reinterpret_cast<uint8_t*>(&in);
+        uint8_t* out_ptr = reinterpret_cast<uint8_t*>(&out);
+
+        for(size_t i = 0; i < limit; ++i)
+            out_ptr[i] = in_ptr[limit - i - 1];
+
+        return out;
     }
 
-    bool m_running = true;
-
-    size_t m_pool_size;
-
-    std::vector<std::thread> m_workers;
-
-    std::queue<std::function<void()>> m_queue;
-
-    std::mutex m_qmutex;
-
-    std::condition_variable m_cv;
-
-};
-
-
 } // namespace utility
+
+template<typename T>
+constexpr inline T to_big_endian(T little)
+{
+    return utility::swap_byteorder<T>(little);
+}
+
+template<typename T>
+constexpr inline T to_little_endian(T big)
+{
+    return utility::swap_byteorder<T>(big);
+}
 
 /// Class to manage all asynchronous socket io operations
 class async_context
