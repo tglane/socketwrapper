@@ -140,3 +140,20 @@ Methods:
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
     ```
+
+## Utility Functions:
+- Run the asynchronous context:
+    This function blocks until the asynchronous context runs out of registered callbacks.
+    ```cpp
+    void async_run();
+    ```
+- Change byte order:
+    ```cpp
+    // Change byte order from little-endian to big-endian
+    template<typename T>
+    constexpr inline T to_big_endian(T little);
+
+    // Change byte order from big-endian to little-endian
+    template<typename T>
+    constexpr inline T to_little_endian(T big);
+    ```
