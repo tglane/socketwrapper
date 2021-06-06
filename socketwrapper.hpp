@@ -434,6 +434,11 @@ namespace utility {
             m_cv.notify_one();
         }
 
+        void flush()
+        {
+            // TODO Block until all currently scheduled tasks are executed
+        }
+
     private:
 
         void loop()
@@ -684,7 +689,7 @@ private:
 };
 
 /// Free function to easily wait until the async_context runs out of registered events
-void async_run()
+inline void async_run()
 {
     async_context::instance().run();
 }
