@@ -67,6 +67,11 @@ Methods:
     // Immediately returns and invokes the callback after all in the given buffer is send. Caller is responsible to keep the data the span shows alive.
     void async_send(net::span<T>&& buffer, CALLBACK_TYPE&& callback) const;
     ```
+- Shorthand identifier:
+    ```cpp
+    using tcp_connection_v4 = tcp_connection<net::ip_version::v4>;
+    using tcp_connection_v6 = tcp_connection<net::ip_version::v6>;
+    ```
     
 ### tcp_acceptor<IP_VER>
 Represents a listening TCP socket that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
@@ -87,6 +92,11 @@ Methods:
     // Immediately returns and invokes the callback when a new connection is established
     void async_accept(CALLBACK_TYPE&& callback) const;
     ```
+- Shorthand identifier:
+    ```cpp
+    using tcp_acceptor_v4 = tcp_acceptor<net::ip_version::v4>;
+    using tcp_acceptor_v6 = tcp_acceptor<net::ip_version::v6>;
+    ```
     
 ### tls_connection<IP_VER> : public tcp_connection<IP_VER>
 Represents a TLS encrypted TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
@@ -99,6 +109,11 @@ Methods:
     Same interface as `tcp_connection<IP_VER>`
 - Writing:
     Same interface as `tcp_connection<IP_VER>`
+- Shorthand identifier:
+    ```cpp
+    using tls_connection_v4 = tls_connection<net::ip_version::v4>;
+    using tls_connection_v6 = tls_connection<net::ip_version::v6>;
+    ```
     
 ### tls_acceptor<IP_VER> : public tcp_acceptor<IP_VER>
 Represents a listening TCP socket with TLS encryption that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
@@ -109,6 +124,11 @@ Methods:
     ```
 - Accepting:
     Same interface as `tcp_acceptor<IP_VER>`
+- Shorthand identifier:
+    ```cpp
+    using tls_acceptor_v4 = tls_acceptor<net::ip_version::v4>;
+    using tls_acceptor_v6 = tls_acceptor<net::ip_version::v6>;
+    ```
 
 ### udp_socket<IP_VER>
 Represents an UDP socket that can either be in "server" or "client" position.
@@ -139,6 +159,11 @@ Methods:
     
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    ```
+- Shorthand identifier:
+    ```cpp
+    using udp_socket_v4 = udp_socket<net::ip_version::v4>;
+    using udp_socket_v6 = udp_socket<net::ip_version::v6>;
     ```
 
 ## Utility Functions:

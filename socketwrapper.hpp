@@ -661,7 +661,9 @@ private:
                     {
                         // Get the callback registered for the event and remove the event from the context
                         m_pool.add_job([this, callback = std::move(ev_it->second.callback)]() {
-                            callback();
+                            try {
+                                callback();
+                            } catch(std::runtime_error& rt) {}
 
                             if(m_store.size() == 1)
                                 m_condition.notify_one();
@@ -924,6 +926,10 @@ protected:
 
 };
 
+/// Using declarations for shorthand usage of templated tcp_connection types
+using tcp_connection_v4 = tcp_connection<ip_version::v4>;
+using tcp_connection_v6 = tcp_connection<ip_version::v6>;
+
 template<ip_version IP_VER>
 class tcp_acceptor
 {
@@ -1070,6 +1076,10 @@ protected:
 
 };
 
+/// Using declarations for shorthand usage of templated tcp_acceptor types
+using tcp_acceptor_v4 = tcp_acceptor<ip_version::v4>;
+using tcp_acceptor_v6 = tcp_acceptor<ip_version::v6>;
+
 #ifdef TLS_ENABLED
 
 template<ip_version IP_VER>
@@ -1187,6 +1197,10 @@ private:
     friend class tls_acceptor;
 };
 
+/// Using declarations for shorthand usage of templated tls_connection types
+using tls_connection_v4 = tls_connection<ip_version::v4>;
+using tls_connection_v6 = tls_connection<ip_version::v6>;
+
 template<ip_version IP_VER>
 class tls_acceptor : public tcp_acceptor<IP_VER>
 {
@@ -1292,6 +1306,10 @@ private:
     SSL* m_ssl = nullptr;
 
 };
+
+/// Using declarations for shorthand usage of templated tls_acceptor types
+using tls_acceptor_v4 = tls_acceptor<ip_version::v4>;
+using tls_acceptor_v6 = tls_acceptor<ip_version::v6>;
 
 #endif // TLS_ENABLED
 
@@ -1531,6 +1549,10 @@ private:
     std::variant<sockaddr_in, sockaddr_in6> m_sockaddr = {};
 
 };
+
+/// Using declarations for shorthand usage of templated udp_socket types
+using udp_socket_v4 = udp_socket<ip_version::v4>;
+using udp_socket_v6 = udp_socket<ip_version::v6>;
 
 } // namespace net
 
