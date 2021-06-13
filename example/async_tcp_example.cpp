@@ -12,13 +12,14 @@ int main(int argc, char**argv)
     {
         std::cout << "--- Receiver ---\n";
         net::tcp_acceptor<net::ip_version::v4> acceptor_two {"0.0.0.0", 4556};
-        // acceptor_two.async_accept([](net::tcp_connection<net::ip_version::v4>&& sock) {
-        //     std::cout << sock.get() << std::endl;
-        // });
 
         net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
+
+        // Make sure to prevent calling the callback on a moved-from (invalid) socket if you use references to async sockets
         std::vector<net::tcp_connection<net::ip_version::v4>> conns;
+        conns.reserve(2);
+
         acceptor.async_accept([&acceptor, &conns](net::tcp_connection<net::ip_version::v4>&& conn) {
             std::array<char, 1024> buffer;
             std::cout << "Accepted\n";
