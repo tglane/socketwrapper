@@ -1,6 +1,4 @@
-#define TLS_ENABLED
-
-#include "../socketwrapper.hpp"
+#include "../include/socketwrapper/tls.hpp"
 #include <iostream>
 #include <thread>
 #include <cstring>

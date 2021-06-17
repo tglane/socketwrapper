@@ -2,13 +2,18 @@
 [Documentation is work in progress]
 
 Currently this is a header-only library containing classes for TCP and UDP
-network connections. There are also classes for TLS encrypted TCP sockets, that
-can be enabled by defining `TLS_ENABLED` before including the `socketwrapper.hpp` header (by doing you need to link against openSSL to use encryption).
+network connections. There are also classes for TLS encrypted TCP sockets, which requires to link 
+against OpenSSL (use the compile flags `-lssl -lcrypto`) and some other utility
+functions.
+
+The only requirements are a C++17 compliant compiler (make sure to compile with
+this version!), and `pthreads` (you need to link with `lpthread`) and OpenSSL
+(but only if you use the `tls.hpp` header).
 
 There are some examples for all socket/connection types in the `examples` directory.
 
 ## Asyncronous functionality:
-TODO
+*TODO Describe the design of the asynchronous system*
 
 ## Class Documentation:
 All of the following classes and enum classes live in the namespace `net`.
@@ -22,6 +27,8 @@ Socket/connection classes all are not copyable but moveable and templated to dis
 ```
 
 ### span<TYPE>
+>#include "socketwrapper/span.hpp" (also included by all socket headers)
+
 Non owning abstraction of a view to memory used to generalize the interface to the reading and sending methods of the socket classes. Can be created from various container/array types.
 The interface of the span class is the same as for most std container classes (providing begin(), end(), front(), back(), empty(), size(), get(), data()).
 Methods:
@@ -41,6 +48,8 @@ Methods:
     ```
     
 ### tcp_connection<IP_VER>
+>#include "socketwrapper/tcp.hpp"
+
 Represents a TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
 Methods:
 - Constructor: .
@@ -74,6 +83,8 @@ Methods:
     ```
     
 ### tcp_acceptor<IP_VER>
+>#include "socketwrapper/tcp.hpp"
+
 Represents a listening TCP socket that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
 Methods:
 - Constructor:
@@ -99,6 +110,8 @@ Methods:
     ```
     
 ### tls_connection<IP_VER> : public tcp_connection<IP_VER>
+>#include "socketwrapper/tls.hpp"
+
 Represents a TLS encrypted TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
 Methods:
 - Constructor:
@@ -116,6 +129,7 @@ Methods:
     ```
     
 ### tls_acceptor<IP_VER> : public tcp_acceptor<IP_VER>
+>#include "socketwrapper/tls.hpp"
 Represents a listening TCP socket with TLS encryption that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
 Methods:
 - Constructor:
@@ -131,6 +145,8 @@ Methods:
     ```
 
 ### udp_socket<IP_VER>
+>#include "socketwrapper/udp.hpp"
+
 Represents an UDP socket that can either be in "server" or "client" position.
 Methods:
 - Constructor:
@@ -167,6 +183,10 @@ Methods:
     ```
 
 ## Utility Functions:
+>#include "socketwrapper/utility.hpp"
+
+All of the following functions live in the namespace `net`
+
 - Run the asynchronous context:
     This function blocks until the asynchronous context runs out of registered callbacks.
     ```cpp
