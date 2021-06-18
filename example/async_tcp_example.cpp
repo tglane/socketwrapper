@@ -1,4 +1,5 @@
-#include "../socketwrapper.hpp"
+#include "../include/socketwrapper/tcp.hpp"
+#include "../include/socketwrapper/utility.hpp"
 #include <iostream>
 #include <thread>
 #include <cstring>
@@ -50,7 +51,7 @@ int main(int argc, char**argv)
 
         std::cout << "Wait for data ...\n";
         // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-        net::async_context::instance().run();
+        net::async_run();
     }
     else if(strcmp(argv[1], "s") == 0)
     {
