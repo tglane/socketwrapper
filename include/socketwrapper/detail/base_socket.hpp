@@ -3,7 +3,6 @@
 
 #include "utility.hpp"
 #include "async.hpp"
-#include <iostream>
 
 #include "unistd.h"
 
