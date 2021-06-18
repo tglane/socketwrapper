@@ -62,8 +62,14 @@ public:
     tls_connection& operator=(const tls_connection&) = delete;
 
     tls_connection(tls_connection&& rhs) noexcept
+        : tcp_connection<IP_VER> {std::move(rhs)}
     {
-        *this = std::move(rhs);
+        m_context = std::move(rhs.m_context);
+        m_ssl = rhs.m_ssl;
+        m_certificate = std::move(rhs.m_certificate);
+        m_private_key = std::move(rhs.m_private_key);
+
+        rhs.m_ssl = nullptr;
     }
 
     tls_connection& operator=(tls_connection&& rhs) noexcept
@@ -71,7 +77,7 @@ public:
         // Provide custom move assginment operator to prevent moved object from deleting SSL context pointers
         if(this != &rhs)
         {
-            static_cast<tcp_connection<IP_VER>&>(*this) = std::move(rhs);
+            tcp_connection<IP_VER>::operator=(std::move(rhs));
 
             m_context = std::move(rhs.m_context);
             m_ssl = rhs.m_ssl;
@@ -182,8 +188,14 @@ public:
     tls_acceptor operator=(const tls_acceptor&) = delete;
 
     tls_acceptor(tls_acceptor& rhs) noexcept
+        : tcp_acceptor<IP_VER> {std::move(rhs)}
     {
-        *this = std::move(rhs);
+        m_certificate = std::move(rhs.m_certificate);
+        m_private_key = std::move(rhs.m_private_key);
+        m_context = std::move(rhs.m_context);
+        m_ssl = rhs.m_ssl;
+
+        rhs.m_ssl = nullptr;
     }
 
     tls_acceptor& operator=(tls_acceptor&& rhs) noexcept
@@ -191,7 +203,7 @@ public:
         // Provide custom move assginment operator to prevent moved object from deleting underlying SSL context
         if(this != &rhs)
         {
-            static_cast<tcp_acceptor<IP_VER>&>(*this) = std::move(rhs);
+            tcp_acceptor<IP_VER>::operator=(std::move(rhs));
 
             m_certificate = std::move(rhs.m_certificate);
             m_private_key = std::move(rhs.m_private_key);
