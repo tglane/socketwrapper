@@ -1,6 +1,8 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_THREADPOOL_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_THREADPOOL_HPP
 
+#include "callbacks.hpp"
+
 #include <vector>
 #include <queue>
 #include <thread>
@@ -62,7 +64,7 @@ public:
         m_workers.clear();
     }
 
-    void add_job(std::function<void()> func)
+    void add_job(async_callback&& func)
     {
         {
             const std::lock_guard<std::mutex> lock {m_qmutex};
@@ -106,7 +108,7 @@ private:
 
     std::vector<std::thread> m_workers;
 
-    std::queue<std::function<void()>> m_queue;
+    std::queue<async_callback> m_queue;
 
     std::mutex m_qmutex;
 

@@ -21,7 +21,7 @@
 namespace net {
 
 template<ip_version IP_VER>
-class tcp_connection : public detail::base_socket<IP_VER>
+class tcp_connection : public detail::base_socket
 {
 protected:
 
@@ -31,13 +31,60 @@ protected:
         connected
     };
 
+    template<typename T>
+    class read_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        read_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_connection<IP_VER>* ptr = reinterpret_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_read = ptr->read(std::move(m_buffer));
+            m_func(bytes_read);
+        }
+
+    private:
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
+    template<typename T>
+    class write_callback : public detail::abstract_socket_callback
+    {
+    public:
+        template<typename USER_CALLBACK>
+        write_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_connection<IP_VER>* ptr = reinterpret_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(std::move(m_buffer));
+            m_func(bytes_written);
+        }
+
+    private:
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
 public:
 
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
 
     tcp_connection(tcp_connection&& rhs) noexcept
-        : detail::base_socket<IP_VER> {std::move(rhs)}
+        : detail::base_socket {std::move(rhs)}
     {
         m_peer = std::move(rhs.m_peer);
         m_connection = rhs.m_connection;
@@ -50,7 +97,7 @@ public:
         // Provide custom move assginment operator to prevent the moved socket from closing the underlying file descriptor
         if(this != &rhs)
         {
-            detail::base_socket<IP_VER>::operator=(std::move(rhs));
+            detail::base_socket::operator=(std::move(rhs));
 
             m_peer = std::move(rhs.m_peer);
             m_connection = rhs.m_connection;
@@ -61,7 +108,7 @@ public:
     }
 
     tcp_connection(const std::string_view conn_addr, const uint16_t port_to)
-        : detail::base_socket<IP_VER> {socket_type::stream},
+        : detail::base_socket {socket_type::stream, IP_VER},
           m_connection {connection_status::closed}
     {
         if(detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
@@ -120,10 +167,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::WRITE,
-            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]() {
-                size_t bytes_written = send(std::move(buffer));
-                func(bytes_written);
-            }
+            write_callback<T> {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
@@ -174,14 +218,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::READ,
-            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                // Ok to create new span because its a cheap type containing only a view to the real buffer
-                size_t bytes_read = read(span<T> {buffer});
-                if(bytes_read == 0)
-                    detail::async_context::instance().remove(this->m_sockfd);
-                func(bytes_read);
-            }
+            read_callback<T> {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
@@ -190,7 +227,7 @@ protected:
     tcp_connection() = default;
 
     tcp_connection(const int socket_fd, const sockaddr_in& peer_addr)
-        : detail::base_socket<IP_VER> {socket_fd, ip_version::v4},
+        : detail::base_socket {socket_fd, ip_version::v4},
           m_peer {peer_addr},
           m_connection {connection_status::connected}
     {
@@ -198,7 +235,7 @@ protected:
     }
 
     tcp_connection(const int socket_fd, const sockaddr_in6& peer_addr)
-        : detail::base_socket<IP_VER> {socket_fd, ip_version::v6},
+        : detail::base_socket {socket_fd, ip_version::v6},
           m_peer {peer_addr},
           m_connection {connection_status::connected}
     {
@@ -230,7 +267,7 @@ using tcp_connection_v6 = tcp_connection<ip_version::v6>;
 
 
 template<ip_version IP_VER>
-class tcp_acceptor : public detail::base_socket<IP_VER>
+class tcp_acceptor : public detail::base_socket
 {
 public:
 
@@ -239,7 +276,7 @@ public:
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
 
     tcp_acceptor(tcp_acceptor&& rhs) noexcept
-        : detail::base_socket<IP_VER> {std::move(rhs)}
+        : detail::base_socket {std::move(rhs)}
     {
         m_sockaddr = std::move(rhs.m_sockaddr);
     }
@@ -249,7 +286,7 @@ public:
         // Provide a custom move assginment operator to prevent the moved object from closing the underlying file descriptor
         if(this != &rhs)
         {
-            detail::base_socket<IP_VER>::operator=(std::move(rhs));
+            detail::base_socket::operator=(std::move(rhs));
 
             m_sockaddr = std::move(rhs.m_sockaddr);
         }
@@ -257,7 +294,7 @@ public:
     }
 
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
-        : detail::base_socket<IP_VER> {socket_type::stream}
+        : detail::base_socket {socket_type::stream, IP_VER}
     {
         if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};

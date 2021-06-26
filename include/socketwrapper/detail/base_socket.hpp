@@ -11,7 +11,6 @@ namespace net {
 namespace detail {
 
 /// Very simple socket base class
-template<ip_version IP_VER>
 class base_socket
 {
 public:
@@ -32,14 +31,16 @@ public:
             m_sockfd = rhs.m_sockfd;
             m_family = rhs.m_family;
 
+            async_context::instance().callback_update_socket(m_sockfd, this);
+
             rhs.m_sockfd = -1;
         }
         return *this;
     }
 
-    base_socket(socket_type type)
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(type), 0)},
-          m_family {IP_VER}
+    base_socket(socket_type type, ip_version ip_ver)
+        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(type), 0)},
+          m_family {ip_ver}
     {
         detail::init_socket_system();
 
