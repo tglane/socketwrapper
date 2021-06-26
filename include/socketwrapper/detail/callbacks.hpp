@@ -40,8 +40,7 @@ public:
 
     void operator()() const
     {
-        if(m_ptr)
-            (*m_ptr)();
+        (*m_ptr)();
     }
 
     void reset_socket_ptr(const base_socket* new_ptr)

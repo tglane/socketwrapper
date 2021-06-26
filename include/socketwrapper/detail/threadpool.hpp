@@ -8,11 +8,15 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <future>
 #include <functional>
 
 namespace net {
 
 namespace detail {
+
+/// Forward declarations
+class async_context;
 
 /// Thread pool
 class thread_pool
@@ -64,11 +68,12 @@ public:
         m_workers.clear();
     }
 
-    void add_job(async_callback&& func)
+    template<typename USER_JOB>
+    void add_job(USER_JOB&& func)
     {
         {
             const std::lock_guard<std::mutex> lock {m_qmutex};
-            m_queue.push(std::move(func));
+            m_queue.push(std::packaged_task<void()> {std::forward<USER_JOB>(func)});
         }
         m_cv.notify_one();
     }
@@ -82,7 +87,7 @@ private:
 
     void loop()
     {
-        std::function<void()> func;
+        std::packaged_task<void()> func;
 
         while(m_running || !m_queue.empty())
         {
@@ -94,7 +99,7 @@ private:
                 else if(m_queue.empty())
                     continue;
 
-                func = m_queue.front();
+                func = std::move(m_queue.front());
                 m_queue.pop();
             }
 
@@ -108,7 +113,7 @@ private:
 
     std::vector<std::thread> m_workers;
 
-    std::queue<async_callback> m_queue;
+    std::queue<std::packaged_task<void()>> m_queue;
 
     std::mutex m_qmutex;
 
