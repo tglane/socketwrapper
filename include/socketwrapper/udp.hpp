@@ -22,7 +22,7 @@
 namespace net {
 
 template<ip_version IP_VER>
-class udp_socket : public detail::base_socket<IP_VER>
+class udp_socket : public detail::base_socket
 {
 
     enum class socket_mode : uint8_t
@@ -31,18 +31,70 @@ class udp_socket : public detail::base_socket<IP_VER>
         non_bound
     };
 
+    template<typename T>
+    class read_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        read_callback(const udp_socket<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            auto [bytes_read, connection] = ptr->read(span {m_buffer.get(), m_buffer.size()});
+            m_func(bytes_read);
+        }
+
+    private:
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
+    template<typename T>
+    class write_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        write_callback(const udp_socket<IP_VER>* sock_ptr, std::string_view addr, uint16_t port, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_addr {std::move(addr)},
+              m_port {port},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(m_addr, m_port, span {m_buffer.get(), m_buffer.size()});
+            m_func(bytes_written);
+        }
+
+    private:
+        std::string_view m_addr;
+        uint16_t m_port;
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
 public:
 
     udp_socket(const udp_socket&) = delete;
     udp_socket& operator=(const udp_socket&) = delete;
 
     udp_socket()
-        : detail::base_socket<IP_VER> {socket_type::datagram},
+        : detail::base_socket {socket_type::datagram, IP_VER},
           m_mode {socket_mode::non_bound}
     {}
 
     udp_socket(udp_socket&& rhs) noexcept
-        : detail::base_socket<IP_VER> {std::move(rhs)}
+        : detail::base_socket {std::move(rhs)}
     {
         m_mode = rhs.m_mode;
         m_sockaddr = std::move(rhs.m_sockaddr);
@@ -55,7 +107,7 @@ public:
         // Provide custom move assginment operator to prevent moved object from closing underlying file descriptor
         if(this != &rhs)
         {
-            detail::base_socket<IP_VER>::operator=(std::move(rhs));
+            detail::base_socket::operator=(std::move(rhs));
 
             m_mode = rhs.m_mode;
             m_sockaddr = std::move(rhs.m_sockaddr);
@@ -66,7 +118,7 @@ public:
     }
 
     udp_socket(const std::string_view bind_addr, const uint16_t port)
-        : detail::base_socket<IP_VER> {socket_type::datagram},
+        : detail::base_socket {socket_type::datagram, IP_VER},
           m_mode {socket_mode::bound}
     {
         if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram, m_sockaddr) != 0)
@@ -113,11 +165,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::WRITE,
-            [this, addr, port, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                size_t bytes_written = send(addr, port, span {buffer});
-                func(bytes_written);
-            }
+            write_callback {this, addr, port, std::move(buffer, std::forward<CALLBACK_TYPE>(callback))}
         );
     }
 
@@ -161,11 +209,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::READ,
-            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                auto [bytes_read, connection] = read(span {buffer});
-                func(bytes_read);
-            }
+            read_callback {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
