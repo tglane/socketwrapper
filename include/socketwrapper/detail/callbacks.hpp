@@ -14,8 +14,11 @@ class base_socket;
 //      to "move" active asynchronous operations with a moved socket
 struct abstract_socket_callback
 {
-    virtual ~abstract_socket_callback()
+    abstract_socket_callback(const base_socket* ptr)
+        : socket_ptr {ptr}
     {}
+
+    virtual ~abstract_socket_callback() = default;
 
     virtual void operator()() const = 0;
 
@@ -27,9 +30,9 @@ class async_callback final
 {
 public:
 
-    template<typename USER_CALLBACK>
-    async_callback(USER_CALLBACK&& cb)
-        : m_ptr {std::make_unique<USER_CALLBACK>(std::forward<USER_CALLBACK>(cb))}
+    template<typename DERIVED_CALLBACK>
+    async_callback(DERIVED_CALLBACK&& cb)
+        : m_ptr {std::make_unique<DERIVED_CALLBACK>(std::forward<DERIVED_CALLBACK>(cb))}
     {}
 
     async_callback(const async_callback&) = delete;

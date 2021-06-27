@@ -39,6 +39,10 @@ class async_context
     //  [Gets never called]
     struct no_op_callback : public abstract_socket_callback
     {
+        no_op_callback()
+            : abstract_socket_callback {nullptr}
+        {}
+
         void operator()() const override
         {}
     };

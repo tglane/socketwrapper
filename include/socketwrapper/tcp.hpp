@@ -18,6 +18,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#include <iostream>
+
 namespace net {
 
 template<ip_version IP_VER>
@@ -38,15 +40,15 @@ protected:
 
         template<typename USER_CALLBACK>
         read_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
-            : detail::abstract_socket_callback {sock_ptr},
+            : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
               m_buffer {std::move(view)},
               m_func {std::forward<USER_CALLBACK>(cb)}
         {}
 
         void operator()() const override
         {
-            const tcp_connection<IP_VER>* ptr = reinterpret_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
-            size_t bytes_read = ptr->read(std::move(m_buffer));
+            const tcp_connection<IP_VER>* ptr = static_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_read = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
             m_func(bytes_read);
         }
 
@@ -61,15 +63,15 @@ protected:
     public:
         template<typename USER_CALLBACK>
         write_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
-            : detail::abstract_socket_callback {sock_ptr},
+            : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
               m_buffer {std::move(view)},
               m_func {std::forward<USER_CALLBACK>(cb)}
         {}
 
         void operator()() const override
         {
-            const tcp_connection<IP_VER>* ptr = reinterpret_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
-            size_t bytes_written = ptr->send(std::move(m_buffer));
+            const tcp_connection<IP_VER>* ptr = static_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(span<T> {m_buffer.get(), m_buffer.size()});
             m_func(bytes_written);
         }
 
@@ -269,6 +271,27 @@ using tcp_connection_v6 = tcp_connection<ip_version::v6>;
 template<ip_version IP_VER>
 class tcp_acceptor : public detail::base_socket
 {
+
+    class accept_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        accept_callback(const tcp_acceptor<IP_VER>* sock_ptr, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_acceptor<IP_VER>* ptr = static_cast<const tcp_acceptor<IP_VER>*>(this->socket_ptr);
+            m_func(ptr->accept());
+        }
+
+    private:
+        std::function<void(tcp_connection<IP_VER>&&)> m_func;
+    };
+
 public:
 
     tcp_acceptor() = delete;
@@ -370,10 +393,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::READ,
-            [this, func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                func(accept());
-            }
+            accept_callback {this, std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
