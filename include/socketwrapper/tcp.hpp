@@ -18,8 +18,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include <iostream>
-
 namespace net {
 
 template<ip_version IP_VER>
