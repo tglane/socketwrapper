@@ -79,9 +79,12 @@ int main(int argc, char**argv)
 
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
             std::string_view buffer {"Hello world from the second accepted connection!"};
-            sock.send(net::span {buffer.begin(), buffer.end()});
+            sock.async_send(net::span {buffer.begin(), buffer.end()}, [](size_t) {
+                std::cout << "Message sent\n";
+            });
 
             std::cout << "Sent\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         }
     }
 }

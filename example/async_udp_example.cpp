@@ -14,8 +14,20 @@ int main(int argc, char** argv)
         net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
         std::array<char, 1024> buffer;
 
-        sock.async_read(net::span {buffer}, [&buffer](size_t bytes) {
+        sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes) {
             std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+
+            sock.async_read(net::span {buffer}, [&buffer](size_t bytes) {
+                std::cout << "Inner received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+            });
+        });
+
+        sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes) {
+            std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+
+            sock.async_read(net::span {buffer}, [&buffer](size_t bytes) {
+                std::cout << "Inner received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+            });
         });
 
         std::cout << "Waiting ...\n";

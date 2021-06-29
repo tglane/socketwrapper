@@ -2,6 +2,7 @@
 #define SOCKETWRAPPER_NET_UDP_HPP
 
 #include "span.hpp"
+#include "detail/base_socket.hpp"
 #include "detail/utility.hpp"
 #include "detail/async.hpp"
 #include "detail/message_notifier.hpp"
@@ -21,7 +22,7 @@
 namespace net {
 
 template<ip_version IP_VER>
-class udp_socket
+class udp_socket : public detail::base_socket
 {
 
     enum class socket_mode : uint8_t
@@ -30,20 +31,75 @@ class udp_socket
         non_bound
     };
 
+    template<typename T>
+    class read_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        read_callback(const udp_socket<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            auto [bytes_read, connection] = ptr->read(span {m_buffer.get(), m_buffer.size()});
+            m_func(bytes_read);
+        }
+
+    private:
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
+    template<typename T>
+    class write_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        template<typename USER_CALLBACK>
+        write_callback(const udp_socket<IP_VER>* sock_ptr, std::string_view addr, uint16_t port, span<T> view, USER_CALLBACK&& cb)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_addr {std::move(addr)},
+              m_port {port},
+              m_buffer {std::move(view)},
+              m_func {std::forward<USER_CALLBACK>(cb)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(m_addr, m_port, span {m_buffer.get(), m_buffer.size()});
+            m_func(bytes_written);
+        }
+
+    private:
+        std::string_view m_addr;
+        uint16_t m_port;
+        span<T> m_buffer;
+        std::function<void(size_t)> m_func;
+    };
+
 public:
 
     udp_socket(const udp_socket&) = delete;
     udp_socket& operator=(const udp_socket&) = delete;
 
     udp_socket()
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)},
-          m_family {IP_VER},
+        : detail::base_socket {socket_type::datagram, IP_VER},
           m_mode {socket_mode::non_bound}
     {}
 
     udp_socket(udp_socket&& rhs) noexcept
+        : detail::base_socket {std::move(rhs)}
     {
-        *this = std::move(rhs);
+        m_mode = rhs.m_mode;
+        m_sockaddr = std::move(rhs.m_sockaddr);
+
+        rhs.m_sockfd = -1;
     }
 
     udp_socket& operator=(udp_socket&& rhs) noexcept
@@ -51,8 +107,8 @@ public:
         // Provide custom move assginment operator to prevent moved object from closing underlying file descriptor
         if(this != &rhs)
         {
-            m_sockfd = rhs.m_sockfd;
-            m_family = rhs.m_family;
+            detail::base_socket::operator=(std::move(rhs));
+
             m_mode = rhs.m_mode;
             m_sockaddr = std::move(rhs.m_sockaddr);
 
@@ -62,56 +118,28 @@ public:
     }
 
     udp_socket(const std::string_view bind_addr, const uint16_t port)
-        : m_sockfd {::socket(static_cast<uint8_t>(IP_VER), static_cast<uint8_t>(socket_type::datagram), 0)},
-          m_family {IP_VER},
+        : detail::base_socket {socket_type::datagram, IP_VER},
           m_mode {socket_mode::bound}
     {
-        if(m_sockfd == -1)
-            throw std::runtime_error {"Failed to create socket."};
-
-        const int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
-            throw std::runtime_error {"Failed to set address reuseable."};
-
-#ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(int)) < 0)
-            throw std::runtime_error {"Failed to set port reuseable."};
-#endif
-
         if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
         if constexpr(IP_VER == ip_version::v4)
         {
             auto& sockaddr_ref = std::get<sockaddr_in>(m_sockaddr);
-            if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in)); res != 0)
+            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             auto& sockaddr_ref = std::get<sockaddr_in6>(m_sockaddr);
-            if(auto res = ::bind(m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6)); res != 0)
+            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6)); res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
         else
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
-    }
-
-    ~udp_socket()
-    {
-        if(m_sockfd > 0)
-        {
-            // TODO only do this when the socket is still in the async context
-            detail::async_context::instance().remove(m_sockfd);
-            ::close(m_sockfd);
-        }
-    }
-
-    int get() const
-    {
-        return m_sockfd;
     }
 
     template<typename T>
@@ -135,13 +163,9 @@ public:
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(
-            m_sockfd,
+            this->m_sockfd,
             detail::async_context::WRITE,
-            [this, addr, port, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                size_t bytes_written = send(addr, port, span {buffer});
-                func(bytes_written);
-            }
+            write_callback {this, addr, port, std::move(buffer, std::forward<CALLBACK_TYPE>(callback))}
         );
     }
 
@@ -167,11 +191,11 @@ public:
         std::condition_variable cv;
         std::mutex mut;
         std::unique_lock<std::mutex> lock {mut};
-        notifier.add(m_sockfd, &cv);
+        notifier.add(this->m_sockfd, &cv);
 
         // Wait for given delay
         const bool ready = cv.wait_for(lock, delay) == std::cv_status::no_timeout;
-        notifier.remove(m_sockfd);
+        notifier.remove(this->m_sockfd);
 
         if(ready)
             return read(span {buffer});
@@ -183,13 +207,9 @@ public:
     void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(
-            m_sockfd,
+            this->m_sockfd,
             detail::async_context::READ,
-            [this, buffer = std::move(buffer), func = std::forward<CALLBACK_TYPE>(callback)]()
-            {
-                auto [bytes_read, connection] = read(span {buffer});
-                func(bytes_read);
-            }
+            read_callback {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
@@ -201,7 +221,7 @@ private:
         {
             socklen_t flen = sizeof(sockaddr_in);
             sockaddr_in from {};
-            const auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
 
             if(peer_data)
                 *peer_data = detail::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
@@ -212,7 +232,7 @@ private:
         {
             socklen_t flen = sizeof(sockaddr_in6);
             sockaddr_in6 from {};
-            const auto bytes = ::recvfrom(m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
+            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
 
             if(peer_data)
                 *peer_data = detail::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
@@ -234,22 +254,18 @@ private:
         if constexpr(IP_VER == ip_version::v4)
         {
             auto& dest_ref = std::get<sockaddr_in>(dest);
-            return ::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in));
+            return ::sendto(this->m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in));
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             auto& dest_ref = std::get<sockaddr_in6>(dest);
-            return ::sendto(m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6));
+            return ::sendto(this->m_sockfd, buffer, length, 0, reinterpret_cast<sockaddr*>(&dest_ref), sizeof(sockaddr_in6));
         }
         else
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
     }
-
-    int m_sockfd;
-
-    ip_version m_family;
 
     socket_mode m_mode;
 

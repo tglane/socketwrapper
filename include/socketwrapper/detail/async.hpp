@@ -1,8 +1,10 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_ASYNC_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_ASYNC_HPP
 
+#include "callbacks.hpp"
 #include "threadpool.hpp"
 
+#include <memory>
 #include <array>
 #include <map>
 #include <future>
@@ -30,7 +32,19 @@ class async_context
     struct context_item
     {
         epoll_event event;
-        std::function<void()> callback;
+        async_callback callback;
+    };
+
+    /// No op callback used to add the pipe file descriptor to manage the async_context
+    //  [Gets never called]
+    struct no_op_callback : public abstract_socket_callback
+    {
+        no_op_callback()
+            : abstract_socket_callback {nullptr}
+        {}
+
+        void operator()() const override
+        {}
     };
 
 public:
@@ -68,7 +82,10 @@ public:
     template<typename CALLBACK_TYPE>
     bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
     {
-        if(const auto [inserted, success] = m_store.insert_or_assign(sock_fd, context_item {}); success)
+        if(const auto [inserted, success] = m_store.insert_or_assign(
+                sock_fd,
+                context_item {epoll_event {}, std::forward<CALLBACK_TYPE>(callback)}
+        ); success)
         {
             auto& item = inserted->second;
             item.event.events = type | EPOLLET;
@@ -79,7 +96,7 @@ public:
                 return false;
             }
 
-            item.callback = std::forward<CALLBACK_TYPE>(callback);
+            // item.callback = std::forward<CALLBACK_TYPE>(callback);
 
             // Restart loop with updated fd set
             const uint8_t control_byte = RELOAD_FD_SET;
@@ -108,6 +125,25 @@ public:
         return false;
     }
 
+    bool socket_registered(const int sock_fd) const
+    {
+        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+            return true;
+        else
+            return false;
+    }
+
+    bool callback_update_socket(const int sock_fd, const base_socket* new_ptr)
+    {
+        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+        {
+            // TODO Check if new_ptr has same type than the old one
+            it->second.callback.reset_socket_ptr(new_ptr);
+            return true;
+        }
+        return false;
+    }
+
 private:
 
     async_context()
@@ -120,7 +156,8 @@ private:
             throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
 
         // Add the pipe to the epoll monitoring set
-        auto [pipe_item_it, success] = m_store.emplace(m_pipe_fds[0], context_item {});
+        auto [pipe_item_it, success] = m_store.emplace(m_pipe_fds[0],
+            context_item {epoll_event{}, no_op_callback {}});
         pipe_item_it->second.event.events = EPOLLIN;
         pipe_item_it->second.event.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_item_it->second.event));
