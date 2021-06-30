@@ -11,19 +11,12 @@
 
 namespace net {
 
-
 /// Change endianess
 template<typename T>
-constexpr inline T to_big_endian(T little)
-{
-    return detail::swap_byteorder<T>(little);
-}
+T (*to_big_endian)(T) = detail::swap_byteorder<T>;
 
 template<typename T>
-constexpr inline T to_little_endian(T big)
-{
-    return detail::swap_byteorder<T>(big);
-}
+T (*to_little_endian)(T) = detail::swap_byteorder<T>;
 
 /// Free function to easily wait until the async_context runs out of registered events
 inline void async_run()
