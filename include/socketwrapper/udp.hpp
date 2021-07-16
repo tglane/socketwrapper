@@ -10,6 +10,7 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <future>
 #include <optional>
 #include <mutex>
 #include <condition_variable>
@@ -24,6 +25,7 @@ namespace net {
 template<ip_version IP_VER>
 class udp_socket : public detail::base_socket
 {
+    using read_return_pair = std::pair<size_t, connection_info>;
 
     enum class socket_mode : uint8_t
     {
@@ -53,6 +55,30 @@ class udp_socket : public detail::base_socket
     private:
         span<T> m_buffer;
         std::function<void(size_t)> m_func;
+    };
+
+    template<typename T>
+    class promised_read_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        promised_read_callback(const udp_socket<IP_VER>* sock_ptr, span<T> view, std::promise<read_return_pair> promise)
+            : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+              m_buffer {std::move(view)},
+              m_promise {std::move(promise)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            read_return_pair ret = ptr->read(span {m_buffer.get(), m_buffer.size()});
+
+            m_promise.set_value(std::move(ret));
+        }
+
+    private:
+        span<T> m_buffer;
+        mutable std::promise<read_return_pair> m_promise;
     };
 
     template<typename T>
@@ -170,9 +196,9 @@ public:
     }
 
     template<typename T>
-    std::pair<size_t, connection_info> read(span<T>&& buffer) const
+    read_return_pair read(span<T>&& buffer) const
     {
-        std::pair<size_t, connection_info> pair {};
+        read_return_pair pair {};
         if(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second)); bytes >= 0)
         {
             pair.first = bytes / sizeof(T);
@@ -211,6 +237,21 @@ public:
             detail::async_context::READ,
             read_callback {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
+    }
+
+    template<typename T>
+    std::future<read_return_pair> promised_read(span<T>&& buffer) const
+    {
+        std::promise<read_return_pair> read_promise;
+        std::future<read_return_pair> read_future = read_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            promised_read_callback {this, std::move(buffer), std::move(read_promise)}
+        );
+
+        return read_future;
     }
 
 private:

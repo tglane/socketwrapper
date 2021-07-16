@@ -60,6 +60,7 @@ protected:
     class promised_read_callback : public detail::abstract_socket_callback
     {
     public:
+
         promised_read_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, std::promise<size_t> promise)
             : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
               m_buffer {std::move(view)},
@@ -346,7 +347,7 @@ class tcp_acceptor : public detail::base_socket
 
     private:
         mutable std::promise<tcp_connection<IP_VER>> m_promise;
-    }
+    };
 
 public:
 

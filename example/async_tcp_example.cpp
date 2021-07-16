@@ -37,7 +37,6 @@ int main(int argc, char**argv)
             // });
             auto read_fut = sock.promised_read(net::span {buffer});
 
-
             acceptor.async_accept([&conns](net::tcp_connection<net::ip_version::v4>&& conn) {
                 std::cout << "Accepted again\n";
                 std::array<char, 1024> buffer;

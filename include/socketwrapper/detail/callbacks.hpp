@@ -18,6 +18,11 @@ struct abstract_socket_callback
         : socket_ptr {ptr}
     {}
 
+    abstract_socket_callback(const abstract_socket_callback&) = delete;
+    abstract_socket_callback& operator=(const abstract_socket_callback&) = delete;
+    abstract_socket_callback(abstract_socket_callback&&) = default;
+    abstract_socket_callback& operator=(abstract_socket_callback&&) = default;
+
     virtual ~abstract_socket_callback() = default;
 
     virtual void operator()() const = 0;

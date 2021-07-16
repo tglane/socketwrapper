@@ -32,6 +32,7 @@ class async_context
     struct context_item
     {
         epoll_event event;
+        // TODO Add queue off callbacks to make sure multiple callbacks can be registered
         async_callback callback;
     };
 
@@ -82,10 +83,13 @@ public:
     template<typename CALLBACK_TYPE>
     bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
     {
+        // TODO Prevent older registered callbacks from being overwritten
+        // Instead push all callbacks of the same type into a queue and handle them in the
+        // order they where registered
         if(const auto [inserted, success] = m_store.insert_or_assign(
                 sock_fd,
                 context_item {epoll_event {}, std::forward<CALLBACK_TYPE>(callback)}
-        ); success)
+            ); success)
         {
             auto& item = inserted->second;
             item.event.events = type | EPOLLET;
@@ -95,8 +99,6 @@ public:
                 m_store.erase(inserted);
                 return false;
             }
-
-            // item.callback = std::forward<CALLBACK_TYPE>(callback);
 
             // Restart loop with updated fd set
             const uint8_t control_byte = RELOAD_FD_SET;
