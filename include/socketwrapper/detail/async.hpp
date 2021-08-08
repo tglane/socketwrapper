@@ -4,7 +4,6 @@
 #include "callbacks.hpp"
 #include "threadpool.hpp"
 
-#include <memory>
 #include <array>
 #include <map>
 #include <optional>
@@ -46,9 +45,15 @@ private:
         std::optional<async_callback> read_callback;
         std::optional<async_callback> write_callback;
 
-        std::optional<async_callback>& operator[](event_type type)
+        std::optional<async_callback>& operator[](const event_type type)
         {
             // TODO Optimize?
+            assert(type == READ || type == WRITE);
+            return (type == READ) ? read_callback : write_callback;
+        }
+
+        const std::optional<async_callback>& operator[](const event_type type) const
+        {
             assert(type == READ || type == WRITE);
             return (type == READ) ? read_callback : write_callback;
         }
@@ -177,13 +182,16 @@ public:
         return false;
     }
 
-    // bool socket_registered(const int sock_fd, const event_type type) const
-    // {
-    //     if(const auto& it = m_store.find(sock_fd); it != m_store.end())
-    //         return true;
-    //     else
-    //         return false;
-    // }
+    bool is_registered(const int sock_fd, const event_type type) const
+    {
+        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+        {
+            if(it->second[type])
+                return true;
+        }
+
+        return false;
+    }
 
     bool callback_update_socket(const int sock_fd, const base_socket* new_ptr)
     {
