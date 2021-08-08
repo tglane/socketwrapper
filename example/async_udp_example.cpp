@@ -12,12 +12,8 @@ int main(int argc, char** argv)
     {
         std::cout << "--- Receiver ---\n";
         net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
+
         std::array<char, 1024> buffer;
-
-        std::array<char, 1024> buffer_two;
-        auto read_fut = sock.promised_read(net::span {buffer_two});
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-
         sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes) {
             std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
 
@@ -27,26 +23,17 @@ int main(int argc, char** argv)
         });
 
         sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes) {
+            std::cout << "UPDATED CALLBACK TIME!!\n";
             std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
 
-            sock.async_read(net::span {buffer}, [&buffer](size_t bytes) {
+            sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes) {
                 std::cout << "Inner received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+
+                sock.async_read(net::span {buffer}, [&buffer](size_t bytes) {
+                    std::cout << "Nested received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+                    });
             });
         });
-
-        if (read_fut.valid())
-        {
-            read_fut.wait();
-            std::cout << "Finished waiting\n";
-
-            auto read_ret = read_fut.get();
-            std::cout << "Received promised read with " << read_ret.first << " bytes. -- "
-               << std::string_view {buffer_two.data(), read_ret.first} << '\n';
-        }
-        else
-        {
-            std::cout << "Read future invalid ...\n";
-        }
 
         std::cout << "Waiting ...\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));

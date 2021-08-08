@@ -7,9 +7,11 @@
 #include <memory>
 #include <array>
 #include <map>
+#include <optional>
 #include <future>
 #include <mutex>
 #include <condition_variable>
+#include <cassert>
 
 #include <unistd.h>
 #include <sys/epoll.h>
@@ -21,6 +23,15 @@ namespace detail {
 /// Class to manage all asynchronous socket io operations
 class async_context
 {
+public:
+
+    enum event_type
+    {
+        READ = EPOLLIN,
+        WRITE = EPOLLOUT
+    };
+
+private:
 
     enum context_control
     {
@@ -29,11 +40,18 @@ class async_context
     };
 
     /// Struct to store events and corresponding callbacks before they are handled by the <thread_pool>
-    struct context_item
+    struct socket_ctx
     {
         epoll_event event;
-        // TODO Add queue off callbacks to make sure multiple callbacks can be registered
-        async_callback callback;
+        std::optional<async_callback> read_callback;
+        std::optional<async_callback> write_callback;
+
+        std::optional<async_callback>& operator[](event_type type)
+        {
+            // TODO Optimize?
+            assert(type == READ || type == WRITE);
+            return (type == READ) ? read_callback : write_callback;
+        }
     };
 
     /// No op callback used to add the pipe file descriptor to manage the async_context
@@ -48,13 +66,9 @@ class async_context
         {}
     };
 
-public:
+    using callback_store = std::map<int, socket_ctx>;
 
-    enum event_type
-    {
-        READ = EPOLLIN,
-        WRITE = EPOLLOUT
-    };
+public:
 
     static async_context& instance()
     {
@@ -76,28 +90,70 @@ public:
         std::mutex mut;
         std::unique_lock<std::mutex> lock {mut};
         m_condition.wait(lock, [this]() {
-            return m_store.size() == 1;
+            // Check if callback stores are empty
+            return (m_store.size() == 1);
         });
     }
 
     template<typename CALLBACK_TYPE>
     bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
     {
-        // TODO Prevent older registered callbacks from being overwritten
-        // Instead push all callbacks of the same type into a queue and handle them in the
-        // order they where registered
-        if(const auto [inserted, success] = m_store.insert_or_assign(
-                sock_fd,
-                context_item {epoll_event {}, std::forward<CALLBACK_TYPE>(callback)}
-            ); success)
+        if(const auto it = m_store.find(sock_fd); it != m_store.end())
         {
-            auto& item = inserted->second;
+            auto& item = it->second;
+            item.event.events |= type;
+            item.event.data.fd = sock_fd;
+            item[type] = std::forward<CALLBACK_TYPE>(callback);
+
+            if(::epoll_ctl(m_epfd, EPOLL_CTL_MOD, sock_fd, &(item.event)) == -1)
+            {
+                m_store.erase(it);
+                return false;
+            }
+        }
+        else
+        {
+            auto [insert_it, success] = m_store.emplace(std::make_pair<>(sock_fd, socket_ctx {}));
+            if(!success)
+                return false;
+
+            auto& item = insert_it->second;
             item.event.events = type | EPOLLET;
             item.event.data.fd = sock_fd;
+            item[type] = std::forward<CALLBACK_TYPE>(callback);
+
             if(::epoll_ctl(m_epfd, EPOLL_CTL_ADD, sock_fd, &(item.event)) == -1)
             {
-                m_store.erase(inserted);
+                m_store.erase(it);
                 return false;
+            }
+        }
+
+        // Restart loop with updated fd set
+        const uint8_t control_byte = RELOAD_FD_SET;
+        ::write(m_pipe_fds[1], &control_byte, 1);
+
+        return true;
+    }
+
+    bool remove(const int sock_fd, const event_type type)
+    {
+        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+        {
+            auto& item = it->second;
+            item[type] = std::nullopt;
+
+            item.event.events &= ~type;
+            if(item.event.events == EPOLLET)
+            {
+                if(::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, nullptr) == -1)
+                    return false;
+                m_store.erase(it);
+            }
+            else
+            {
+                if(::epoll_ctl(m_epfd, EPOLL_CTL_MOD, sock_fd, &(item.event)) == -1)
+                    return false;
             }
 
             // Restart loop with updated fd set
@@ -109,38 +165,35 @@ public:
         return false;
     }
 
-    bool remove(const int sock_fd)
+    bool deregister(const int sock_fd)
     {
         if(const auto& it = m_store.find(sock_fd); it != m_store.end())
         {
             if(::epoll_ctl(m_epfd, EPOLL_CTL_DEL, sock_fd, nullptr) == -1)
                 return false;
-
             m_store.erase(it);
-
-            // Restart loop with updated fd set
-            const uint8_t control_byte = RELOAD_FD_SET;
-            ::write(m_pipe_fds[1], &control_byte, 1);
-
-            return true;
         }
+
         return false;
     }
 
-    bool socket_registered(const int sock_fd) const
-    {
-        if(const auto& it = m_store.find(sock_fd); it != m_store.end())
-            return true;
-        else
-            return false;
-    }
+    // bool socket_registered(const int sock_fd, const event_type type) const
+    // {
+    //     if(const auto& it = m_store.find(sock_fd); it != m_store.end())
+    //         return true;
+    //     else
+    //         return false;
+    // }
 
     bool callback_update_socket(const int sock_fd, const base_socket* new_ptr)
     {
         if(const auto& it = m_store.find(sock_fd); it != m_store.end())
         {
             // TODO Check if new_ptr has same type than the old one
-            it->second.callback.reset_socket_ptr(new_ptr);
+            if(it->second.read_callback)
+                it->second.read_callback->reset_socket_ptr(new_ptr);
+            if(it->second.write_callback)
+                it->second.write_callback->reset_socket_ptr(new_ptr);
             return true;
         }
         return false;
@@ -159,11 +212,12 @@ private:
 
         // Add the pipe to the epoll monitoring set
         auto [pipe_item_it, success] = m_store.emplace(m_pipe_fds[0],
-            context_item {epoll_event{}, no_op_callback {}});
+            socket_ctx {epoll_event{}, no_op_callback {}, std::nullopt});
         pipe_item_it->second.event.events = EPOLLIN;
         pipe_item_it->second.event.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_item_it->second.event));
 
+        // Start async loop that manages the callbacks
         m_context_holder = std::async(std::launch::async, &async_context::context_loop, this);
     }
 
@@ -204,23 +258,40 @@ private:
                     if(byte == EXIT_LOOP)
                         return;
                 }
-                else if(ready_set[i].events & EPOLLIN || ready_set[i].events & EPOLLOUT)
+                else if(ready_set[i].events & EPOLLIN)
                 {
                     // Run callback on receiving socket and deregister this socket from context afterwards
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
                         // Get the callback registered for the event and remove the event from the context
-                        m_pool.add_job([this, callback = std::move(ev_it->second.callback)]() {
-                            try {
-                                callback();
-                            } catch(std::runtime_error& rt) {}
+                        m_pool.add_job([this, callback = std::move(ev_it->second.read_callback)]() {
+                            if(callback)
+                                (*callback)();
 
                             if(m_store.size() == 1)
                                 m_condition.notify_one();
                         });
 
-                        this->remove(ev_it->first);
+                        this->remove(ev_it->first, READ);
                     }
+                }
+                else if(ready_set[i].events & EPOLLOUT)
+                {
+                    // Run callback on receiving socket and deregister this socket from context afterwards
+                    if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
+                    {
+                        // Get the callback registered for the event and remove the event from the context
+                        m_pool.add_job([this, callback = std::move(ev_it->second.write_callback)]() {
+                            if(callback)
+                                (*callback)();
+
+                            if(m_store.size() == 1)
+                                m_condition.notify_one();
+                        });
+
+                        this->remove(ev_it->first, WRITE);
+                    }
+
                 }
             }
         }
@@ -232,7 +303,7 @@ private:
 
     std::future<void> m_context_holder {};
 
-    std::map<int, context_item> m_store {};
+    callback_store m_store {};
 
     thread_pool m_pool {};
 

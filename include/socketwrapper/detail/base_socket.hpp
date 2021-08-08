@@ -62,7 +62,7 @@ public:
         if(m_sockfd > 0)
         {
             // TODO only do this when the socket is still in the async context
-            detail::async_context::instance().remove(m_sockfd);
+            detail::async_context::instance().deregister(m_sockfd);
             ::close(m_sockfd);
         }
     }
