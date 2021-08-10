@@ -109,6 +109,33 @@ class udp_socket : public detail::base_socket
         std::function<void(size_t)> m_func;
     };
 
+    template<typename T>
+    class promised_write_callback : public detail::abstract_socket_callback
+    {
+    public:
+        promised_write_callback(const udp_socket<IP_VER>* sock_ptr, std::string_view addr, uint16_t port, span<T> view, std::promise<size_t> promise)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_addr {addr},
+              m_port {port},
+              m_buffer {std::move(view)},
+              m_promise {std::move(promise)}
+        {}
+
+        void operator()() const override
+        {
+            const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(m_addr, m_port, span {m_buffer.get(), m_buffer.size()});
+
+            m_promise.set_value(bytes_written);
+        }
+
+    private:
+        std::string_view m_addr;
+        uint16_ m_port;
+        span<T> m_buffer;
+        mutable std::promise<size_t> m_promise;
+    };
+
 public:
 
     udp_socket(const udp_socket&) = delete;
@@ -191,8 +218,23 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::WRITE,
-            write_callback {this, addr, port, std::move(buffer, std::forward<CALLBACK_TYPE>(callback))}
+            write_callback {this, addr, port, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
+    }
+
+    template<typename T>
+    std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
+    {
+        std::promise<size_t> size_promise;
+        std::future<size_t> size_future = size_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::WRITE,
+            promised_write_callback<T> {this, addr, port, std::move(buffer), std::move(size_promise)}
+        );
+
+        return size_future;
     }
 
     template<typename T>
