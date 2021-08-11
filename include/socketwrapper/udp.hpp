@@ -131,7 +131,7 @@ class udp_socket : public detail::base_socket
 
     private:
         std::string_view m_addr;
-        uint16_ m_port;
+        uint16_t m_port;
         span<T> m_buffer;
         mutable std::promise<size_t> m_promise;
     };
