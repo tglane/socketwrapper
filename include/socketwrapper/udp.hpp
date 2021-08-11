@@ -277,7 +277,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::READ,
-            read_callback {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
+            read_callback<T> {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
@@ -290,7 +290,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::READ,
-            promised_read_callback {this, std::move(buffer), std::move(read_promise)}
+            promised_read_callback<T> {this, std::move(buffer), std::move(read_promise)}
         );
 
         return read_future;
