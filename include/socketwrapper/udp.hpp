@@ -48,13 +48,13 @@ class udp_socket : public detail::base_socket
         void operator()() const override
         {
             const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-            auto [bytes_read, connection] = ptr->read(span {m_buffer.get(), m_buffer.size()});
-            m_func(bytes_read);
+            auto [bytes_read, conn_info] = ptr->read(span {m_buffer.get(), m_buffer.size()});
+            m_func(bytes_read, conn_info);
         }
 
     private:
         span<T> m_buffer;
-        std::function<void(size_t)> m_func;
+        std::function<void(size_t, connection_info)> m_func;
     };
 
     template<typename T>
@@ -218,7 +218,7 @@ public:
         detail::async_context::instance().add(
             this->m_sockfd,
             detail::async_context::WRITE,
-            write_callback {this, addr, port, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
+            write_callback<T> {this, addr, port, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
     }
 
