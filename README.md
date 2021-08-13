@@ -67,6 +67,9 @@ Methods:
     
     // Immediately return and call the callback function after there is data available.
     void async_read(net::span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+
+    // Immediately return and get a future to get the number of elements received at a later timepoint
+    std::future<size_t> promised_read(net::span<T>&& buffer) const;
     ```
 - Sending:
     ```cpp
@@ -75,6 +78,9 @@ Methods:
     
     // Immediately returns and invokes the callback after all in the given buffer is send. Caller is responsible to keep the data the span shows alive.
     void async_send(net::span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+
+    // Immediately return and get a future to get the number of elements written at a later point in time
+    std::future<size_t> promised_send(net::span<T>&& buffer) const;
     ```
 - Shorthand identifier:
     ```cpp
@@ -102,6 +108,9 @@ Methods:
     
     // Immediately returns and invokes the callback when a new connection is established
     void async_accept(CALLBACK_TYPE&& callback) const;
+
+    // Immediately return and get a future to access the accepted socket at a later point in time
+    std::future<net::tcp_connection<IP_VER>> promised_accept() const;
     ```
 - Shorthand identifier:
     ```cpp
@@ -167,6 +176,9 @@ Methods:
     
     // Immediately return and invoke the callback when data is read into the buffer. Caller is responsible to keep the underlying buffer alive.
     void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+
+    // Immediately return and get a future to get the number of elements read and the connection info of the sender at a later point in time
+    std::future<size_t, connection_info> promised_read(span<T>&& buffer) const;
     ```
 - Writing:
     ```cpp
@@ -175,6 +187,9 @@ Methods:
     
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+
+    // Immediately return and get a future to get the number of elements written at a later point in time
+    std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
     ```
 - Shorthand identifier:
     ```cpp
@@ -201,4 +216,16 @@ All of the following functions live in the namespace `net`
     // Change byte order from big-endian to little-endian
     template<typename T>
     constexpr inline T to_little_endian(T big);
+    ```
+- Connection info for UDP peers:
+    ```cpp
+    // Struct contains information of a peer that send data to a socket. Returned from udp_sockets read functions.
+    struct connection_info
+    {
+        // IP address of the peer
+        std::string addr;
+
+        // Remote port
+        uint16_t port;
+    };
     ```

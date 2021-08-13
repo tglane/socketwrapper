@@ -10,6 +10,7 @@
 #include <string_view>
 #include <variant>
 #include <optional>
+#include <future>
 #include <mutex>
 #include <condition_variable>
 #include <stdexcept>
@@ -56,6 +57,30 @@ protected:
     };
 
     template<typename T>
+    class promised_read_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        promised_read_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, std::promise<size_t> promise)
+            : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+              m_buffer {std::move(view)},
+              m_promise {std::move(promise)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_connection<IP_VER>* ptr = static_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_read = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
+
+            m_promise.set_value(bytes_read);
+        }
+
+    private:
+        span<T> m_buffer;
+        mutable std::promise<size_t> m_promise;
+    };
+
+    template<typename T>
     class write_callback : public detail::abstract_socket_callback
     {
     public:
@@ -76,6 +101,29 @@ protected:
     private:
         span<T> m_buffer;
         std::function<void(size_t)> m_func;
+    };
+
+    template<typename T>
+    class promised_write_callback : public detail::abstract_socket_callback
+    {
+    public:
+        promised_write_callback(const tcp_connection<IP_VER>* sock_ptr, span<T> view, std::promise<size_t> promise)
+            : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+              m_buffer {std::move(view)},
+              m_promise {std::move(promise)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_connection<IP_VER>* ptr = static_cast<const tcp_connection<IP_VER>*>(this->socket_ptr);
+            size_t bytes_written = ptr->send(span<T> {m_buffer.get(), m_buffer.size()});
+
+            m_promise.set_value(bytes_written);
+        }
+
+    private:
+        span<T> m_buffer;
+        mutable std::promise<size_t> m_promise;
     };
 
 public:
@@ -172,6 +220,21 @@ public:
     }
 
     template<typename T>
+    std::future<size_t> promised_send(span<T>&& buffer) const
+    {
+        std::promise<size_t> size_promise;
+        std::future<size_t> size_future = size_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::WRITE,
+            promised_write_callback<T> {this, std::move(buffer), std::move(size_promise)}
+        );
+
+        return size_future;
+    }
+
+    template<typename T>
     size_t read(span<T>&& buffer) const
     {
         if(m_connection == connection_status::closed)
@@ -220,6 +283,21 @@ public:
             detail::async_context::READ,
             read_callback<T> {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)}
         );
+    }
+
+    template<typename T>
+    std::future<size_t> promised_read(span<T>&& buffer) const
+    {
+        std::promise<size_t> size_promise;
+        std::future<size_t> size_future = size_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            promised_read_callback<T> {this, std::move(buffer), std::move(size_promise)}
+        );
+
+        return size_future;
     }
 
 protected:
@@ -288,6 +366,25 @@ class tcp_acceptor : public detail::base_socket
 
     private:
         std::function<void(tcp_connection<IP_VER>&&)> m_func;
+    };
+
+    class promised_accept_callback : public detail::abstract_socket_callback
+    {
+    public:
+
+        promised_accept_callback(const tcp_acceptor<IP_VER>* sock_ptr, std::promise<tcp_connection<IP_VER>> promise)
+            : detail::abstract_socket_callback {sock_ptr},
+              m_promise {std::move(promise)}
+        {}
+
+        void operator()() const override
+        {
+            const tcp_acceptor<IP_VER>* ptr = static_cast<const tcp_acceptor<IP_VER>*>(this->socket_ptr);
+            m_promise.set_value(ptr->accept());
+        }
+
+    private:
+        mutable std::promise<tcp_connection<IP_VER>> m_promise;
     };
 
 public:
@@ -393,6 +490,20 @@ public:
             detail::async_context::READ,
             accept_callback {this, std::forward<CALLBACK_TYPE>(callback)}
         );
+    }
+
+    std::future<tcp_connection<IP_VER>> promised_accept() const
+    {
+        std::promise<tcp_connection<IP_VER>> acc_promise;
+        std::future<tcp_connection<IP_VER>> acc_future = acc_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            promised_accept_callback {this, std::move(acc_promise)}
+        );
+
+        return acc_future;
     }
 
 protected:
