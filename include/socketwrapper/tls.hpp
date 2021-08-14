@@ -121,6 +121,64 @@ public:
         }
     }
 
+    template<typename T, typename CALLBACK_TYPE>
+    void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::WRITE,
+            detail::stream_write_callback<tls_connection<IP_VER>, T> {
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
+            }
+        );
+    }
+
+    template<typename T>
+    std::future<size_t> promised_send(span<T>&& buffer) const
+    {
+        std::promise<size_t> size_promise;
+        std::future<size_t> size_future = size_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::WRITE,
+            detail::stream_promised_write_callback<tls_connection<IP_VER>, T> {
+                this, std::move(buffer), std::move(size_promise)
+            }
+        );
+
+        return size_future;
+    }
+
+    template<typename T, typename CALLBACK_TYPE>
+    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    {
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            detail::stream_read_callback<tls_connection<IP_VER>, T> {
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
+            }
+        );
+    }
+
+    template<typename T>
+    std::future<size_t> promised_read(span<T>&& buffer) const
+    {
+        std::promise<size_t> size_promise;
+        std::future<size_t> size_future = size_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            detail::stream_promised_read_callback<tls_connection<IP_VER>, T> {
+                this, std::move(buffer), std::move(size_promise)
+            }
+        );
+
+        return size_future;
+    }
+
 private:
 
     tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
@@ -278,6 +336,34 @@ public:
             return std::optional<tls_connection<IP_VER>> {accept()};
         else
             return std::nullopt;
+    }
+
+    template<typename CALLBACK_TYPE>
+    void async_accept(CALLBACK_TYPE&& callback) const
+    {
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            detail::stream_accept_callback<tls_acceptor<IP_VER>> {
+                this, std::forward<CALLBACK_TYPE>(callback)
+            }
+        );
+    }
+
+    std::future<tls_connection<IP_VER>> promised_accept() const
+    {
+        std::promise<tls_connection<IP_VER>> acc_promise;
+        std::future<tls_connection<IP_VER>> acc_future = acc_promise.get_future();
+
+        detail::async_context::instance().add(
+            this->m_sockfd,
+            detail::async_context::READ,
+            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>> {
+                this, std::move(acc_promise)
+            }
+        );
+
+        return acc_future;
     }
 
 private:

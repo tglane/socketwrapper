@@ -1,7 +1,11 @@
 #ifndef SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 #define SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 
+#include "../span.hpp"
+
 #include <memory>
+#include <future>
+#include <functional>
 
 namespace net {
 
@@ -59,6 +63,143 @@ public:
 private:
 
     std::unique_ptr<abstract_socket_callback> m_ptr;
+};
+
+template<typename SOCK_TYPE, typename T>
+class stream_read_callback : public detail::abstract_socket_callback
+{
+public:
+
+    template<typename USER_CALLBACK>
+    stream_read_callback(const SOCK_TYPE* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+        : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+          m_buffer {std::move(view)},
+          m_func {std::forward<USER_CALLBACK>(cb)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        size_t bytes_read = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
+        m_func(bytes_read);
+    }
+
+private:
+    span<T> m_buffer;
+    std::function<void(size_t)> m_func;
+};
+
+template<typename SOCK_TYPE, typename T>
+class stream_promised_read_callback : public detail::abstract_socket_callback
+{
+public:
+
+    stream_promised_read_callback(const SOCK_TYPE* sock_ptr, span<T> view, std::promise<size_t> promise)
+        : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+          m_buffer {std::move(view)},
+          m_promise {std::move(promise)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        size_t bytes_read = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
+
+        m_promise.set_value(bytes_read);
+    }
+
+private:
+    span<T> m_buffer;
+    mutable std::promise<size_t> m_promise;
+};
+
+template<typename SOCK_TYPE, typename T>
+class stream_write_callback : public detail::abstract_socket_callback
+{
+public:
+    template<typename USER_CALLBACK>
+    stream_write_callback(const SOCK_TYPE* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+        : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+          m_buffer {std::move(view)},
+          m_func {std::forward<USER_CALLBACK>(cb)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        size_t bytes_written = ptr->send(span<T> {m_buffer.get(), m_buffer.size()});
+        m_func(bytes_written);
+    }
+
+private:
+    span<T> m_buffer;
+    std::function<void(size_t)> m_func;
+};
+
+template<typename SOCK_TYPE, typename T>
+class stream_promised_write_callback : public detail::abstract_socket_callback
+{
+public:
+    stream_promised_write_callback(const SOCK_TYPE* sock_ptr, span<T> view, std::promise<size_t> promise)
+        : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)},
+          m_buffer {std::move(view)},
+          m_promise {std::move(promise)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        size_t bytes_written = ptr->send(span<T> {m_buffer.get(), m_buffer.size()});
+
+        m_promise.set_value(bytes_written);
+    }
+
+private:
+    span<T> m_buffer;
+    mutable std::promise<size_t> m_promise;
+};
+
+template<typename SOCK_TYPE>
+class stream_accept_callback : public detail::abstract_socket_callback
+{
+    using ACCEPT_SOCK_TYPE = decltype(std::declval<SOCK_TYPE>().accept());
+public:
+
+    template<typename USER_CALLBACK>
+    stream_accept_callback(const SOCK_TYPE* sock_ptr, USER_CALLBACK&& cb)
+        : detail::abstract_socket_callback {sock_ptr},
+          m_func {std::forward<USER_CALLBACK>(cb)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        m_func(ptr->accept());
+    }
+
+private:
+    std::function<void(ACCEPT_SOCK_TYPE&&)> m_func;
+};
+
+template<typename SOCK_TYPE>
+class stream_promised_accept_callback : public detail::abstract_socket_callback
+{
+    using ACCEPT_SOCK_TYPE = decltype(std::declval<SOCK_TYPE>().accept());
+public:
+
+    stream_promised_accept_callback(const SOCK_TYPE* sock_ptr, std::promise<ACCEPT_SOCK_TYPE> promise)
+        : detail::abstract_socket_callback {sock_ptr},
+          m_promise {std::move(promise)}
+    {}
+
+    void operator()() const override
+    {
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        m_promise.set_value(ptr->accept());
+    }
+
+private:
+    mutable std::promise<ACCEPT_SOCK_TYPE> m_promise;
 };
 
 

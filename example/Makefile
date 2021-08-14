@@ -13,6 +13,10 @@ all: tls tcp async_tcp udp async_udp span
 tls: tls_example.cpp
 	$(cc) -o tls_example $^ $(CFLAGS) $(LDFLAGS) -lssl -lcrypto
 
+PHONY: async_tls
+async_tls: async_tls_example.cpp
+	$(cc) -o async_tls_example $^ $(CFLAGS) $(LDFLAGS) -lssl -lcrypto
+
 .PHONY: tcp
 tcp: tcp_example.cpp
 	$(cc) -o tcp_example $^ $(CFLAGS) $(LDFLAGS)
@@ -36,6 +40,7 @@ span: span_example.cpp
 .PHONY: clean
 clean:
 	rm tls_example
+	rm async_tls_example
 	rm tcp_example
 	rm async_tcp_example
 	rm udp_example
