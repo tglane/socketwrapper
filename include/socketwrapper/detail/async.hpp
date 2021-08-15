@@ -32,7 +32,7 @@ public:
 
 private:
 
-    enum context_control
+    enum context_control : uint8_t
     {
         EXIT_LOOP = 1,
         RELOAD_FD_SET = 2
@@ -232,7 +232,7 @@ private:
     ~async_context()
     {
         // Send stop signal to epoll loop to exit background task
-        const uint8_t stop_byte = EXIT_LOOP;
+        uint8_t stop_byte = EXIT_LOOP;
         ::write(m_pipe_fds[1], &stop_byte, 1);
 
         m_context_holder.get();
