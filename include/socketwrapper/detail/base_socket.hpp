@@ -57,7 +57,7 @@ public:
 #endif
     }
 
-    ~base_socket()
+    virtual ~base_socket()
     {
         if(m_sockfd > 0)
         {

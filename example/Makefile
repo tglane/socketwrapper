@@ -1,4 +1,5 @@
-cc = g++
+#cc = g++
+cc = clang++
 
 CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic
 LDFLAGS = -lpthread
