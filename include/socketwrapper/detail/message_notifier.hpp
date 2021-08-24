@@ -2,11 +2,11 @@
 #define SOCKETWRAPPER_NET_INTERNAL_MESSAGE_NOTIFIER_HPP
 
 #include <array>
-#include <map>
 #include <future>
+#include <map>
 
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 
 namespace net {
 
@@ -16,7 +16,6 @@ namespace detail {
 class message_notifier
 {
 public:
-
     message_notifier(const message_notifier&) = delete;
     message_notifier& operator=(const message_notifier&) = delete;
     message_notifier(message_notifier&&) = delete;
@@ -30,7 +29,9 @@ public:
 
     bool add(int sock_fd, std::condition_variable* cv)
     {
-        if(auto [inserted, success] = m_store.emplace(sock_fd, std::pair<std::condition_variable*, epoll_event> {cv, epoll_event {}}); success)
+        if(auto [inserted, success] =
+                m_store.emplace(sock_fd, std::pair<std::condition_variable*, epoll_event> {cv, epoll_event {}});
+            success)
         {
             auto& ev = inserted->second.second;
 
@@ -56,7 +57,6 @@ public:
     }
 
 private:
-
     message_notifier()
     {
         if(m_epfd = ::epoll_create(1); m_epfd == -1)
@@ -71,29 +71,31 @@ private:
         m_pipe_event.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &m_pipe_event);
 
-        m_future = std::async(std::launch::async, [this]() {
-
-            std::array<epoll_event, 64> ready_set;
-
-            while(true)
+        m_future = std::async(std::launch::async,
+            [this]()
             {
-                int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 100);
-                for(int i = 0; i < num_ready; ++i)
+                std::array<epoll_event, 64> ready_set;
+
+                while(true)
                 {
-                    if(ready_set[i].data.fd == this->m_pipe_fds[0])
+                    int num_ready = ::epoll_wait(this->m_epfd, ready_set.data(), 64, 100);
+                    for(int i = 0; i < num_ready; ++i)
                     {
-                        // Stop signal via destructor
-                        return;
-                    }
-                    else if(ready_set[i].events & EPOLLIN)
-                    {
-                        // Data ready to read on socket -> notify
-                        if(const auto& it = this->m_store.find(ready_set[i].data.fd); it != this->m_store.end() && it->second.first != nullptr)
-                            it->second.first->notify_one();
+                        if(ready_set[i].data.fd == this->m_pipe_fds[0])
+                        {
+                            // Stop signal via destructor
+                            return;
+                        }
+                        else if(ready_set[i].events & EPOLLIN)
+                        {
+                            // Data ready to read on socket -> notify
+                            if(const auto& it = this->m_store.find(ready_set[i].data.fd);
+                                it != this->m_store.end() && it->second.first != nullptr)
+                                it->second.first->notify_one();
+                        }
                     }
                 }
-            }
-        });
+            });
     }
 
     ~message_notifier()
@@ -116,7 +118,6 @@ private:
     std::future<void> m_future;
 
     std::map<int, std::pair<std::condition_variable*, epoll_event>> m_store;
-
 };
 
 } // namespace detail

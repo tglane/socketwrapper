@@ -1,19 +1,19 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 
-#include <memory>
-#include <fstream>
 #include <array>
-#include <string_view>
-#include <variant>
 #include <charconv>
-#include <stdexcept>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
-#include <csignal>
+#include <fstream>
+#include <memory>
+#include <stdexcept>
+#include <string_view>
+#include <variant>
 
-#include <netdb.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 namespace net {
 
@@ -38,8 +38,9 @@ struct connection_info
 
 namespace detail {
 
-template<ip_version IP_VER>
-inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
+template <ip_version IP_VER>
+inline int resolve_hostname(
+    std::string_view host_name, uint16_t port, socket_type type, std::variant<sockaddr_in, sockaddr_in6>& addr_out)
 {
     int ret;
 
@@ -61,7 +62,8 @@ inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_ty
 
     if(ret == 0)
     {
-        if constexpr(IP_VER == ip_version::v4) {
+        if constexpr(IP_VER == ip_version::v4)
+        {
             addr_out = *reinterpret_cast<sockaddr_in*>(resultlist_owner->ai_addr);
         }
         else if constexpr(IP_VER == ip_version::v6)
@@ -73,7 +75,7 @@ inline int resolve_hostname(std::string_view host_name, uint16_t port, socket_ty
     return ret;
 }
 
-template<ip_version IP_VER>
+template <ip_version IP_VER>
 inline connection_info resolve_addrinfo(sockaddr* addr_in)
 {
     connection_info peer {};
@@ -83,7 +85,9 @@ inline connection_info resolve_addrinfo(sockaddr* addr_in)
         std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
         port_str.resize(6);
 
-        if(inet_ntop(AF_INET, &(reinterpret_cast<sockaddr_in*>(addr_in)->sin_addr), peer.addr.data(), peer.addr.capacity()) == nullptr)
+        if(inet_ntop(
+               AF_INET, &(reinterpret_cast<sockaddr_in*>(addr_in)->sin_addr), peer.addr.data(), peer.addr.capacity()) ==
+            nullptr)
             throw std::runtime_error {"Failed to resolve addrinfo."};
         peer.port = ntohs(reinterpret_cast<sockaddr_in*>(addr_in)->sin_port);
 
@@ -95,7 +99,10 @@ inline connection_info resolve_addrinfo(sockaddr* addr_in)
         std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
         port_str.resize(6);
 
-        if(inet_ntop(AF_INET, &(reinterpret_cast<sockaddr_in6*>(addr_in)->sin6_addr), peer.addr.data(), peer.addr.capacity()) == nullptr)
+        if(inet_ntop(AF_INET,
+               &(reinterpret_cast<sockaddr_in6*>(addr_in)->sin6_addr),
+               peer.addr.data(),
+               peer.addr.capacity()) == nullptr)
             throw std::runtime_error {"Failed to resolve addrinfo."};
         peer.port = ntohs(reinterpret_cast<sockaddr_in6*>(addr_in)->sin6_port);
 
@@ -117,7 +124,7 @@ inline std::string read_file(std::string_view path)
     out.reserve(ifs.tellg());
     ifs.seekg(0, std::ios::beg);
 
-    out.assign({std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}});
+    out.assign({std::istreambuf_iterator<char> {ifs}, std::istreambuf_iterator<char> {}});
     return out;
 }
 
@@ -132,10 +139,7 @@ inline void init_socket_system()
     }
 }
 
-
-
-
-template<typename T>
+template <typename T>
 constexpr inline T swap_byteorder(T in)
 {
     T out;

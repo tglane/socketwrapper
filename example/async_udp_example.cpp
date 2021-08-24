@@ -1,7 +1,7 @@
 #include "../include/socketwrapper/udp.hpp"
+#include <cstring>
 #include <iostream>
 #include <thread>
-#include <cstring>
 
 int main(int argc, char** argv)
 {
@@ -14,26 +14,37 @@ int main(int argc, char** argv)
         net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
 
         std::array<char, 1024> buffer;
-        sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes, net::connection_info) {
-            std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+        sock.async_read(net::span {buffer},
+            [&sock, &buffer](size_t bytes, net::connection_info)
+            {
+                std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
 
-            sock.async_read(net::span {buffer}, [&buffer](size_t bytes, net::connection_info) {
-                std::cout << "Inner received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
-            });
-        });
-
-        sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes, net::connection_info) {
-            std::cout << "UPDATED CALLBACK TIME!!\n";
-            std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
-
-            sock.async_read(net::span {buffer}, [&sock, &buffer](size_t bytes, net::connection_info) {
-                std::cout << "Inner received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
-
-                sock.async_read(net::span {buffer}, [&buffer](size_t bytes, net::connection_info) {
-                    std::cout << "Nested received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+                sock.async_read(net::span {buffer},
+                    [&buffer](size_t bytes, net::connection_info) {
+                        std::cout << "Inner received " << bytes << " bytes. -- "
+                                  << std::string_view {buffer.data(), bytes} << '\n';
                     });
             });
-        });
+
+        sock.async_read(net::span {buffer},
+            [&sock, &buffer](size_t bytes, net::connection_info)
+            {
+                std::cout << "UPDATED CALLBACK TIME!!\n";
+                std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
+
+                sock.async_read(net::span {buffer},
+                    [&sock, &buffer](size_t bytes, net::connection_info)
+                    {
+                        std::cout << "Inner received " << bytes << " bytes. -- "
+                                  << std::string_view {buffer.data(), bytes} << '\n';
+
+                        sock.async_read(net::span {buffer},
+                            [&buffer](size_t bytes, net::connection_info) {
+                                std::cout << "Nested received " << bytes << " bytes. -- "
+                                          << std::string_view {buffer.data(), bytes} << '\n';
+                            });
+                    });
+            });
 
         std::cout << "Waiting ...\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));

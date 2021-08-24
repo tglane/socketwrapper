@@ -1,7 +1,7 @@
 #include "../include/socketwrapper/udp.hpp"
+#include <cstring>
 #include <iostream>
 #include <thread>
-#include <cstring>
 
 int main(int argc, char** argv)
 {
@@ -17,14 +17,16 @@ int main(int argc, char** argv)
         // net::connection_info peer;
         // size_t bytes_read = sock.read(net::span {buffer}, peer);
         auto [bytes_read, peer] = sock.read(net::span {buffer});
-        std::cout << "Peer addr: " << peer.addr << "; Peer port: " << peer.port << "; Bytes read: " << bytes_read << '\n';
+        std::cout << "Peer addr: " << peer.addr << "; Peer port: " << peer.port << "; Bytes read: " << bytes_read
+                  << '\n';
         std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
 
         std::optional<net::connection_info> peer_opt;
         std::tie(bytes_read, peer_opt) = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
         if(peer_opt)
         {
-            std::cout << "Peer addr: " << peer_opt->addr << "; Peer port: " << peer_opt->port << "; Bytes read: " << bytes_read << '\n';
+            std::cout << "Peer addr: " << peer_opt->addr << "; Peer port: " << peer_opt->port
+                      << "; Bytes read: " << bytes_read << '\n';
             std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
         }
         else

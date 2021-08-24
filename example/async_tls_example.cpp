@@ -1,10 +1,10 @@
 #include "../include/socketwrapper/tls.hpp"
 #include "../include/socketwrapper/utility.hpp"
+#include <cstring>
 #include <iostream>
 #include <thread>
-#include <cstring>
 
-int main(int argc, char**argv)
+int main(int argc, char** argv)
 {
     if(argc <= 1)
         return 0;
@@ -18,10 +18,10 @@ int main(int argc, char**argv)
         std::cout << "Got future socket\n";
         auto conn = sock_fut.get();
         std::array<char, 1024> buffer;
-        conn.async_read(net::span {buffer}, [&buffer](size_t br) {
-            std::cout << "Received " << br << " bytes -- "
-                << std::string_view {buffer.data(), br} << '\n';
-        });
+        conn.async_read(net::span {buffer},
+            [&buffer](size_t br) {
+                std::cout << "Received " << br << " bytes -- " << std::string_view {buffer.data(), br} << '\n';
+            });
 
         net::async_run();
     }

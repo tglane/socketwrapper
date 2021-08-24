@@ -5,15 +5,15 @@
 #include "threadpool.hpp"
 
 #include <array>
-#include <map>
-#include <optional>
-#include <future>
-#include <mutex>
-#include <condition_variable>
 #include <cassert>
+#include <condition_variable>
+#include <future>
+#include <map>
+#include <mutex>
+#include <optional>
 
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 
 namespace net {
 
@@ -23,7 +23,6 @@ namespace detail {
 class async_context
 {
 public:
-
     enum event_type
     {
         READ = EPOLLIN,
@@ -31,7 +30,6 @@ public:
     };
 
 private:
-
     enum context_control : uint8_t
     {
         EXIT_LOOP = 1,
@@ -74,7 +72,6 @@ private:
     using callback_store = std::map<int, socket_ctx>;
 
 public:
-
     static async_context& instance()
     {
         static async_context handler;
@@ -94,13 +91,15 @@ public:
         // Wait until the handle store is empty. Condition variable notified in remove(...)
         std::mutex mut;
         std::unique_lock<std::mutex> lock {mut};
-        m_condition.wait(lock, [this]() {
-            // Check if callback stores are empty
-            return (m_store.size() == 1);
-        });
+        m_condition.wait(lock,
+            [this]()
+            {
+                // Check if callback stores are empty
+                return (m_store.size() == 1);
+            });
     }
 
-    template<typename CALLBACK_TYPE>
+    template <typename CALLBACK_TYPE>
     bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
     {
         if(const auto it = m_store.find(sock_fd); it != m_store.end())
@@ -208,7 +207,6 @@ public:
     }
 
 private:
-
     async_context()
     {
         if(m_epfd = ::epoll_create(1); m_epfd == -1)
@@ -219,8 +217,8 @@ private:
             throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
 
         // Add the pipe to the epoll monitoring set
-        auto [pipe_item_it, success] = m_store.emplace(m_pipe_fds[0],
-            socket_ctx {epoll_event{}, no_op_callback {}, std::nullopt});
+        auto [pipe_item_it, success] =
+            m_store.emplace(m_pipe_fds[0], socket_ctx {epoll_event {}, no_op_callback {}, std::nullopt});
         pipe_item_it->second.event.events = EPOLLIN;
         pipe_item_it->second.event.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_item_it->second.event));
@@ -243,7 +241,7 @@ private:
 
         // Stopping thread pool results in blocking until all running callbacks are completed
         if(m_pool.running())
-             m_pool.stop();
+            m_pool.stop();
     }
 
     void context_loop()
@@ -272,13 +270,15 @@ private:
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
                         // Get the callback registered for the event and remove the event from the context
-                        m_pool.add_job([this, callback = std::move(ev_it->second.read_callback)]() {
-                            if(callback)
-                                (*callback)();
+                        m_pool.add_job(
+                            [this, callback = std::move(ev_it->second.read_callback)]()
+                            {
+                                if(callback)
+                                    (*callback)();
 
-                            if(m_store.size() == 1)
-                                m_condition.notify_one();
-                        });
+                                if(m_store.size() == 1)
+                                    m_condition.notify_one();
+                            });
 
                         this->remove(ev_it->first, READ);
                     }
@@ -289,17 +289,18 @@ private:
                     if(const auto& ev_it = m_store.find(ready_set[i].data.fd); ev_it != m_store.end())
                     {
                         // Get the callback registered for the event and remove the event from the context
-                        m_pool.add_job([this, callback = std::move(ev_it->second.write_callback)]() {
-                            if(callback)
-                                (*callback)();
+                        m_pool.add_job(
+                            [this, callback = std::move(ev_it->second.write_callback)]()
+                            {
+                                if(callback)
+                                    (*callback)();
 
-                            if(m_store.size() == 1)
-                                m_condition.notify_one();
-                        });
+                                if(m_store.size() == 1)
+                                    m_condition.notify_one();
+                            });
 
                         this->remove(ev_it->first, WRITE);
                     }
-
                 }
             }
         }
@@ -316,10 +317,9 @@ private:
     thread_pool m_pool {};
 
     std::condition_variable m_condition;
-
 };
 
-} // namespace async
+} // namespace detail
 
 } // namespace net
 
