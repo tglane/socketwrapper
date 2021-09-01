@@ -3,16 +3,16 @@
 
 #include "tcp.hpp"
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <mutex>
-#include <condition_variable>
-#include <stdexcept>
 
 #include <netinet/in.h>
-#include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 namespace net {
 
@@ -35,9 +35,12 @@ inline void init_ssl_system()
 
 inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view cert, std::string_view key, bool server)
 {
-    ctx = std::shared_ptr<SSL_CTX>(SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()), [](SSL_CTX* ctx) {
-        if(ctx) SSL_CTX_free(ctx);
-    });
+    ctx = std::shared_ptr<SSL_CTX>(SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()),
+        [](SSL_CTX* ctx)
+        {
+            if(ctx)
+                SSL_CTX_free(ctx);
+        });
     if(!ctx)
         throw std::runtime_error {"Failed to create TLS context."};
 
@@ -52,11 +55,10 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
 
 } // namespace detail
 
-template<ip_version IP_VER>
+template <ip_version IP_VER>
 class tls_connection : public tcp_connection<IP_VER>
 {
 public:
-
     tls_connection() = delete;
     tls_connection(const tls_connection&) = delete;
     tls_connection& operator=(const tls_connection&) = delete;
@@ -90,9 +92,9 @@ public:
     }
 
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
-        : tcp_connection<IP_VER> {conn_addr, port},
-          m_certificate {detail::read_file(cert_path)},
-          m_private_key {detail::read_file(key_path)}
+        : tcp_connection<IP_VER> {conn_addr, port}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -112,7 +114,7 @@ public:
         }
     }
 
-   ~tls_connection()
+    ~tls_connection()
     {
         if(m_ssl != nullptr)
         {
@@ -121,68 +123,56 @@ public:
         }
     }
 
-    template<typename T, typename CALLBACK_TYPE>
+    template <typename T, typename CALLBACK_TYPE>
     void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
             detail::stream_write_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
     }
 
-    template<typename T>
+    template <typename T>
     std::future<size_t> promised_send(span<T>&& buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
             detail::stream_promised_write_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)
-            }
-        );
+                this, std::move(buffer), std::move(size_promise)});
 
         return size_future;
     }
 
-    template<typename T, typename CALLBACK_TYPE>
+    template <typename T, typename CALLBACK_TYPE>
     void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
             detail::stream_read_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
     }
 
-    template<typename T>
+    template <typename T>
     std::future<size_t> promised_read(span<T>&& buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
             detail::stream_promised_read_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)
-            }
-        );
+                this, std::move(buffer), std::move(size_promise)});
 
         return size_future;
     }
 
 private:
-
     tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
-        : tcp_connection<IP_VER> {socketfd, peer_addr}, m_context {std::move(context)}
+        : tcp_connection<IP_VER> {socketfd, peer_addr}
+        , m_context {std::move(context)}
     {
         static_assert(IP_VER == ip_version::v4);
 
@@ -199,7 +189,8 @@ private:
     }
 
     tls_connection(int socketfd, const sockaddr_in6& peer_addr, std::shared_ptr<SSL_CTX> context)
-        : tcp_connection<IP_VER> {socketfd, peer_addr}, m_context {std::move(context)}
+        : tcp_connection<IP_VER> {socketfd, peer_addr}
+        , m_context {std::move(context)}
     {
         static_assert(IP_VER == ip_version::v6);
 
@@ -227,7 +218,7 @@ private:
     std::string m_certificate;
     std::string m_private_key;
 
-    template<ip_version>
+    template <ip_version>
     friend class tls_acceptor;
 };
 
@@ -235,12 +226,10 @@ private:
 using tls_connection_v4 = tls_connection<ip_version::v4>;
 using tls_connection_v6 = tls_connection<ip_version::v6>;
 
-
-template<ip_version IP_VER>
+template <ip_version IP_VER>
 class tls_acceptor : public tcp_acceptor<IP_VER>
 {
 public:
-
     tls_acceptor() = delete;
     tls_acceptor(const tls_acceptor&) = delete;
     tls_acceptor operator=(const tls_acceptor&) = delete;
@@ -273,10 +262,11 @@ public:
         return *this;
     }
 
-    tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5)
-        : tcp_acceptor<IP_VER> {bind_addr, port, backlog},
-          m_certificate {detail::read_file(cert_path)},
-          m_private_key {detail::read_file(key_path)}
+    tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port,
+        size_t backlog = 5)
+        : tcp_acceptor<IP_VER> {bind_addr, port, backlog}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -338,16 +328,12 @@ public:
             return std::nullopt;
     }
 
-    template<typename CALLBACK_TYPE>
+    template <typename CALLBACK_TYPE>
     void async_accept(CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_accept_callback<tls_acceptor<IP_VER>> {
-                this, std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+            detail::stream_accept_callback<tls_acceptor<IP_VER>> {this, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     std::future<tls_connection<IP_VER>> promised_accept() const
@@ -355,31 +341,24 @@ public:
         std::promise<tls_connection<IP_VER>> acc_promise;
         std::future<tls_connection<IP_VER>> acc_future = acc_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>> {
-                this, std::move(acc_promise)
-            }
-        );
+            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>> {this, std::move(acc_promise)});
 
         return acc_future;
     }
 
 private:
-
     std::string m_certificate;
     std::string m_private_key;
 
     std::shared_ptr<SSL_CTX> m_context;
     SSL* m_ssl = nullptr;
-
 };
 
 /// Using declarations for shorthand usage of templated tls_acceptor types
 using tls_acceptor_v4 = tls_acceptor<ip_version::v4>;
 using tls_acceptor_v6 = tls_acceptor<ip_version::v6>;
-
 
 } // namespace net
 

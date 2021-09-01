@@ -1,7 +1,7 @@
 #include "../include/socketwrapper/span.hpp"
+#include <iostream>
 #include <string>
 #include <vector>
-#include <iostream>
 
 int main()
 {

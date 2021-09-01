@@ -1,10 +1,10 @@
 #include "../include/socketwrapper/tcp.hpp"
 
+#include <cstring>
 #include <iostream>
 #include <thread>
-#include <cstring>
 
-int main(int argc, char**argv)
+int main(int argc, char** argv)
 {
     if(argc <= 1)
         return 0;
@@ -28,12 +28,10 @@ int main(int argc, char**argv)
 
         std::cout << "Wait for data ...\n";
         size_t bytes_read = sock.read(net::span {buffer});
-        std::cout << "Received: " << bytes_read << " - "
-            << std::string_view {buffer.data(), bytes_read} << '\n';
+        std::cout << "Received: " << bytes_read << " - " << std::string_view {buffer.data(), bytes_read} << '\n';
 
         bytes_read = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
-        std::cout << "Received: " << bytes_read << " - "
-            << std::string_view {buffer.data(), bytes_read} << '\n';
+        std::cout << "Received: " << bytes_read << " - " << std::string_view {buffer.data(), bytes_read} << '\n';
     }
     else if(strcmp(argv[1], "s") == 0)
     {

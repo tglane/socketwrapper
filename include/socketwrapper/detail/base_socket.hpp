@@ -1,8 +1,8 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
-#include "utility.hpp"
 #include "async.hpp"
+#include "utility.hpp"
 
 #include "unistd.h"
 
@@ -14,7 +14,6 @@ namespace detail {
 class base_socket
 {
 public:
-
     base_socket(const base_socket&) = delete;
     base_socket& operator=(const base_socket&) = delete;
 
@@ -25,7 +24,8 @@ public:
 
     base_socket& operator=(base_socket&& rhs) noexcept
     {
-        // Provide custom move assginment operator to prevent the moved socket from closing the underlying file descriptor
+        // Provide custom move assginment operator to prevent the moved socket from closing the underlying file
+        // descriptor
         if(this != &rhs)
         {
             m_sockfd = rhs.m_sockfd;
@@ -39,8 +39,8 @@ public:
     }
 
     base_socket(socket_type type, ip_version ip_ver)
-        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(type), 0)},
-          m_family {ip_ver}
+        : m_sockfd {::socket(static_cast<uint8_t>(ip_ver), static_cast<uint8_t>(type), 0)}
+        , m_family {ip_ver}
     {
         detail::init_socket_system();
 
@@ -78,10 +78,9 @@ public:
     }
 
 protected:
-
     base_socket(int sockfd, ip_version ip_ver)
-        : m_sockfd {sockfd},
-          m_family {ip_ver}
+        : m_sockfd {sockfd}
+        , m_family {ip_ver}
     {
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};

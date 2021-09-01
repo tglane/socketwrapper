@@ -3,13 +3,13 @@
 
 #include "callbacks.hpp"
 
-#include <vector>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <mutex>
 #include <queue>
 #include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <future>
-#include <functional>
+#include <vector>
 
 namespace net {
 
@@ -22,7 +22,6 @@ class async_context;
 class thread_pool
 {
 public:
-
     thread_pool()
         : m_pool_size {std::thread::hardware_concurrency()}
     {
@@ -68,7 +67,7 @@ public:
         m_workers.clear();
     }
 
-    template<typename USER_JOB>
+    template <typename USER_JOB>
     void add_job(USER_JOB&& func)
     {
         {
@@ -84,7 +83,6 @@ public:
     }
 
 private:
-
     void loop()
     {
         std::packaged_task<void()> func;
@@ -118,7 +116,6 @@ private:
     std::mutex m_qmutex;
 
     std::condition_variable m_cv;
-
 };
 
 } // namespace detail

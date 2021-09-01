@@ -1,7 +1,7 @@
 #include "../include/socketwrapper/tls.hpp"
+#include <cstring>
 #include <iostream>
 #include <thread>
-#include <cstring>
 
 using namespace std::literals::chrono_literals;
 
@@ -27,8 +27,7 @@ int main(int argc, char** argv)
         std::array<char, 1024> buffer;
         size_t bytes_read = sock->read(net::span {buffer.begin(), buffer.end()});
         std::cout << "br: " << bytes_read << std::endl;
-        std::cout << "Received: " << bytes_read << '\n'
-            << std::string_view {buffer.data(), bytes_read} << std::endl;
+        std::cout << "Received: " << bytes_read << '\n' << std::string_view {buffer.data(), bytes_read} << std::endl;
     }
     else if(strcmp(argv[1], "s") == 0)
     {

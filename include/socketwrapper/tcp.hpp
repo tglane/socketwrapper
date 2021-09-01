@@ -1,31 +1,30 @@
 #ifndef SOCKETWRAPPER_NET_TCP_HPP
 #define SOCKETWRAPPER_NET_TCP_HPP
 
-#include "span.hpp"
-#include "detail/base_socket.hpp"
-#include "detail/utility.hpp"
 #include "detail/async.hpp"
+#include "detail/base_socket.hpp"
 #include "detail/message_notifier.hpp"
+#include "detail/utility.hpp"
+#include "span.hpp"
 
-#include <string_view>
-#include <variant>
-#include <optional>
+#include <condition_variable>
 #include <future>
 #include <mutex>
-#include <condition_variable>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
+#include <variant>
 
-#include <unistd.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace net {
 
-template<ip_version IP_VER>
+template <ip_version IP_VER>
 class tcp_connection : public detail::base_socket
 {
 protected:
-
     enum class connection_status : uint8_t
     {
         closed,
@@ -33,7 +32,6 @@ protected:
     };
 
 public:
-
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
 
@@ -48,7 +46,8 @@ public:
 
     tcp_connection& operator=(tcp_connection&& rhs) noexcept
     {
-        // Provide custom move assginment operator to prevent the moved socket from closing the underlying file descriptor
+        // Provide custom move assginment operator to prevent the moved socket from closing the underlying file
+        // descriptor
         if(this != &rhs)
         {
             detail::base_socket::operator=(std::move(rhs));
@@ -62,8 +61,8 @@ public:
     }
 
     tcp_connection(const std::string_view conn_addr, const uint16_t port_to)
-        : detail::base_socket {socket_type::stream, IP_VER},
-          m_connection {connection_status::closed}
+        : detail::base_socket {socket_type::stream, IP_VER}
+        , m_connection {connection_status::closed}
     {
         if(detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
@@ -88,7 +87,7 @@ public:
         }
     }
 
-    template<typename T>
+    template <typename T>
     size_t send(span<T>&& buffer) const
     {
         if(m_connection == connection_status::closed)
@@ -98,7 +97,9 @@ public:
         const size_t bytes_to_send = buffer.size() * sizeof(T);
         while(total < bytes_to_send)
         {
-            switch(const auto bytes = write_to_socket(reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total); bytes)
+            switch(const auto bytes =
+                       write_to_socket(reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total);
+                   bytes)
             {
                 case -1:
                     // TODO Check for errors that must be handled
@@ -115,42 +116,37 @@ public:
         return total / sizeof(T);
     }
 
-    template<typename T, typename CALLBACK_TYPE>
+    template <typename T, typename CALLBACK_TYPE>
     void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
             detail::stream_write_callback<tcp_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
     }
 
-    template<typename T>
+    template <typename T>
     std::future<size_t> promised_send(span<T>&& buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
             detail::stream_promised_write_callback<tcp_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)
-            }
-        );
+                this, std::move(buffer), std::move(size_promise)});
 
         return size_future;
     }
 
-    template<typename T>
+    template <typename T>
     size_t read(span<T>&& buffer) const
     {
         if(m_connection == connection_status::closed)
             throw std::runtime_error {"Connection already closed."};
 
-        switch(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T)); bytes)
+        switch(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T));
+               bytes)
         {
             case -1:
                 // TODO Maybe handle errno to get some error code?
@@ -163,7 +159,7 @@ public:
         }
     }
 
-    template<typename T>
+    template <typename T>
     size_t read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         if(m_connection == connection_status::closed)
@@ -185,51 +181,44 @@ public:
             return 0;
     }
 
-    template<typename T, typename CALLBACK_TYPE>
+    template <typename T, typename CALLBACK_TYPE>
     void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
             detail::stream_read_callback<tcp_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
     }
 
-    template<typename T>
+    template <typename T>
     std::future<size_t> promised_read(span<T>&& buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
             detail::stream_promised_read_callback<tcp_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)
-            }
-        );
+                this, std::move(buffer), std::move(size_promise)});
 
         return size_future;
     }
 
 protected:
-
     tcp_connection() = default;
 
     tcp_connection(const int socket_fd, const sockaddr_in& peer_addr)
-        : detail::base_socket {socket_fd, ip_version::v4},
-          m_peer {peer_addr},
-          m_connection {connection_status::connected}
+        : detail::base_socket {socket_fd, ip_version::v4}
+        , m_peer {peer_addr}
+        , m_connection {connection_status::connected}
     {
         static_assert(IP_VER == ip_version::v4);
     }
 
     tcp_connection(const int socket_fd, const sockaddr_in6& peer_addr)
-        : detail::base_socket {socket_fd, ip_version::v6},
-          m_peer {peer_addr},
-          m_connection {connection_status::connected}
+        : detail::base_socket {socket_fd, ip_version::v6}
+        , m_peer {peer_addr}
+        , m_connection {connection_status::connected}
     {
         static_assert(IP_VER == ip_version::v6);
     }
@@ -248,21 +237,18 @@ protected:
 
     mutable connection_status m_connection;
 
-    template<ip_version>
+    template <ip_version>
     friend class tcp_acceptor;
-
 };
 
 /// Using declarations for shorthand usage of templated tcp_connection types
 using tcp_connection_v4 = tcp_connection<ip_version::v4>;
 using tcp_connection_v6 = tcp_connection<ip_version::v6>;
 
-
-template<ip_version IP_VER>
+template <ip_version IP_VER>
 class tcp_acceptor : public detail::base_socket
 {
 public:
-
     tcp_acceptor() = delete;
     tcp_acceptor(const tcp_acceptor&) = delete;
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
@@ -275,7 +261,8 @@ public:
 
     tcp_acceptor& operator=(tcp_acceptor&& rhs) noexcept
     {
-        // Provide a custom move assginment operator to prevent the moved object from closing the underlying file descriptor
+        // Provide a custom move assginment operator to prevent the moved object from closing the underlying file
+        // descriptor
         if(this != &rhs)
         {
             detail::base_socket::operator=(std::move(rhs));
@@ -294,13 +281,15 @@ public:
         if constexpr(IP_VER == ip_version::v4)
         {
             auto& sockaddr_ref = std::get<sockaddr_in>(m_sockaddr);
-            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in)); res != 0)
+            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in));
+                res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             auto& sockaddr_ref = std::get<sockaddr_in6>(m_sockaddr);
-            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6)); res != 0)
+            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6));
+                res != 0)
                 throw std::runtime_error {"Failed to bind."};
         }
         else
@@ -356,16 +345,12 @@ public:
             return std::nullopt;
     }
 
-    template<typename CALLBACK_TYPE>
+    template <typename CALLBACK_TYPE>
     void async_accept(CALLBACK_TYPE&& callback) const
     {
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_accept_callback<tcp_acceptor<IP_VER>> {
-                this, std::forward<CALLBACK_TYPE>(callback)
-            }
-        );
+            detail::stream_accept_callback<tcp_acceptor<IP_VER>> {this, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     std::future<tcp_connection<IP_VER>> promised_accept() const
@@ -373,27 +358,20 @@ public:
         std::promise<tcp_connection<IP_VER>> acc_promise;
         std::future<tcp_connection<IP_VER>> acc_future = acc_promise.get_future();
 
-        detail::async_context::instance().add(
-            this->m_sockfd,
+        detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_accept_callback<tcp_acceptor<IP_VER>> {
-                this, std::move(acc_promise)
-            }
-        );
+            detail::stream_promised_accept_callback<tcp_acceptor<IP_VER>> {this, std::move(acc_promise)});
 
         return acc_future;
     }
 
 protected:
-
     std::variant<sockaddr_in, sockaddr_in6> m_sockaddr {};
-
 };
 
 /// Using declarations for shorthand usage of templated tcp_acceptor types
 using tcp_acceptor_v4 = tcp_acceptor<ip_version::v4>;
 using tcp_acceptor_v6 = tcp_acceptor<ip_version::v6>;
-
 
 } // namespace net
 
