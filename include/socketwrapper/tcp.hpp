@@ -32,6 +32,11 @@ protected:
     };
 
 public:
+    tcp_connection()
+        : detail::base_socket {socket_type::stream, IP_VER}
+        , m_connection {connection_status::closed}
+    {}
+
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
 
@@ -64,6 +69,14 @@ public:
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_connection {connection_status::closed}
     {
+        connect(conn_addr, port_to);
+    }
+
+    virtual void connect(const std::string_view conn_addr, const uint16_t port_to)
+    {
+        if(m_connection != connection_status::closed)
+            return;
+
         if(detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
@@ -72,19 +85,19 @@ public:
             auto& ref = std::get<sockaddr_in>(m_peer);
             if(auto res = ::connect(this->m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to connect."};
-            m_connection = connection_status::connected;
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             auto& ref = std::get<sockaddr_in6>(m_peer);
             if(auto res = ::connect(this->m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
                 throw std::runtime_error {"Failed to connect."};
-            m_connection = connection_status::connected;
         }
         else
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
+
+        m_connection = connection_status::connected;
     }
 
     template <typename T>
@@ -205,8 +218,6 @@ public:
     }
 
 protected:
-    tcp_connection() = default;
-
     tcp_connection(const int socket_fd, const sockaddr_in& peer_addr)
         : detail::base_socket {socket_fd, ip_version::v4}
         , m_peer {peer_addr}
@@ -248,8 +259,18 @@ using tcp_connection_v6 = tcp_connection<ip_version::v6>;
 template <ip_version IP_VER>
 class tcp_acceptor : public detail::base_socket
 {
+protected:
+    enum class acceptor_state : uint8_t
+    {
+        non_bound,
+        bound
+    };
+
 public:
-    tcp_acceptor() = delete;
+    tcp_acceptor()
+        : detail::base_socket {socket_type::stream, IP_VER}
+    {}
+
     tcp_acceptor(const tcp_acceptor&) = delete;
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
 
@@ -275,6 +296,14 @@ public:
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
         : detail::base_socket {socket_type::stream, IP_VER}
     {
+        activate(bind_addr, port, backlog);
+    }
+
+    void activate(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
+    {
+        if(m_state == acceptor_state::bound)
+            return;
+
         if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
@@ -299,10 +328,15 @@ public:
 
         if(const auto res = ::listen(this->m_sockfd, backlog); res != 0)
             throw std::runtime_error {"Failed to initiate listen."};
+
+        m_state = acceptor_state::bound;
     }
 
     tcp_connection<IP_VER> accept() const
     {
+        if(m_state == acceptor_state::non_bound)
+            throw std::runtime_error {"Socket not in listening state."};
+
         if constexpr(IP_VER == ip_version::v4)
         {
             sockaddr_in client {};
@@ -366,6 +400,8 @@ public:
     }
 
 protected:
+    acceptor_state m_state = acceptor_state::non_bound;
+
     std::variant<sockaddr_in, sockaddr_in6> m_sockaddr {};
 };
 

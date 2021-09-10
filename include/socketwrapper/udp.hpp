@@ -27,7 +27,7 @@ class udp_socket : public detail::base_socket
 {
     using read_return_pair = std::pair<size_t, connection_info>;
 
-    enum class socket_mode : uint8_t
+    enum class socket_state : uint8_t
     {
         bound,
         non_bound
@@ -39,13 +39,13 @@ public:
 
     udp_socket()
         : detail::base_socket {socket_type::datagram, IP_VER}
-        , m_mode {socket_mode::non_bound}
+        , m_state {socket_state::non_bound}
     {}
 
     udp_socket(udp_socket&& rhs) noexcept
         : detail::base_socket {std::move(rhs)}
     {
-        m_mode = rhs.m_mode;
+        m_state = rhs.m_state;
         m_sockaddr = std::move(rhs.m_sockaddr);
 
         rhs.m_sockfd = -1;
@@ -58,7 +58,7 @@ public:
         {
             detail::base_socket::operator=(std::move(rhs));
 
-            m_mode = rhs.m_mode;
+            m_state = rhs.m_state;
             m_sockaddr = std::move(rhs.m_sockaddr);
 
             rhs.m_sockfd = -1;
@@ -68,8 +68,16 @@ public:
 
     udp_socket(const std::string_view bind_addr, const uint16_t port)
         : detail::base_socket {socket_type::datagram, IP_VER}
-        , m_mode {socket_mode::bound}
+        , m_state {socket_state::non_bound}
     {
+        bind(bind_addr, port);
+    }
+
+    void bind(const std::string_view bind_addr, const uint16_t port)
+    {
+        if(m_state == socket_state::bound)
+            return;
+
         if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram, m_sockaddr) != 0)
             throw std::runtime_error {"Failed to resolve hostname."};
 
@@ -91,6 +99,8 @@ public:
         {
             static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
         }
+
+        m_state = socket_state::bound;
     }
 
     template <typename T>
@@ -249,7 +259,7 @@ private:
         }
     }
 
-    socket_mode m_mode;
+    socket_state m_state;
 
     std::variant<sockaddr_in, sockaddr_in6> m_sockaddr = {};
 };

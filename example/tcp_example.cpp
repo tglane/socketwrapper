@@ -36,7 +36,10 @@ int main(int argc, char** argv)
     else if(strcmp(argv[1], "s") == 0)
     {
         std::cout << "--- Sender ---\n";
-        net::tcp_connection<net::ip_version::v4> sock {"127.0.0.1", 4433};
+        net::tcp_connection<net::ip_version::v4> sock;
+        std::cout << "Socket created\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        sock.connect("127.0.0.1", 4433);
         std::cout << "Connected\n";
         std::vector<char> vec {'H', 'e', 'l', 'l', 'o'};
         // sock.send(net::span {vec});

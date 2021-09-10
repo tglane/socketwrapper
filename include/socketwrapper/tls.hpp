@@ -91,27 +91,28 @@ public:
         return *this;
     }
 
-    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
-        : tcp_connection<IP_VER> {conn_addr, port}
+    tls_connection(std::string_view cert_path, std::string_view key_path)
+        : tcp_connection<IP_VER> {}
         , m_certificate {detail::read_file(cert_path)}
         , m_private_key {detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
         // TODO Change configure function to use the cert and key string not the path
-        // detail::configure_ssl_ctx(m_ctx, m_certificate, m_private_key, false);
+        detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
+    }
+
+    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
+        : tcp_connection<IP_VER> {}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
+    {
+        detail::init_ssl_system();
+
+        // TODO Change configure function to use the cert and key string not the path
         detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
 
-        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
-            throw std::runtime_error {"Failed to instatiate SSL structure."};
-        SSL_set_fd(m_ssl, this->m_sockfd);
-
-        if(auto ret = SSL_connect(m_ssl); ret != 1)
-        {
-            ret = SSL_get_error(m_ssl, ret);
-            ERR_print_errors_fp(stderr);
-            throw std::runtime_error {"Failed to connect TLS connection."};
-        }
+        connect(conn_addr, port);
     }
 
     ~tls_connection()
@@ -120,6 +121,26 @@ public:
         {
             SSL_shutdown(m_ssl);
             SSL_free(m_ssl);
+        }
+    }
+
+    void connect(const std::string_view conn_addr, const uint16_t port) override
+    {
+        tcp_connection<IP_VER>::connect(conn_addr, port);
+
+        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
+        {
+            this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
+            throw std::runtime_error {"Failed to instatiate SSL structure."};
+        }
+        SSL_set_fd(m_ssl, this->m_sockfd);
+
+        if(auto ret = SSL_connect(m_ssl); ret != 1)
+        {
+            this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
+            ret = SSL_get_error(m_ssl, ret);
+            ERR_print_errors_fp(stderr);
+            throw std::runtime_error {"Failed to connect TLS connection."};
         }
     }
 
@@ -262,6 +283,17 @@ public:
         return *this;
     }
 
+    tls_acceptor(std::string_view cert_path, std::string_view key_path)
+        : tcp_acceptor<IP_VER> {}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
+    {
+        detail::init_ssl_system();
+
+        // TODO Change configure function to use the cert and key string not the path
+        detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
+    }
+
     tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port,
         size_t backlog = 5)
         : tcp_acceptor<IP_VER> {bind_addr, port, backlog}
@@ -271,7 +303,6 @@ public:
         detail::init_ssl_system();
 
         // TODO Change configure function to use the cert and key string not the path
-        // configure_ssl_ctx(m_ctx, m_certificate, m_private_key, true);
         detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
     }
 
@@ -286,6 +317,9 @@ public:
 
     tls_connection<IP_VER> accept() const
     {
+        if(this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
+            throw std::runtime_error {"Socket not in listening state."};
+
         if constexpr(IP_VER == ip_version::v4)
         {
             sockaddr_in client {};
