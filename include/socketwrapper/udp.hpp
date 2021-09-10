@@ -78,8 +78,7 @@ public:
         if(m_state == socket_state::bound)
             return;
 
-        if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram, m_sockaddr) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
+        m_sockaddr = detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::datagram);
 
         if constexpr(IP_VER == ip_version::v4)
         {
@@ -237,9 +236,8 @@ private:
 
     int write_to_socket(const std::string_view addr_to, const uint16_t port, const char* buffer, size_t length) const
     {
-        std::variant<sockaddr_in, sockaddr_in6> dest;
-        if(detail::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram, dest) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
+        std::variant<sockaddr_in, sockaddr_in6> dest =
+            detail::resolve_hostname<IP_VER>(addr_to, port, socket_type::datagram);
 
         if constexpr(IP_VER == ip_version::v4)
         {

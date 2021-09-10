@@ -77,8 +77,7 @@ public:
         if(m_connection != connection_status::closed)
             return;
 
-        if(detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
+        m_peer = detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream);
 
         if constexpr(IP_VER == ip_version::v4)
         {
@@ -304,8 +303,7 @@ public:
         if(m_state == acceptor_state::bound)
             return;
 
-        if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream, m_sockaddr) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
+        m_sockaddr = detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream);
 
         if constexpr(IP_VER == ip_version::v4)
         {
