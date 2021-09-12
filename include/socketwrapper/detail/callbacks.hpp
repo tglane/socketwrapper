@@ -1,6 +1,7 @@
 #ifndef SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 #define SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 
+#include "../address.hpp"
 #include "../span.hpp"
 #include "./utility.hpp"
 
@@ -9,6 +10,10 @@
 #include <memory>
 
 namespace net {
+
+/// Forward declarations
+template <ip_version>
+class udp_socket;
 
 namespace detail {
 
@@ -199,14 +204,14 @@ private:
     mutable std::promise<ACCEPT_SOCK_TYPE> m_promise;
 };
 
-template <typename SOCK_TYPE, typename T>
+template <ip_version IP_VER, typename T>
 class dgram_read_callback : public detail::abstract_socket_callback
 {
     using read_return_pair = std::pair<size_t, connection_info>;
 
 public:
     template <typename USER_CALLBACK>
-    dgram_read_callback(const SOCK_TYPE* sock_ptr, span<T> view, USER_CALLBACK&& cb)
+    dgram_read_callback(const udp_socket<IP_VER>* sock_ptr, span<T> view, USER_CALLBACK&& cb)
         : detail::abstract_socket_callback {sock_ptr}
         , m_buffer {std::move(view)}
         , m_func {std::forward<USER_CALLBACK>(cb)}
@@ -214,8 +219,8 @@ public:
 
     void operator()() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        read_return_pair ret = ptr->read(span {m_buffer.get(), m_buffer.size()});
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        read_return_pair ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
         m_func(ret.first, std::move(ret.second));
     }
 
@@ -224,13 +229,14 @@ private:
     std::function<void(size_t, connection_info)> m_func;
 };
 
-template <typename SOCK_TYPE, typename T>
+template <ip_version IP_VER, typename T>
 class dgram_promised_read_callback : public detail::abstract_socket_callback
 {
     using read_return_pair = std::pair<size_t, connection_info>;
 
 public:
-    dgram_promised_read_callback(const SOCK_TYPE* sock_ptr, span<T> view, std::promise<read_return_pair> promise)
+    dgram_promised_read_callback(
+        const udp_socket<IP_VER>* sock_ptr, span<T> view, std::promise<read_return_pair> promise)
         : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)}
         , m_buffer {std::move(view)}
         , m_promise {std::move(promise)}
@@ -238,8 +244,8 @@ public:
 
     void operator()() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        read_return_pair ret = ptr->read(span {m_buffer.get(), m_buffer.size()});
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        read_return_pair ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
 
         m_promise.set_value(std::move(ret));
     }
@@ -249,58 +255,53 @@ private:
     mutable std::promise<read_return_pair> m_promise;
 };
 
-template <typename SOCK_TYPE, typename T>
+template <ip_version IP_VER, typename T>
 class dgram_write_callback : public detail::abstract_socket_callback
 {
 public:
     template <typename USER_CALLBACK>
-    dgram_write_callback(
-        const SOCK_TYPE* sock_ptr, std::string_view addr, uint16_t port, span<T> view, USER_CALLBACK&& cb)
+    dgram_write_callback(const udp_socket<IP_VER>* sock_ptr, address<IP_VER> addr, span<T> view, USER_CALLBACK&& cb)
         : detail::abstract_socket_callback {sock_ptr}
         , m_addr {std::move(addr)}
-        , m_port {port}
         , m_buffer {std::move(view)}
         , m_func {std::forward<USER_CALLBACK>(cb)}
     {}
 
     void operator()() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(m_addr, m_port, span {m_buffer.get(), m_buffer.size()});
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        size_t bytes_written = ptr->send(m_addr, span<T> {m_buffer.get(), m_buffer.size()});
         m_func(bytes_written);
     }
 
 private:
-    std::string_view m_addr;
-    uint16_t m_port;
+    address<IP_VER> m_addr;
     span<T> m_buffer;
     std::function<void(size_t)> m_func;
 };
 
-template <typename SOCK_TYPE, typename T>
+template <ip_version IP_VER, typename T>
 class dgram_promised_write_callback : public detail::abstract_socket_callback
 {
 public:
     dgram_promised_write_callback(
-        const SOCK_TYPE* sock_ptr, std::string_view addr, uint16_t port, span<T> view, std::promise<size_t> promise)
+        const udp_socket<IP_VER>* sock_ptr, address<IP_VER> addr, span<T> view, std::promise<size_t> promise)
         : detail::abstract_socket_callback {sock_ptr}
         , m_addr {addr}
-        , m_port {port}
         , m_buffer {std::move(view)}
         , m_promise {std::move(promise)}
     {}
 
     void operator()() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(m_addr, m_port, span {m_buffer.get(), m_buffer.size()});
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        size_t bytes_written = ptr->send(m_addr, span<T> {m_buffer.get(), m_buffer.size()});
 
         m_promise.set_value(bytes_written);
     }
 
 private:
-    std::string_view m_addr;
-    uint16_t m_port;
+    address<IP_VER> m_addr;
     span<T> m_buffer;
     mutable std::promise<size_t> m_promise;
 };

@@ -14,7 +14,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
-#include <variant>
 
 #include <netinet/in.h>
 #include <sys/socket.h>

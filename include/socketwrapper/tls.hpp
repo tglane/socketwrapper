@@ -102,7 +102,7 @@ public:
         detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
     }
 
-    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port)
+    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr_str, uint16_t port)
         : tcp_connection<IP_VER> {}
         , m_certificate {detail::read_file(cert_path)}
         , m_private_key {detail::read_file(key_path)}
@@ -112,7 +112,21 @@ public:
         // TODO Change configure function to use the cert and key string not the path
         detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
 
-        connect(conn_addr, port);
+        address<IP_VER> conn_addr {conn_addr_str, port, socket_type::stream};
+        connect(conn_addr);
+    }
+
+    tls_connection(std::string_view cert_path, std::string_view key_path, const address<IP_VER>& conn_addr)
+        : tcp_connection<IP_VER> {}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
+    {
+        detail::init_ssl_system();
+
+        // TODO Change configure function to use the cert and key string not the path
+        detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
+
+        connect(conn_addr);
     }
 
     ~tls_connection()
@@ -124,9 +138,9 @@ public:
         }
     }
 
-    void connect(const std::string_view conn_addr, const uint16_t port) override
+    void connect(const address<IP_VER>& conn_addr) override
     {
-        tcp_connection<IP_VER>::connect(conn_addr, port);
+        tcp_connection<IP_VER>::connect(conn_addr);
 
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
         {
@@ -191,12 +205,10 @@ public:
     }
 
 private:
-    tls_connection(int socketfd, const sockaddr_in& peer_addr, std::shared_ptr<SSL_CTX> context)
+    tls_connection(int socketfd, const address<IP_VER>& peer_addr, std::shared_ptr<SSL_CTX> context)
         : tcp_connection<IP_VER> {socketfd, peer_addr}
         , m_context {std::move(context)}
     {
-        static_assert(IP_VER == ip_version::v4);
-
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
             throw std::runtime_error {"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
@@ -207,20 +219,6 @@ private:
             ERR_print_errors_fp(stderr);
             throw std::runtime_error {"Failed to accept TLS connection."};
         }
-    }
-
-    tls_connection(int socketfd, const sockaddr_in6& peer_addr, std::shared_ptr<SSL_CTX> context)
-        : tcp_connection<IP_VER> {socketfd, peer_addr}
-        , m_context {std::move(context)}
-    {
-        static_assert(IP_VER == ip_version::v6);
-
-        if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
-            throw std::runtime_error {"Failed to set up SSL."};
-        SSL_set_fd(m_ssl, this->m_sockfd);
-
-        if(SSL_accept(m_ssl) != 1)
-            throw std::runtime_error {"Failed to accept TLS connection."};
     }
 
     int read_from_socket(char* const buffer_to, const size_t bytes_to_read) const override
@@ -306,6 +304,18 @@ public:
         detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
     }
 
+    tls_acceptor(
+        std::string_view cert_path, std::string_view key_path, const address<IP_VER>& bind_addr, size_t backlog = 5)
+        : tcp_acceptor<IP_VER> {bind_addr, backlog}
+        , m_certificate {detail::read_file(cert_path)}
+        , m_private_key {detail::read_file(key_path)}
+    {
+        detail::init_ssl_system();
+
+        // TODO Change configure function to use the cert and key string not the path
+        detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
+    }
+
     ~tls_acceptor()
     {
         if(m_ssl != nullptr)
@@ -325,18 +335,28 @@ public:
             sockaddr_in client {};
             socklen_t len = sizeof(sockaddr_in);
             if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
-                return tls_connection<IP_VER> {sock, client, m_context};
+            {
+                address<IP_VER> conn_addr {client};
+                return tls_connection<IP_VER> {sock, conn_addr, m_context};
+            }
             else
+            {
                 throw std::runtime_error {"Failed to accept."};
+            }
         }
         else if constexpr(IP_VER == ip_version::v6)
         {
             sockaddr_in6 client {};
             socklen_t len = sizeof(sockaddr_in6);
             if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
+            {
+                address<IP_VER> conn_addr {client};
                 return tls_connection<IP_VER> {sock, client, m_context};
+            }
             else
+            {
                 throw std::runtime_error {"Failed to accept."};
+            }
         }
         else
         {
