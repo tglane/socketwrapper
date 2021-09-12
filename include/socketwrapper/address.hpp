@@ -18,6 +18,8 @@ class address<ip_version::v4>
 public:
     static constexpr const size_t addr_size = sizeof(sockaddr_in);
 
+    address() = default;
+
     explicit address(const sockaddr_in& sockaddr)
         : m_addr {sockaddr}
     {}
@@ -51,6 +53,8 @@ class address<ip_version::v6>
 {
 public:
     static constexpr const size_t addr_size = sizeof(sockaddr_in6);
+
+    address() = default;
 
     explicit address(const sockaddr_in6& sockaddr)
         : m_addr {sockaddr}

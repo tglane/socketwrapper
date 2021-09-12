@@ -330,37 +330,15 @@ public:
         if(this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
             throw std::runtime_error {"Socket not in listening state."};
 
-        if constexpr(IP_VER == ip_version::v4)
+        address<IP_VER> client_addr;
+        socklen_t addr_len = client_addr.addr_size;
+        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len); sock > 0)
         {
-            sockaddr_in client {};
-            socklen_t len = sizeof(sockaddr_in);
-            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
-            {
-                address<IP_VER> conn_addr {client};
-                return tls_connection<IP_VER> {sock, conn_addr, m_context};
-            }
-            else
-            {
-                throw std::runtime_error {"Failed to accept."};
-            }
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            sockaddr_in6 client {};
-            socklen_t len = sizeof(sockaddr_in6);
-            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock >= 0)
-            {
-                address<IP_VER> conn_addr {client};
-                return tls_connection<IP_VER> {sock, client, m_context};
-            }
-            else
-            {
-                throw std::runtime_error {"Failed to accept."};
-            }
+            return tls_connection<IP_VER> {sock, client_addr, m_context};
         }
         else
         {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+            throw std::runtime_error {"Accept operation failed."};
         }
     }
 
