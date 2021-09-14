@@ -253,6 +253,7 @@ public:
     tcp_acceptor()
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_sockaddr {std::nullopt}
+        , m_state {acceptor_state::non_bound}
     {}
 
     tcp_acceptor(const tcp_acceptor&) = delete;
@@ -260,6 +261,7 @@ public:
 
     tcp_acceptor(tcp_acceptor&& rhs) noexcept
         : detail::base_socket {std::move(rhs)}
+        , m_state {acceptor_state::non_bound}
     {
         m_sockaddr = std::move(rhs.m_sockaddr);
     }
@@ -279,6 +281,7 @@ public:
 
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
         : detail::base_socket {socket_type::stream, IP_VER}
+        , m_state {acceptor_state::non_bound}
     {
         address<IP_VER> addr {bind_addr, port, socket_type::stream};
         activate(addr, backlog);
@@ -312,7 +315,8 @@ public:
 
         address<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
-        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len); sock > 0)
+        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
+            sock > 0 && addr_len == client_addr.addr_size)
         {
             return tcp_connection<IP_VER> {sock, client_addr};
         }
@@ -361,9 +365,9 @@ public:
     }
 
 protected:
-    acceptor_state m_state = acceptor_state::non_bound;
-
     std::optional<address<IP_VER>> m_sockaddr;
+
+    acceptor_state m_state = acceptor_state::non_bound;
 };
 
 /// Using declarations for shorthand usage of templated tcp_acceptor types

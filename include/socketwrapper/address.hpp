@@ -16,6 +16,7 @@ template <>
 class address<ip_version::v4>
 {
 public:
+    using addr_type = sockaddr_in;
     static constexpr const size_t addr_size = sizeof(sockaddr_in);
 
     address() = default;
@@ -52,6 +53,7 @@ template <>
 class address<ip_version::v6>
 {
 public:
+    using addr_type = sockaddr_in6;
     static constexpr const size_t addr_size = sizeof(sockaddr_in6);
 
     address() = default;

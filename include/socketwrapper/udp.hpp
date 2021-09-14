@@ -224,31 +224,17 @@ public:
 private:
     int read_from_socket(char* const buffer, const size_t size, connection_info* peer_data = nullptr) const
     {
-        if constexpr(IP_VER == ip_version::v4)
+        if(peer_data)
         {
-            socklen_t flen = sizeof(sockaddr_in);
-            sockaddr_in from {};
-            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
-
-            if(peer_data)
-                *peer_data = detail::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
-
-            return bytes;
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            socklen_t flen = sizeof(sockaddr_in6);
-            sockaddr_in6 from {};
-            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, reinterpret_cast<sockaddr*>(&from), &flen);
-
-            if(peer_data)
-                *peer_data = detail::resolve_addrinfo<IP_VER>(reinterpret_cast<sockaddr*>(&from));
-
+            address<IP_VER> addr;
+            socklen_t addr_len = addr.addr_size;
+            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, &(addr.get_addr()), &addr_len);
+            *peer_data = addr.connection_info();
             return bytes;
         }
         else
         {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+            return ::recvfrom(this->m_sockfd, buffer, size, 0, nullptr, nullptr);
         }
     }
 

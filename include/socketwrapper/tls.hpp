@@ -332,7 +332,8 @@ public:
 
         address<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
-        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len); sock > 0)
+        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
+            sock > 0 && addr_len == client_addr.addr_size)
         {
             return tls_connection<IP_VER> {sock, client_addr, m_context};
         }
