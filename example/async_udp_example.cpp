@@ -15,31 +15,31 @@ int main(int argc, char** argv)
 
         std::array<char, 1024> buffer;
         sock.async_read(net::span {buffer},
-            [&sock, &buffer](size_t bytes, net::connection_info)
+            [&sock, &buffer](size_t bytes, net::address_v4)
             {
                 std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
 
                 sock.async_read(net::span {buffer},
-                    [&buffer](size_t bytes, net::connection_info) {
+                    [&buffer](size_t bytes, net::address_v4) {
                         std::cout << "Inner received " << bytes << " bytes. -- "
                                   << std::string_view {buffer.data(), bytes} << '\n';
                     });
             });
 
         sock.async_read(net::span {buffer},
-            [&sock, &buffer](size_t bytes, net::connection_info)
+            [&sock, &buffer](size_t bytes, net::address_v4)
             {
                 std::cout << "UPDATED CALLBACK TIME!!\n";
                 std::cout << "Received " << bytes << " bytes. -- " << std::string_view {buffer.data(), bytes} << '\n';
 
                 sock.async_read(net::span {buffer},
-                    [&sock, &buffer](size_t bytes, net::connection_info)
+                    [&sock, &buffer](size_t bytes, net::address_v4)
                     {
                         std::cout << "Inner received " << bytes << " bytes. -- "
                                   << std::string_view {buffer.data(), bytes} << '\n';
 
                         sock.async_read(net::span {buffer},
-                            [&buffer](size_t bytes, net::connection_info) {
+                            [&buffer](size_t bytes, net::address_v4) {
                                 std::cout << "Nested received " << bytes << " bytes. -- "
                                           << std::string_view {buffer.data(), bytes} << '\n';
                             });

@@ -207,7 +207,7 @@ private:
 template <ip_version IP_VER, typename T>
 class dgram_read_callback : public detail::abstract_socket_callback
 {
-    using read_return_pair = std::pair<size_t, connection_info>;
+    using dgram_operation_res = std::pair<size_t, address<IP_VER>>;
 
 public:
     template <typename USER_CALLBACK>
@@ -220,23 +220,23 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        read_return_pair ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
+        dgram_operation_res ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
         m_func(ret.first, std::move(ret.second));
     }
 
 private:
     span<T> m_buffer;
-    std::function<void(size_t, connection_info)> m_func;
+    std::function<void(size_t, address<IP_VER>)> m_func;
 };
 
 template <ip_version IP_VER, typename T>
 class dgram_promised_read_callback : public detail::abstract_socket_callback
 {
-    using read_return_pair = std::pair<size_t, connection_info>;
+    using dgram_operation_res = std::pair<size_t, address<IP_VER>>;
 
 public:
     dgram_promised_read_callback(
-        const udp_socket<IP_VER>* sock_ptr, span<T> view, std::promise<read_return_pair> promise)
+        const udp_socket<IP_VER>* sock_ptr, span<T> view, std::promise<dgram_operation_res> promise)
         : detail::abstract_socket_callback {static_cast<const detail::base_socket*>(sock_ptr)}
         , m_buffer {std::move(view)}
         , m_promise {std::move(promise)}
@@ -245,14 +245,14 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        read_return_pair ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
+        dgram_operation_res ret = ptr->read(span<T> {m_buffer.get(), m_buffer.size()});
 
         m_promise.set_value(std::move(ret));
     }
 
 private:
     span<T> m_buffer;
-    mutable std::promise<read_return_pair> m_promise;
+    mutable std::promise<dgram_operation_res> m_promise;
 };
 
 template <ip_version IP_VER, typename T>

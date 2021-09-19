@@ -29,13 +29,6 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
-/// Struct containing connection data including a string representation of peers ip address and port
-struct connection_info
-{
-    std::string addr;
-    uint16_t port;
-};
-
 namespace detail {
 
 template <ip_version IP_VER>
@@ -81,40 +74,40 @@ inline std::variant<sockaddr_in, sockaddr_in6> resolve_hostname(
 }
 
 template <ip_version IP_VER>
-inline connection_info resolve_addrinfo(const sockaddr* addr_in)
+inline std::pair<std::string, uint16_t> resolve_addrinfo(const sockaddr* addr_in)
 {
-    connection_info peer {};
+    std::pair<std::string, uint16_t> peer {};
     if constexpr(IP_VER == ip_version::v4)
     {
-        peer.addr.resize(INET_ADDRSTRLEN);
+        peer.first.resize(INET_ADDRSTRLEN);
         std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
         port_str.resize(6);
 
         if(inet_ntop(AF_INET,
                &(reinterpret_cast<const sockaddr_in*>(addr_in)->sin_addr),
-               peer.addr.data(),
-               peer.addr.capacity()) == nullptr)
+               peer.first.data(),
+               peer.first.capacity()) == nullptr)
         {
             throw std::runtime_error {"Failed to resolve addrinfo."};
         }
-        peer.port = ntohs(reinterpret_cast<const sockaddr_in*>(addr_in)->sin_port);
+        peer.second = ntohs(reinterpret_cast<const sockaddr_in*>(addr_in)->sin_port);
 
         return peer;
     }
     else if constexpr(IP_VER == ip_version::v6)
     {
-        peer.addr.resize(INET6_ADDRSTRLEN);
+        peer.first.resize(INET6_ADDRSTRLEN);
         std::string port_str; // Use string instead of array here because std::stoi creates a string anyway
         port_str.resize(6);
 
         if(inet_ntop(AF_INET,
                &(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_addr),
-               peer.addr.data(),
-               peer.addr.capacity()) == nullptr)
+               peer.first.data(),
+               peer.first.capacity()) == nullptr)
         {
             throw std::runtime_error {"Failed to resolve addrinfo."};
         }
-        peer.port = ntohs(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_port);
+        peer.second = ntohs(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_port);
 
         return peer;
     }

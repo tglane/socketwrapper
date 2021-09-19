@@ -25,8 +25,6 @@ namespace net {
 template <ip_version IP_VER>
 class udp_socket : public detail::base_socket
 {
-    using read_return_pair = std::pair<size_t, connection_info>;
-
     enum class socket_state : uint8_t
     {
         bound,
@@ -164,9 +162,9 @@ public:
     }
 
     template <typename T>
-    read_return_pair read(span<T>&& buffer) const
+    std::pair<size_t, address<IP_VER>> read(span<T>&& buffer) const
     {
-        read_return_pair pair {};
+        std::pair<size_t, address<IP_VER>> pair {};
         if(const auto bytes =
                 read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second));
             bytes >= 0)
@@ -181,7 +179,7 @@ public:
     }
 
     template <typename T>
-    std::pair<size_t, std::optional<connection_info>> read(
+    std::pair<size_t, std::optional<address<IP_VER>>> read(
         span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         auto& notifier = detail::message_notifier::instance();
@@ -195,9 +193,9 @@ public:
         notifier.remove(this->m_sockfd);
 
         if(ready)
-            return read(span {buffer});
+            return read(span<T> {buffer});
         else
-            return {0, std::nullopt};
+            return std::make_pair(0, std::nullopt);
     }
 
     template <typename T, typename CALLBACK_TYPE>
@@ -209,10 +207,10 @@ public:
     }
 
     template <typename T>
-    std::future<read_return_pair> promised_read(span<T>&& buffer) const
+    std::future<std::pair<size_t, address<IP_VER>>> promised_read(span<T>&& buffer) const
     {
-        std::promise<read_return_pair> read_promise;
-        std::future<read_return_pair> read_future = read_promise.get_future();
+        std::promise<std::pair<size_t, address<IP_VER>>> read_promise;
+        std::future<std::pair<size_t, address<IP_VER>>> read_future = read_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
@@ -222,14 +220,12 @@ public:
     }
 
 private:
-    int read_from_socket(char* const buffer, const size_t size, connection_info* peer_data = nullptr) const
+    int read_from_socket(char* const buffer, const size_t size, address<IP_VER>* peer_data = nullptr) const
     {
         if(peer_data)
         {
-            address<IP_VER> addr;
-            socklen_t addr_len = addr.addr_size;
-            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, &(addr.get_addr()), &addr_len);
-            *peer_data = addr.connection_info();
+            socklen_t addr_len = peer_data->addr_size;
+            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, &(peer_data->get_addr()), &addr_len);
             return bytes;
         }
         else
