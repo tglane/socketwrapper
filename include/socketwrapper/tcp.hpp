@@ -1,11 +1,11 @@
 #ifndef SOCKETWRAPPER_NET_TCP_HPP
 #define SOCKETWRAPPER_NET_TCP_HPP
 
-#include "address.hpp"
 #include "detail/async.hpp"
 #include "detail/base_socket.hpp"
 #include "detail/message_notifier.hpp"
 #include "detail/utility.hpp"
+#include "endpoint.hpp"
 #include "span.hpp"
 
 #include <condition_variable>
@@ -70,18 +70,18 @@ public:
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_connection {connection_status::closed}
     {
-        address<IP_VER> addr {conn_addr, port_to, socket_type::stream};
+        endpoint<IP_VER> addr {conn_addr, port_to, socket_type::stream};
         connect(addr);
     }
 
-    tcp_connection(const address<IP_VER>& conn_addr)
+    tcp_connection(const endpoint<IP_VER>& conn_addr)
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_connection {connection_status::closed}
     {
         connect(conn_addr);
     }
 
-    virtual void connect(const address<IP_VER>& conn_addr)
+    virtual void connect(const endpoint<IP_VER>& conn_addr)
     {
         if(m_connection != connection_status::closed)
             return;
@@ -211,7 +211,7 @@ public:
     }
 
 protected:
-    tcp_connection(const int socket_fd, const address<IP_VER>& peer_addr)
+    tcp_connection(const int socket_fd, const endpoint<IP_VER>& peer_addr)
         : detail::base_socket {socket_fd, IP_VER}
         , m_peer {peer_addr}
         , m_connection {connection_status::connected}
@@ -227,7 +227,7 @@ protected:
         return ::send(this->m_sockfd, buffer_from, bytes_to_write, 0);
     }
 
-    std::optional<address<IP_VER>> m_peer;
+    std::optional<endpoint<IP_VER>> m_peer;
 
     mutable connection_status m_connection;
 
@@ -283,17 +283,17 @@ public:
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_state {acceptor_state::non_bound}
     {
-        address<IP_VER> addr {bind_addr, port, socket_type::stream};
+        endpoint<IP_VER> addr {bind_addr, port, socket_type::stream};
         activate(addr, backlog);
     }
 
-    tcp_acceptor(const address<IP_VER>& bind_addr, const size_t backlog = 5)
+    tcp_acceptor(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
         : detail::base_socket {socket_type::stream, IP_VER}
     {
         activate(bind_addr, backlog);
     }
 
-    void activate(const address<IP_VER>& bind_addr, const size_t backlog = 5)
+    void activate(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
     {
         if(m_state == acceptor_state::bound)
             return;
@@ -313,7 +313,7 @@ public:
         if(m_state == acceptor_state::non_bound)
             throw std::runtime_error {"Socket not in listening state."};
 
-        address<IP_VER> client_addr;
+        endpoint<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
         if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
             sock > 0 && addr_len == client_addr.addr_size)
@@ -365,7 +365,7 @@ public:
     }
 
 protected:
-    std::optional<address<IP_VER>> m_sockaddr;
+    std::optional<endpoint<IP_VER>> m_sockaddr;
 
     acceptor_state m_state = acceptor_state::non_bound;
 };

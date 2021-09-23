@@ -21,7 +21,7 @@ int main(int argc, char** argv)
                   << "; Bytes read: " << bytes_read << '\n';
         std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
 
-        std::optional<net::address<net::ip_version::v4>> peer_opt;
+        std::optional<net::endpoint_v4> peer_opt;
         std::tie(bytes_read, peer_opt) = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
         if(peer_opt)
         {

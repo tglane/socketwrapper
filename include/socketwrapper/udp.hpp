@@ -1,11 +1,11 @@
 #ifndef SOCKETWRAPPER_NET_UDP_HPP
 #define SOCKETWRAPPER_NET_UDP_HPP
 
-#include "address.hpp"
 #include "detail/async.hpp"
 #include "detail/base_socket.hpp"
 #include "detail/message_notifier.hpp"
 #include "detail/utility.hpp"
+#include "endpoint.hpp"
 #include "span.hpp"
 
 #include <condition_variable>
@@ -70,11 +70,11 @@ public:
         , m_state {socket_state::non_bound}
         , m_sockaddr {std::nullopt}
     {
-        address<IP_VER> bind_addr {bind_addr_str, port, socket_type::datagram};
+        endpoint<IP_VER> bind_addr {bind_addr_str, port, socket_type::datagram};
         bind(bind_addr);
     }
 
-    udp_socket(const address<IP_VER>& bind_addr)
+    udp_socket(const endpoint<IP_VER>& bind_addr)
         : detail::base_socket {socket_type::datagram, IP_VER}
         , m_state {socket_state::non_bound}
         , m_sockaddr {std::nullopt}
@@ -82,7 +82,7 @@ public:
         bind(bind_addr);
     }
 
-    void bind(const address<IP_VER>& bind_addr)
+    void bind(const endpoint<IP_VER>& bind_addr)
     {
         if(m_state == socket_state::bound)
             return;
@@ -99,12 +99,12 @@ public:
     template <typename T>
     size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
     {
-        address<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
         return send(addr_to, std::move(buffer));
     }
 
     template <typename T>
-    size_t send(const address<IP_VER>& addr, span<T>&& buffer) const
+    size_t send(const endpoint<IP_VER>& addr, span<T>&& buffer) const
     {
         size_t total = 0;
         const size_t bytes_to_send = buffer.size() * sizeof(T);
@@ -128,12 +128,12 @@ public:
     template <typename T, typename CALLBACK_TYPE>
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
-        address<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
         async_send(addr_to, std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_send(const address<IP_VER>& addr, span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_send(const endpoint<IP_VER>& addr, span<T>&& buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
@@ -144,12 +144,12 @@ public:
     template <typename T>
     std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
     {
-        address<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
         return promised_send(addr_to, std::move(buffer));
     }
 
     template <typename T>
-    std::future<size_t> promised_send(const address<IP_VER>& addr, span<T>&& buffer) const
+    std::future<size_t> promised_send(const endpoint<IP_VER>& addr, span<T>&& buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
@@ -162,9 +162,9 @@ public:
     }
 
     template <typename T>
-    std::pair<size_t, address<IP_VER>> read(span<T>&& buffer) const
+    std::pair<size_t, endpoint<IP_VER>> read(span<T>&& buffer) const
     {
-        std::pair<size_t, address<IP_VER>> pair {};
+        std::pair<size_t, endpoint<IP_VER>> pair {};
         if(const auto bytes =
                 read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second));
             bytes >= 0)
@@ -179,7 +179,7 @@ public:
     }
 
     template <typename T>
-    std::pair<size_t, std::optional<address<IP_VER>>> read(
+    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(
         span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         auto& notifier = detail::message_notifier::instance();
@@ -207,10 +207,10 @@ public:
     }
 
     template <typename T>
-    std::future<std::pair<size_t, address<IP_VER>>> promised_read(span<T>&& buffer) const
+    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T>&& buffer) const
     {
-        std::promise<std::pair<size_t, address<IP_VER>>> read_promise;
-        std::future<std::pair<size_t, address<IP_VER>>> read_future = read_promise.get_future();
+        std::promise<std::pair<size_t, endpoint<IP_VER>>> read_promise;
+        std::future<std::pair<size_t, endpoint<IP_VER>>> read_future = read_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
@@ -220,7 +220,7 @@ public:
     }
 
 private:
-    int read_from_socket(char* const buffer, const size_t size, address<IP_VER>* peer_data = nullptr) const
+    int read_from_socket(char* const buffer, const size_t size, endpoint<IP_VER>* peer_data = nullptr) const
     {
         if(peer_data)
         {
@@ -234,14 +234,14 @@ private:
         }
     }
 
-    int write_to_socket(const address<IP_VER>& addr_to, const char* buffer, size_t length) const
+    int write_to_socket(const endpoint<IP_VER>& addr_to, const char* buffer, size_t length) const
     {
         return ::sendto(this->m_sockfd, buffer, length, 0, &(addr_to.get_addr()), addr_to.addr_size);
     }
 
     socket_state m_state;
 
-    std::optional<address<IP_VER>> m_sockaddr;
+    std::optional<endpoint<IP_VER>> m_sockaddr;
 };
 
 /// Using declarations for shorthand usage of templated udp_socket types

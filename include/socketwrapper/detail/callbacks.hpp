@@ -1,7 +1,7 @@
 #ifndef SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 #define SOCKETWRAPPER_NET_DETAIL_CALLBACKS_HPP
 
-#include "../address.hpp"
+#include "../endpoint.hpp"
 #include "../span.hpp"
 #include "./utility.hpp"
 
@@ -207,7 +207,7 @@ private:
 template <ip_version IP_VER, typename T>
 class dgram_read_callback : public detail::abstract_socket_callback
 {
-    using dgram_operation_res = std::pair<size_t, address<IP_VER>>;
+    using dgram_operation_res = std::pair<size_t, endpoint<IP_VER>>;
 
 public:
     template <typename USER_CALLBACK>
@@ -226,13 +226,13 @@ public:
 
 private:
     span<T> m_buffer;
-    std::function<void(size_t, address<IP_VER>)> m_func;
+    std::function<void(size_t, endpoint<IP_VER>)> m_func;
 };
 
 template <ip_version IP_VER, typename T>
 class dgram_promised_read_callback : public detail::abstract_socket_callback
 {
-    using dgram_operation_res = std::pair<size_t, address<IP_VER>>;
+    using dgram_operation_res = std::pair<size_t, endpoint<IP_VER>>;
 
 public:
     dgram_promised_read_callback(
@@ -260,7 +260,7 @@ class dgram_write_callback : public detail::abstract_socket_callback
 {
 public:
     template <typename USER_CALLBACK>
-    dgram_write_callback(const udp_socket<IP_VER>* sock_ptr, address<IP_VER> addr, span<T> view, USER_CALLBACK&& cb)
+    dgram_write_callback(const udp_socket<IP_VER>* sock_ptr, endpoint<IP_VER> addr, span<T> view, USER_CALLBACK&& cb)
         : detail::abstract_socket_callback {sock_ptr}
         , m_addr {std::move(addr)}
         , m_buffer {std::move(view)}
@@ -275,7 +275,7 @@ public:
     }
 
 private:
-    address<IP_VER> m_addr;
+    endpoint<IP_VER> m_addr;
     span<T> m_buffer;
     std::function<void(size_t)> m_func;
 };
@@ -285,7 +285,7 @@ class dgram_promised_write_callback : public detail::abstract_socket_callback
 {
 public:
     dgram_promised_write_callback(
-        const udp_socket<IP_VER>* sock_ptr, address<IP_VER> addr, span<T> view, std::promise<size_t> promise)
+        const udp_socket<IP_VER>* sock_ptr, endpoint<IP_VER> addr, span<T> view, std::promise<size_t> promise)
         : detail::abstract_socket_callback {sock_ptr}
         , m_addr {addr}
         , m_buffer {std::move(view)}
@@ -301,7 +301,7 @@ public:
     }
 
 private:
-    address<IP_VER> m_addr;
+    endpoint<IP_VER> m_addr;
     span<T> m_buffer;
     mutable std::promise<size_t> m_promise;
 };

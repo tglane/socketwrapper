@@ -112,11 +112,11 @@ public:
         // TODO Change configure function to use the cert and key string not the path
         detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
 
-        address<IP_VER> conn_addr {conn_addr_str, port, socket_type::stream};
+        endpoint<IP_VER> conn_addr {conn_addr_str, port, socket_type::stream};
         connect(conn_addr);
     }
 
-    tls_connection(std::string_view cert_path, std::string_view key_path, const address<IP_VER>& conn_addr)
+    tls_connection(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& conn_addr)
         : tcp_connection<IP_VER> {}
         , m_certificate {detail::read_file(cert_path)}
         , m_private_key {detail::read_file(key_path)}
@@ -138,7 +138,7 @@ public:
         }
     }
 
-    void connect(const address<IP_VER>& conn_addr) override
+    void connect(const endpoint<IP_VER>& conn_addr) override
     {
         tcp_connection<IP_VER>::connect(conn_addr);
 
@@ -205,7 +205,7 @@ public:
     }
 
 private:
-    tls_connection(int socketfd, const address<IP_VER>& peer_addr, std::shared_ptr<SSL_CTX> context)
+    tls_connection(int socketfd, const endpoint<IP_VER>& peer_addr, std::shared_ptr<SSL_CTX> context)
         : tcp_connection<IP_VER> {socketfd, peer_addr}
         , m_context {std::move(context)}
     {
@@ -305,7 +305,7 @@ public:
     }
 
     tls_acceptor(
-        std::string_view cert_path, std::string_view key_path, const address<IP_VER>& bind_addr, size_t backlog = 5)
+        std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& bind_addr, size_t backlog = 5)
         : tcp_acceptor<IP_VER> {bind_addr, backlog}
         , m_certificate {detail::read_file(cert_path)}
         , m_private_key {detail::read_file(key_path)}
@@ -330,7 +330,7 @@ public:
         if(this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
             throw std::runtime_error {"Socket not in listening state."};
 
-        address<IP_VER> client_addr;
+        endpoint<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
         if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
             sock > 0 && addr_len == client_addr.addr_size)
