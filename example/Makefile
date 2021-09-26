@@ -1,7 +1,7 @@
 #cc = g++
 cc = clang++
 
-CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic
+CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic -g
 LDFLAGS = -lpthread
 
 %.o: %.cpp

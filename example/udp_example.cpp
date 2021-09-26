@@ -12,7 +12,8 @@ int main(int argc, char** argv)
     {
         std::cout << "--- Receiver ---\n";
 
-        net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
+        // net::udp_socket<net::ip_version::v4> sock {net::endpoint_v4 {"0.0.0.0", 4433}};
+        net::udp_socket<net::ip_version::v4> sock {net::endpoint_v4 {{0, 0, 0, 0}, 4433}};
         std::array<char, 1024> buffer;
         // net::connection_info peer;
         // size_t bytes_read = sock.read(net::span {buffer}, peer);
@@ -39,13 +40,17 @@ int main(int argc, char** argv)
         std::cout << "--- Sender ---\n";
         net::udp_socket<net::ip_version::v4> sock {};
         std::string buffer {"Hello world"};
-        sock.send("127.0.0.1", 4433, net::span {buffer});
+        net::endpoint_v4 endpoint = net::endpoint_v4 {"127.0.0.1", 4433};
+        std::cout << "TÖST: " << endpoint.get_addr_bytes()[0] << '\n';
+        sock.send(endpoint, net::span {buffer});
+        // sock.send(net::endpoint_v4 {std::array<unsigned char, 4> {127, 0, 0, 1}, 4433}, net::span {buffer});
         std::cout << "All messages sent." << std::endl;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
         std::vector<char> vec {'A', 'B', 'C'};
-        sock.send("127.0.0.1", 4433, net::span {vec});
+        // sock.send(net::endpoint_v4 {"127.0.0.1", 4433}, net::span {vec});
+        sock.send(net::endpoint_v4 {std::array<unsigned char, 4> {127, 0, 0, 1}, 4433}, net::span {vec});
         std::cout << "All messages sent. Again." << std::endl;
     }
 }

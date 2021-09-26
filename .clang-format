@@ -10,7 +10,6 @@ AlignEscapedNewlines: Right
 AlignOperands: DontAlign
 AlignTrailingComments: false
 AllowAllConstructorInitializersOnNextLine: false
-AllowAllConstructorInitializersOnNextLine: false
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortEnumsOnASingleLine: false
@@ -18,10 +17,11 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
-BinPackArguments: false
+BinPackParameters: false
 BitFieldColonSpacing: Both
 BreakBeforeBraces: Custom
 BraceWrapping:

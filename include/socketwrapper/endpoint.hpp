@@ -1,8 +1,12 @@
 #ifndef SOCKETWRAPPER_NET_endpoint_HPP
 #define SOCKETWRAPPER_NET_endpoint_HPP
 
+#include <iostream>
+
 #include "detail/utility.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -30,17 +34,36 @@ public:
             detail::resolve_addrinfo<ip_version::v4>(reinterpret_cast<const sockaddr*>(&m_addr));
     }
 
-    endpoint(std::string_view addr, uint16_t port, socket_type conn_type)
+    endpoint(std::string_view addr, uint16_t port, socket_type conn_type = socket_type::unspecified)
         : m_up_to_date {true}
-        , m_addr {std::get<sockaddr_in>(detail::resolve_hostname<ip_version::v4>(addr, port, conn_type))}
+        , m_addr {detail::resolve_hostname<ip_version::v4>(addr, port, conn_type)}
         , m_addr_string {addr.begin(), addr.end()}
         , m_port {port}
     {}
+
+    endpoint(const std::array<unsigned char, 4>& addr_bytes, uint16_t port)
+        : m_up_to_date {true}
+        , m_addr {}
+        , m_addr_string {}
+        , m_port {port}
+    {
+        m_addr.sin_port = m_port;
+        m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
+        std::copy_n(addr_bytes.data(), 4, reinterpret_cast<unsigned char*>(&m_addr.sin_addr.s_addr));
+    }
 
     const std::string& get_addr_string() const
     {
         update();
         return m_addr_string;
+    }
+
+    std::array<unsigned char, 4> get_addr_bytes() const
+    {
+        std::array<unsigned char, 4> bytes;
+        const unsigned char* addr_ptr = reinterpret_cast<const unsigned char*>(&m_addr.sin_addr.s_addr);
+        std::copy_n(addr_ptr, 4, bytes.data());
+        return bytes;
     }
 
     uint16_t get_port() const
@@ -95,17 +118,36 @@ public:
             detail::resolve_addrinfo<ip_version::v6>(reinterpret_cast<const sockaddr*>(&m_addr));
     }
 
-    endpoint(std::string_view addr, uint16_t port, socket_type conn_type)
+    endpoint(std::string_view addr, uint16_t port, socket_type conn_type = socket_type::unspecified)
         : m_up_to_date {true}
-        , m_addr {std::get<sockaddr_in6>(detail::resolve_hostname<ip_version::v6>(addr, port, conn_type))}
+        , m_addr {detail::resolve_hostname<ip_version::v6>(addr, port, conn_type)}
         , m_addr_string {addr.begin(), addr.end()}
         , m_port {port}
     {}
+
+    endpoint(const std::array<unsigned char, 16>& addr_bytes, uint16_t port)
+        : m_up_to_date {true}
+        , m_addr {}
+        , m_addr_string {}
+        , m_port {port}
+    {
+        m_addr.sin6_port = m_port;
+        m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
+        std::copy_n(addr_bytes.data(), 16, reinterpret_cast<unsigned char*>(&m_addr.sin6_addr.s6_addr));
+    }
 
     const std::string& get_addr_string() const
     {
         update();
         return m_addr_string;
+    }
+
+    std::array<unsigned char, 16> get_addr_bytes() const
+    {
+        std::array<unsigned char, 16> bytes;
+        const unsigned char* addr_ptr = reinterpret_cast<const unsigned char*>(&m_addr.sin6_addr.s6_addr);
+        std::copy_n(addr_ptr, 16, bytes.data());
+        return bytes;
     }
 
     uint16_t get_port() const

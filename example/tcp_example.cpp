@@ -39,7 +39,7 @@ int main(int argc, char** argv)
         net::tcp_connection<net::ip_version::v4> sock;
         std::cout << "Socket created\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        sock.connect({"127.0.0.1", 4433, net::socket_type::stream});
+        sock.connect(net::endpoint_v4 {"127.0.0.1", 4433, net::socket_type::stream});
         std::cout << "Connected\n";
         std::vector<char> vec {'H', 'e', 'l', 'l', 'o'};
         // sock.send(net::span {vec});
