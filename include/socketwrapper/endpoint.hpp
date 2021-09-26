@@ -1,8 +1,6 @@
 #ifndef SOCKETWRAPPER_NET_endpoint_HPP
 #define SOCKETWRAPPER_NET_endpoint_HPP
 
-#include <iostream>
-
 #include "detail/utility.hpp"
 
 #include <algorithm>
@@ -41,15 +39,30 @@ public:
         , m_port {port}
     {}
 
-    endpoint(const std::array<unsigned char, 4>& addr_bytes, uint16_t port)
-        : m_up_to_date {true}
+    endpoint(const std::array<uint8_t, 4>& addr_bytes, uint16_t port)
+        : m_up_to_date {false}
         , m_addr {}
         , m_addr_string {}
-        , m_port {port}
+        , m_port {}
     {
-        m_addr.sin_port = m_port;
+        m_addr.sin_port = detail::swap_byteorder<uint16_t>(port);
         m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
-        std::copy_n(addr_bytes.data(), 4, reinterpret_cast<unsigned char*>(&m_addr.sin_addr.s_addr));
+        std::copy_n(addr_bytes.data(), 4, reinterpret_cast<uint8_t*>(&m_addr.sin_addr.s_addr));
+
+        update();
+    }
+
+    endpoint(uint8_t (&addr_bytes)[4], uint16_t port)
+        : m_up_to_date {false}
+        , m_addr {}
+        , m_addr_string {}
+        , m_port {}
+    {
+        m_addr.sin_port = detail::swap_byteorder<uint16_t>(port);
+        m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
+        std::copy_n(addr_bytes, 4, reinterpret_cast<uint8_t*>(&m_addr.sin_addr.s_addr));
+
+        update();
     }
 
     const std::string& get_addr_string() const
@@ -58,11 +71,10 @@ public:
         return m_addr_string;
     }
 
-    std::array<unsigned char, 4> get_addr_bytes() const
+    std::array<uint8_t, 4> get_addr_bytes() const
     {
-        std::array<unsigned char, 4> bytes;
-        const unsigned char* addr_ptr = reinterpret_cast<const unsigned char*>(&m_addr.sin_addr.s_addr);
-        std::copy_n(addr_ptr, 4, bytes.data());
+        std::array<uint8_t, 4> bytes;
+        std::copy_n(reinterpret_cast<const uint8_t*>(&m_addr.sin_addr.s_addr), 4, bytes.data());
         return bytes;
     }
 
@@ -125,15 +137,30 @@ public:
         , m_port {port}
     {}
 
-    endpoint(const std::array<unsigned char, 16>& addr_bytes, uint16_t port)
-        : m_up_to_date {true}
+    endpoint(const std::array<uint8_t, 16>& addr_bytes, uint16_t port)
+        : m_up_to_date {false}
         , m_addr {}
         , m_addr_string {}
-        , m_port {port}
+        , m_port {}
     {
-        m_addr.sin6_port = m_port;
+        m_addr.sin6_port = detail::swap_byteorder<uint16_t>(port);
         m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
-        std::copy_n(addr_bytes.data(), 16, reinterpret_cast<unsigned char*>(&m_addr.sin6_addr.s6_addr));
+        std::copy_n(addr_bytes.data(), 16, reinterpret_cast<uint8_t*>(&m_addr.sin6_addr.s6_addr));
+
+        update();
+    }
+
+    endpoint(uint8_t (&addr_bytes)[16], uint16_t port)
+        : m_up_to_date {false}
+        , m_addr {}
+        , m_addr_string {}
+        , m_port {}
+    {
+        m_addr.sin6_port = detail::swap_byteorder<uint16_t>(port);
+        m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
+        std::copy_n(addr_bytes, 16, reinterpret_cast<uint8_t*>(&m_addr.sin6_addr.s6_addr));
+
+        update();
     }
 
     const std::string& get_addr_string() const
@@ -142,11 +169,10 @@ public:
         return m_addr_string;
     }
 
-    std::array<unsigned char, 16> get_addr_bytes() const
+    std::array<uint8_t, 16> get_addr_bytes() const
     {
         std::array<unsigned char, 16> bytes;
-        const unsigned char* addr_ptr = reinterpret_cast<const unsigned char*>(&m_addr.sin6_addr.s6_addr);
-        std::copy_n(addr_ptr, 16, bytes.data());
+        std::copy_n(reinterpret_cast<const uint8_t*>(&m_addr.sin6_addr.s6_addr), 16, bytes.data());
         return bytes;
     }
 
