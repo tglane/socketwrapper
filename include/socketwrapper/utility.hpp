@@ -50,18 +50,21 @@ inline constexpr T to_little_endian(T in)
 }
 
 template <typename T>
-inline constexpr T to_network(T in)
+inline constexpr T host_to_network(T in)
 {
-    return to_big_endian(in);
+    if constexpr(detail::is_big_endian())
+        return in;
+    else
+        return detail::swap_byteorder<T>(in);
 }
 
 template <typename T>
-inline constexpr T to_host(T in)
+inline constexpr T network_to_host(T in)
 {
-    if constexpr(detail::is_big_endian())
-        return to_big_endian(in);
+    if constexpr(detail::is_little_endian())
+        return detail::swap_byteorder<T>(in);
     else
-        return to_little_endian(in);
+        return in;
 }
 
 } // namespace net
