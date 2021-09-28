@@ -277,30 +277,31 @@ Methods:
 
 All of the following functions live in the namespace `net`
 
-- Run the asynchronous context:
-    This function blocks until the asynchronous context runs out of registered callbacks.
-    ```cpp
-    void async_run();
-    ```
 - Change byte order:
     ```cpp
     // Change byte order from little-endian to big-endian
-    template<typename T>
-    constexpr inline T to_big_endian(T little);
+    template <typename T>
+    inline constexpr T to_big_endian(T little);
 
     // Change byte order from big-endian to little-endian
-    template<typename T>
-    constexpr inline T to_little_endian(T big);
-    ```
-- Connection info for UDP peers:
-    ```cpp
-    // Struct contains information of a peer that send data to a socket. Returned from udp_sockets read functions.
-    struct connection_info
-    {
-        // IP address of the peer
-        std::string addr;
+    template <typename T>
+    inline constexpr T to_little_endian(T big);
 
-        // Remote port
-        uint16_t port;
-    };
+    // Change byteorder from host byte order to network byte order if they differ
+    template <typename T>
+    inline constexpr T host_to_network(T in);
+
+    // Change byteorder from network byte order to host byte order if they differ
+    template <typename T>
+    inline constexpr T network_to_host(T in);
     ```
+
+## Async helper functions:
+This functions are implicitly included with every socket class.
+
+- Run the asynchronous context until all callbacks are handled:
+    ```cpp
+    // Blocks until the asynchronous context runs out of registered callbacks.
+    void async_run();
+    ```
+

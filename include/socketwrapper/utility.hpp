@@ -34,19 +34,13 @@ inline constexpr bool is_little_endian()
 template <typename T>
 inline constexpr T to_big_endian(T in)
 {
-    if constexpr(detail::is_big_endian())
-        return in;
-    else
-        return detail::swap_byteorder(in);
+    return detail::swap_byteorder(in);
 }
 
 template <typename T>
 inline constexpr T to_little_endian(T in)
 {
-    if constexpr(detail::is_little_endian())
-        return in;
-    else
-        return detail::swap_byteorder(in);
+    return detail::swap_byteorder(in);
 }
 
 template <typename T>

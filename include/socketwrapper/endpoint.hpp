@@ -45,7 +45,7 @@ public:
         , m_addr_string {}
         , m_port {}
     {
-        m_addr.sin_port = to_big_endian<uint16_t>(port);
+        m_addr.sin_port = host_to_network<uint16_t>(port);
         m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
         std::copy_n(addr_bytes.data(), 4, reinterpret_cast<uint8_t*>(&m_addr.sin_addr.s_addr));
 
@@ -58,7 +58,7 @@ public:
         , m_addr_string {}
         , m_port {}
     {
-        m_addr.sin_port = to_big_endian<uint16_t>(port);
+        m_addr.sin_port = host_to_network<uint16_t>(port);
         m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
         std::copy_n(addr_bytes, 4, reinterpret_cast<uint8_t*>(&m_addr.sin_addr.s_addr));
 
@@ -143,7 +143,7 @@ public:
         , m_addr_string {}
         , m_port {}
     {
-        m_addr.sin6_port = to_big_endian<uint16_t>(port);
+        m_addr.sin6_port = host_to_network<uint16_t>(port);
         m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
         std::copy_n(addr_bytes.data(), 16, reinterpret_cast<uint8_t*>(&m_addr.sin6_addr.s6_addr));
 
@@ -156,7 +156,7 @@ public:
         , m_addr_string {}
         , m_port {}
     {
-        m_addr.sin6_port = to_big_endian<uint16_t>(port);
+        m_addr.sin6_port = host_to_network<uint16_t>(port);
         m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
         std::copy_n(addr_bytes, 16, reinterpret_cast<uint8_t*>(&m_addr.sin6_addr.s6_addr));
 
