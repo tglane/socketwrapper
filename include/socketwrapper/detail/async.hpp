@@ -23,7 +23,7 @@ namespace detail {
 class async_context
 {
 public:
-    enum event_type
+    enum event_type : uint32_t
     {
         READ = EPOLLIN,
         WRITE = EPOLLOUT
@@ -122,7 +122,7 @@ public:
                 return false;
 
             auto& item = insert_it->second;
-            item.event.events = type | EPOLLET;
+            item.event.events = static_cast<uint32_t>(type) | EPOLLET;
             item.event.data.fd = sock_fd;
             item[type] = std::forward<CALLBACK_TYPE>(callback);
 
