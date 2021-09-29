@@ -321,6 +321,12 @@ private:
 
 } // namespace detail
 
+/// Free function to easily wait until the async_context runs out of registered events
+inline void async_run()
+{
+    detail::async_context::instance().run();
+}
+
 } // namespace net
 
 #endif

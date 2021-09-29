@@ -26,7 +26,7 @@ Socket/connection classes all are not copyable but moveable and templated to dis
     }
 ```
 
-### span<TYPE>
+### span<typename TYPE>
 >#include "socketwrapper/span.hpp" (also included by all socket headers)
 
 Non owning abstraction of a view to memory used to generalize the interface to the reading and sending methods of the socket classes. Can be created from various container/array types.
@@ -47,15 +47,57 @@ Methods:
     span(CONTAINER&& con) noexcept;
     ```
     
-### tcp_connection<IP_VER>
+### endpoint<ip_version IP_VER>
+>#include "socketwrapper/endpoint.hpp"
+
+Represents a endpoint of a IP/socket connection.
+Methods:
+- Constructor:
+    ```cpp
+    // Constructs an endpoint from a string representation of a IP address, a port and the type of the connection (stream or datagram)
+    endpoint(std::string_view address_string, uint16_t port, socket_type connection_type);
+    
+    // Constructs an endpoint<ip_version::v4> from a POSIX struct sockaddr_in
+    endpoint(const sockaddr_in& address);
+    
+    // Constructs an endpoint<ip_version::v6> from a POSIX struct sockaddr_in6
+    endpoint(const sockaddr_in6& address);
+    ```
+- Accessor:
+    ```cpp
+    // Returns the IP address of the represented endpoint in string representation
+    const std::string& get_addr_string() const;
+    
+    // Returns the port of the represented endpoint as a uint16_t
+    uint16_t get_port() const;
+    
+    // Returns information of the endpoint represented by a const reference to a POSIX struct sockaddr
+    const sockaddr& get_addr() const;
+    
+    // Returns information of the endpoint represented by a reference to a POSIX struct sockaddr
+    sockaddr& get_addr();
+    ```
+
+### tcp_connection<ip_version IP_VER>
 >#include "socketwrapper/tcp.hpp"
 
 Represents a TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
 Methods:
-- Constructor: .
+- Constructor:
     ```cpp
+    // Default constructor of a not connected tcp connection
+    tcp_connection();
+    
     // Construct a tcp connection that immediately connects to the remote in the constructor defined by the parameters.
     tcp_connection(const std::string_view remote_address, const uint16_t remote_port);
+    
+    // Construct a tcp connection from a net::endpoint<IP_VER>
+    tcp_connection(const endpoint<IP_VER>& endpoint);
+    ```
+- Config:
+    ```cpp
+    // Connect a not connected socket to a given endpoint
+    void connect(const endpoint<IP_VER>& endpoint);
     ```
 - Reading:
     ```cpp
@@ -88,15 +130,23 @@ Methods:
     using tcp_connection_v6 = tcp_connection<net::ip_version::v6>;
     ```
     
-### tcp_acceptor<IP_VER>
+### tcp_acceptor<ip_version IP_VER>
 >#include "socketwrapper/tcp.hpp"
 
 Represents a listening TCP socket that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
 Methods:
 - Constructor:
     ```cpp
+    // Default constructor of a non-bound tcp acceptor
+    tcp_acceptor();
+    
     // Immediately creates a socket that listens on the given address and port with a connection backlog of `backlog`
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5);
+    ```
+- Config:
+    ```cpp
+    // Bind a non-bound acceptor to a internal endpoint and set the socket in listening state
+    void activate(const endpoint<IP_VER>& endpoint, const size_t backlog = 5);
     ```
 - Accepting:
     ```cpp
@@ -118,14 +168,21 @@ Methods:
     using tcp_acceptor_v6 = tcp_acceptor<net::ip_version::v6>;
     ```
     
-### tls_connection<IP_VER> : public tcp_connection<IP_VER>
+### tls_connection<ip_version IP_VER> : public tcp_connection<IP_VER>
 >#include "socketwrapper/tls.hpp"
 
 Represents a TLS encrypted TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
 Methods:
 - Constructor:
     ```cpp
+    // Construct a non connected tls connection
+    tls_connection(std::string_view cert_path, std::string_view key_path);
+    
+    // Construct a tls connection that immediately connects to the remote in the constructor defined by the parameters.
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port);
+    
+    // Construct a tls connection from an endpoint and immediately connect it
+    tls_connection(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& endpoint);
     ```
 - Reading:
     Same interface as `tcp_connection<IP_VER>`
@@ -137,13 +194,20 @@ Methods:
     using tls_connection_v6 = tls_connection<net::ip_version::v6>;
     ```
     
-### tls_acceptor<IP_VER> : public tcp_acceptor<IP_VER>
+### tls_acceptor<ip_version IP_VER> : public tcp_acceptor<IP_VER>
 >#include "socketwrapper/tls.hpp"
 Represents a listening TCP socket with TLS encryption that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
 Methods:
 - Constructor:
     ```cpp
+    // Construct a non-bound tls_acceptor
+    tls_acceptor(std::string_view cert_path, std::string_view key_path);
+    
+    // Construct a tls acceptor from address string and port and set it into listening state
     tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5);
+    
+    // Construct a tls acceptor from an endpoint and set it into listening state
+    tls_acceptor(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& endpoint);
     ```
 - Accepting:
     Same interface as `tcp_acceptor<IP_VER>`
@@ -153,7 +217,7 @@ Methods:
     using tls_acceptor_v6 = tls_acceptor<net::ip_version::v6>;
     ```
 
-### udp_socket<IP_VER>
+### udp_socket<ip_version IP_VER>
 >#include "socketwrapper/udp.hpp"
 
 Represents an UDP socket that can either be in "server" or "client" position.
@@ -165,31 +229,42 @@ Methods:
     
     // Creates a UDP socket that is bound to a given address and port so it can send and receive data after construction.
     udp_socket(const std::string_view bind_addr, const uint16_t port);
+    
+    // Creates a UDP socket that is bound to a given endpoint so it can send and receive data directly after construction
+    udp_socket(const endpoint<IP_VER>& endpoint);
+    ```
+- Config:
+    ```cpp
+    // Bind a non-bound udp socket to a given endpoint so that it is able to receive data afterwards
+    void bind(const endpoint<IP_VER>& endpoint);
     ```
 - Reading:
     ```cpp
     // Block until data is read into the given buffer. Reads max the amount of elements that fits into the buffer.
-    std::pair<size_t, connection_info> read(span<T>&& buffer) const;
+    std::pair<size_t, endpoint<IP_VER>> read(span<T>&& buffer) const;
     
     // Block until data is read into the given buffer or the delay is over. Reads max the amount of elements that fits into the buffer.
-    std::pair<size_t, std::optional<connection_info>> read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
+    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
     
     // Immediately return and invoke the callback when data is read into the buffer. Caller is responsible to keep the underlying buffer alive.
     void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const;
 
     // Immediately return and get a future to get the number of elements read and the connection info of the sender at a later point in time
-    std::future<size_t, connection_info> promised_read(span<T>&& buffer) const;
+    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T>&& buffer) const;
     ```
 - Writing:
     ```cpp
-    // Send all data in the given buffer to a remote represented by the addr and port parameter.
+    // Send all data in the given buffer to a remote endpoint.
     size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
+    size_t send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer) const;
     
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
-
+    void async_send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    
     // Immediately return and get a future to get the number of elements written at a later point in time
     std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
+    std::future<size_t> promised_send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer) const;
     ```
 - Shorthand identifier:
     ```cpp
@@ -202,30 +277,31 @@ Methods:
 
 All of the following functions live in the namespace `net`
 
-- Run the asynchronous context:
-    This function blocks until the asynchronous context runs out of registered callbacks.
-    ```cpp
-    void async_run();
-    ```
 - Change byte order:
     ```cpp
     // Change byte order from little-endian to big-endian
-    template<typename T>
-    constexpr inline T to_big_endian(T little);
+    template <typename T>
+    inline constexpr T to_big_endian(T little);
 
     // Change byte order from big-endian to little-endian
-    template<typename T>
-    constexpr inline T to_little_endian(T big);
-    ```
-- Connection info for UDP peers:
-    ```cpp
-    // Struct contains information of a peer that send data to a socket. Returned from udp_sockets read functions.
-    struct connection_info
-    {
-        // IP address of the peer
-        std::string addr;
+    template <typename T>
+    inline constexpr T to_little_endian(T big);
 
-        // Remote port
-        uint16_t port;
-    };
+    // Change byteorder from host byte order to network byte order if they differ
+    template <typename T>
+    inline constexpr T host_to_network(T in);
+
+    // Change byteorder from network byte order to host byte order if they differ
+    template <typename T>
+    inline constexpr T network_to_host(T in);
     ```
+
+## Async helper functions:
+This functions are implicitly included with every socket class.
+
+- Run the asynchronous context until all callbacks are handled:
+    ```cpp
+    // Blocks until the asynchronous context runs out of registered callbacks.
+    void async_run();
+    ```
+

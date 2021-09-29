@@ -12,20 +12,21 @@ int main(int argc, char** argv)
     {
         std::cout << "--- Receiver ---\n";
 
-        net::udp_socket<net::ip_version::v4> sock {"0.0.0.0", 4433};
+        // net::udp_socket<net::ip_version::v4> sock {net::endpoint_v4 {"0.0.0.0", 4433}};
+        net::udp_socket<net::ip_version::v4> sock {net::endpoint_v4 {{0, 0, 0, 0}, 4433}};
         std::array<char, 1024> buffer;
         // net::connection_info peer;
         // size_t bytes_read = sock.read(net::span {buffer}, peer);
         auto [bytes_read, peer] = sock.read(net::span {buffer});
-        std::cout << "Peer addr: " << peer.addr << "; Peer port: " << peer.port << "; Bytes read: " << bytes_read
-                  << '\n';
+        std::cout << "Peer addr: " << peer.get_addr_string() << "; Peer port: " << peer.get_port()
+                  << "; Bytes read: " << bytes_read << '\n';
         std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
 
-        std::optional<net::connection_info> peer_opt;
+        std::optional<net::endpoint_v4> peer_opt;
         std::tie(bytes_read, peer_opt) = sock.read(net::span {buffer}, std::chrono::milliseconds(4000));
         if(peer_opt)
         {
-            std::cout << "Peer addr: " << peer_opt->addr << "; Peer port: " << peer_opt->port
+            std::cout << "Peer addr: " << peer_opt->get_addr_string() << "; Peer port: " << peer_opt->get_port()
                       << "; Bytes read: " << bytes_read << '\n';
             std::cout << std::string_view {buffer.data(), bytes_read} << '\n';
         }
@@ -39,13 +40,14 @@ int main(int argc, char** argv)
         std::cout << "--- Sender ---\n";
         net::udp_socket<net::ip_version::v4> sock {};
         std::string buffer {"Hello world"};
-        sock.send("127.0.0.1", 4433, net::span {buffer});
+        net::endpoint_v4 endpoint = net::endpoint_v4 {"127.0.0.1", 4433};
+        sock.send(endpoint, net::span {buffer});
         std::cout << "All messages sent." << std::endl;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
         std::vector<char> vec {'A', 'B', 'C'};
-        sock.send("127.0.0.1", 4433, net::span {vec});
+        sock.send(net::endpoint_v4 {std::array<uint8_t, 4> {127, 0, 0, 1}, 4433}, net::span {vec});
         std::cout << "All messages sent. Again." << std::endl;
     }
 }

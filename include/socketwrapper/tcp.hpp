@@ -5,6 +5,7 @@
 #include "detail/base_socket.hpp"
 #include "detail/message_notifier.hpp"
 #include "detail/utility.hpp"
+#include "endpoint.hpp"
 #include "span.hpp"
 
 #include <condition_variable>
@@ -13,7 +14,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
-#include <variant>
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -34,6 +34,7 @@ protected:
 public:
     tcp_connection()
         : detail::base_socket {socket_type::stream, IP_VER}
+        , m_peer {std::nullopt}
         , m_connection {connection_status::closed}
     {}
 
@@ -69,33 +70,25 @@ public:
         : detail::base_socket {socket_type::stream, IP_VER}
         , m_connection {connection_status::closed}
     {
-        connect(conn_addr, port_to);
+        endpoint<IP_VER> addr {conn_addr, port_to, socket_type::stream};
+        connect(addr);
     }
 
-    virtual void connect(const std::string_view conn_addr, const uint16_t port_to)
+    tcp_connection(const endpoint<IP_VER>& conn_addr)
+        : detail::base_socket {socket_type::stream, IP_VER}
+        , m_connection {connection_status::closed}
+    {
+        connect(conn_addr);
+    }
+
+    virtual void connect(const endpoint<IP_VER>& conn_addr)
     {
         if(m_connection != connection_status::closed)
             return;
 
-        if(detail::resolve_hostname<IP_VER>(conn_addr, port_to, socket_type::stream, m_peer) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
-
-        if constexpr(IP_VER == ip_version::v4)
-        {
-            auto& ref = std::get<sockaddr_in>(m_peer);
-            if(auto res = ::connect(this->m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
-                throw std::runtime_error {"Failed to connect."};
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            auto& ref = std::get<sockaddr_in6>(m_peer);
-            if(auto res = ::connect(this->m_sockfd, reinterpret_cast<sockaddr*>(&ref), sizeof(sockaddr_in)); res != 0)
-                throw std::runtime_error {"Failed to connect."};
-        }
-        else
-        {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
-        }
+        m_peer = conn_addr;
+        if(auto res = ::connect(this->m_sockfd, &(m_peer->get_addr()), m_peer->addr_size); res != 0)
+            throw std::runtime_error {"Failed to connect."};
 
         m_connection = connection_status::connected;
     }
@@ -218,21 +211,11 @@ public:
     }
 
 protected:
-    tcp_connection(const int socket_fd, const sockaddr_in& peer_addr)
-        : detail::base_socket {socket_fd, ip_version::v4}
+    tcp_connection(const int socket_fd, const endpoint<IP_VER>& peer_addr)
+        : detail::base_socket {socket_fd, IP_VER}
         , m_peer {peer_addr}
         , m_connection {connection_status::connected}
-    {
-        static_assert(IP_VER == ip_version::v4);
-    }
-
-    tcp_connection(const int socket_fd, const sockaddr_in6& peer_addr)
-        : detail::base_socket {socket_fd, ip_version::v6}
-        , m_peer {peer_addr}
-        , m_connection {connection_status::connected}
-    {
-        static_assert(IP_VER == ip_version::v6);
-    }
+    {}
 
     virtual int read_from_socket(char* const buffer_to, size_t bytes_to_read) const
     {
@@ -244,7 +227,7 @@ protected:
         return ::send(this->m_sockfd, buffer_from, bytes_to_write, 0);
     }
 
-    std::variant<sockaddr_in, sockaddr_in6> m_peer = {};
+    std::optional<endpoint<IP_VER>> m_peer;
 
     mutable connection_status m_connection;
 
@@ -269,6 +252,8 @@ protected:
 public:
     tcp_acceptor()
         : detail::base_socket {socket_type::stream, IP_VER}
+        , m_sockaddr {std::nullopt}
+        , m_state {acceptor_state::non_bound}
     {}
 
     tcp_acceptor(const tcp_acceptor&) = delete;
@@ -276,6 +261,7 @@ public:
 
     tcp_acceptor(tcp_acceptor&& rhs) noexcept
         : detail::base_socket {std::move(rhs)}
+        , m_state {acceptor_state::non_bound}
     {
         m_sockaddr = std::move(rhs.m_sockaddr);
     }
@@ -295,36 +281,26 @@ public:
 
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
         : detail::base_socket {socket_type::stream, IP_VER}
+        , m_state {acceptor_state::non_bound}
     {
-        activate(bind_addr, port, backlog);
+        endpoint<IP_VER> addr {bind_addr, port, socket_type::stream};
+        activate(addr, backlog);
     }
 
-    void activate(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
+    tcp_acceptor(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
+        : detail::base_socket {socket_type::stream, IP_VER}
+    {
+        activate(bind_addr, backlog);
+    }
+
+    void activate(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
     {
         if(m_state == acceptor_state::bound)
             return;
 
-        if(detail::resolve_hostname<IP_VER>(bind_addr, port, socket_type::stream, m_sockaddr) != 0)
-            throw std::runtime_error {"Failed to resolve hostname."};
-
-        if constexpr(IP_VER == ip_version::v4)
-        {
-            auto& sockaddr_ref = std::get<sockaddr_in>(m_sockaddr);
-            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in));
-                res != 0)
-                throw std::runtime_error {"Failed to bind."};
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            auto& sockaddr_ref = std::get<sockaddr_in6>(m_sockaddr);
-            if(auto res = ::bind(this->m_sockfd, reinterpret_cast<sockaddr*>(&sockaddr_ref), sizeof(sockaddr_in6));
-                res != 0)
-                throw std::runtime_error {"Failed to bind."};
-        }
-        else
-        {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
-        }
+        m_sockaddr = bind_addr;
+        if(auto res = ::bind(this->m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
+            throw std::runtime_error {"Failed to bind."};
 
         if(const auto res = ::listen(this->m_sockfd, backlog); res != 0)
             throw std::runtime_error {"Failed to initiate listen."};
@@ -337,27 +313,16 @@ public:
         if(m_state == acceptor_state::non_bound)
             throw std::runtime_error {"Socket not in listening state."};
 
-        if constexpr(IP_VER == ip_version::v4)
+        endpoint<IP_VER> client_addr;
+        socklen_t addr_len = client_addr.addr_size;
+        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
+            sock > 0 && addr_len == client_addr.addr_size)
         {
-            sockaddr_in client {};
-            socklen_t len = sizeof(sockaddr_in);
-            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
-                return tcp_connection<IP_VER> {sock, client};
-            else
-                throw std::runtime_error {"Failed to accept."};
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-        {
-            sockaddr_in6 client {};
-            socklen_t len = sizeof(sockaddr_in6);
-            if(const int sock = ::accept(this->m_sockfd, reinterpret_cast<sockaddr*>(&client), &len); sock > 0)
-                return tcp_connection<IP_VER> {sock, client};
-            else
-                throw std::runtime_error {"Failed to accept."};
+            return tcp_connection<IP_VER> {sock, client_addr};
         }
         else
         {
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6);
+            throw std::runtime_error {"Accept operation failed."};
         }
     }
 
@@ -400,9 +365,9 @@ public:
     }
 
 protected:
-    acceptor_state m_state = acceptor_state::non_bound;
+    std::optional<endpoint<IP_VER>> m_sockaddr;
 
-    std::variant<sockaddr_in, sockaddr_in6> m_sockaddr {};
+    acceptor_state m_state = acceptor_state::non_bound;
 };
 
 /// Using declarations for shorthand usage of templated tcp_acceptor types
