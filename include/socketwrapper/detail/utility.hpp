@@ -1,8 +1,6 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 
-#include <iostream>
-
 #include <array>
 #include <charconv>
 #include <csignal>
