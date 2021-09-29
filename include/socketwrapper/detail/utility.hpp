@@ -1,6 +1,8 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_UTILITY_HPP
 
+#include <iostream>
+
 #include <array>
 #include <charconv>
 #include <csignal>
@@ -30,6 +32,9 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
+template <ip_version IP_VER>
+class endpoint;
+
 namespace detail {
 
 template <ip_version IP_VER>
@@ -40,7 +45,7 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
     hints.ai_socktype = static_cast<uint8_t>(type);
 
     std::array<char, 6> port_buffer {0, 0, 0, 0, 0, '\0'};
-    auto [end_ptr, ec] = std::to_chars(port_buffer.begin(), port_buffer.end(), port);
+    auto [_, ec] = std::to_chars(port_buffer.begin(), port_buffer.end(), port);
     if(ec != std::errc())
         throw std::runtime_error {"Ill formed address."};
 
@@ -53,58 +58,37 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
     resultlist_owner.reset(tmp_resultlist);
 
     if(ret == 0)
-    {
-        if constexpr(IP_VER == ip_version::v4)
-        {
-            return *reinterpret_cast<sockaddr_in*>(resultlist_owner->ai_addr);
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-            return *reinterpret_cast<sockaddr_in6*>(resultlist_owner->ai_addr);
-        else
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6, "Invalid ip_version");
-    }
+        return reinterpret_cast<typename endpoint<IP_VER>::addr_type&>(*resultlist_owner->ai_addr);
     else
-    {
         throw std::runtime_error {"Error while resolving hostname."};
-    }
 }
+
 
 template <ip_version IP_VER>
 inline std::pair<std::string, uint16_t> resolve_addrinfo(const sockaddr* addr_in)
 {
     std::pair<std::string, uint16_t> peer {};
-    if constexpr(IP_VER == ip_version::v4)
-    {
-        peer.first.resize(INET_ADDRSTRLEN);
-        if(inet_ntop(AF_INET,
-               &(reinterpret_cast<const sockaddr_in*>(addr_in)->sin_addr),
-               peer.first.data(),
-               peer.first.capacity()) == nullptr)
-        {
-            throw std::runtime_error {"Failed to resolve addrinfo."};
-        }
-        peer.second = ntohs(reinterpret_cast<const sockaddr_in*>(addr_in)->sin_port);
+    peer.first.resize(endpoint<IP_VER>::addr_str_len);
 
-        return peer;
-    }
-    else if constexpr(IP_VER == ip_version::v6)
-    {
-        peer.first.resize(INET6_ADDRSTRLEN);
-        if(inet_ntop(AF_INET,
-               &(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_addr),
-               peer.first.data(),
-               peer.first.capacity()) == nullptr)
-        {
-            throw std::runtime_error {"Failed to resolve addrinfo."};
-        }
-        peer.second = ntohs(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_port);
+    std::array<char, NI_MAXSERV> port_buffer;
 
-        return peer;
-    }
-    else
+    // Parse the ip address represented by addr_in
+    if(::getnameinfo(addr_in,
+           endpoint<IP_VER>::addr_size,
+           peer.first.data(),
+           peer.first.capacity(),
+           port_buffer.data(),
+           port_buffer.size(),
+           NI_NUMERICHOST | NI_NUMERICSERV) != 0)
     {
-        static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6, "Invalid ip_version");
+        throw std::runtime_error {"Failed to resolve address info."};
     }
+
+    auto [_, ec] = std::from_chars(port_buffer.begin(), port_buffer.end(), peer.second);
+    if(ec != std::errc())
+        throw std::runtime_error {"Failed to resolve port."};
+
+    return peer;
 }
 
 inline std::string read_file(std::string_view path)
