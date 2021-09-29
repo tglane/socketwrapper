@@ -30,6 +30,9 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
+template <ip_version IP_VER>
+class endpoint;
+
 namespace detail {
 
 template <ip_version IP_VER>
@@ -53,20 +56,9 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
     resultlist_owner.reset(tmp_resultlist);
 
     if(ret == 0)
-    {
-        if constexpr(IP_VER == ip_version::v4)
-        {
-            return *reinterpret_cast<sockaddr_in*>(resultlist_owner->ai_addr);
-        }
-        else if constexpr(IP_VER == ip_version::v6)
-            return *reinterpret_cast<sockaddr_in6*>(resultlist_owner->ai_addr);
-        else
-            static_assert(IP_VER == ip_version::v4 || IP_VER == ip_version::v6, "Invalid ip_version");
-    }
+        return reinterpret_cast<typename endpoint<IP_VER>::addr_type&>(*resultlist_owner->ai_addr);
     else
-    {
         throw std::runtime_error {"Error while resolving hostname."};
-    }
 }
 
 template <ip_version IP_VER>
@@ -90,7 +82,7 @@ inline std::pair<std::string, uint16_t> resolve_addrinfo(const sockaddr* addr_in
     else if constexpr(IP_VER == ip_version::v6)
     {
         peer.first.resize(INET6_ADDRSTRLEN);
-        if(inet_ntop(AF_INET,
+        if(inet_ntop(AF_INET6,
                &(reinterpret_cast<const sockaddr_in6*>(addr_in)->sin6_addr),
                peer.first.data(),
                peer.first.capacity()) == nullptr)

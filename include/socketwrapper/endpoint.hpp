@@ -21,6 +21,8 @@ class endpoint<ip_version::v4>
 public:
     using addr_type = sockaddr_in;
     static constexpr const size_t addr_size = sizeof(sockaddr_in);
+    static constexpr const size_t addr_str_len = INET_ADDRSTRLEN;
+    static constexpr const int addr_family = AF_INET;
 
     endpoint() = default;
 
@@ -86,13 +88,13 @@ public:
 
     const sockaddr& get_addr() const
     {
-        return *reinterpret_cast<const sockaddr*>(&m_addr);
+        return reinterpret_cast<const sockaddr&>(m_addr);
     }
 
     sockaddr& get_addr()
     {
         m_up_to_date = false;
-        return *reinterpret_cast<sockaddr*>(&m_addr);
+        return reinterpret_cast<sockaddr&>(m_addr);
     }
 
 private:
@@ -119,6 +121,8 @@ class endpoint<ip_version::v6>
 public:
     using addr_type = sockaddr_in6;
     static constexpr const size_t addr_size = sizeof(sockaddr_in6);
+    static constexpr const size_t addr_str_len = INET6_ADDRSTRLEN;
+    static constexpr const int addr_family = AF_INET6;
 
     endpoint() = default;
 
@@ -184,13 +188,13 @@ public:
 
     const sockaddr& get_addr() const
     {
-        return *reinterpret_cast<const sockaddr*>(&m_addr);
+        return reinterpret_cast<const sockaddr&>(m_addr);
     }
 
     sockaddr& get_addr()
     {
         m_up_to_date = false;
-        return *reinterpret_cast<sockaddr*>(&m_addr);
+        return reinterpret_cast<sockaddr&>(m_addr);
     }
 
 private:
