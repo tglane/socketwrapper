@@ -102,27 +102,27 @@ Methods:
 - Reading:
     ```cpp
     // Read as much bytes as fit into buffer and block until the read operation finishes.
-    size_t read(net::span<T>&& buffer) const;
+    size_t read(net::span<T>buffer) const;
     
     // Read as much bytes as fit into buffer and block until the read operation finishes or the delay is over.
-    size_t read(net::span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
+    size_t read(net::span<T> buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
     
     // Immediately return and call the callback function after there is data available.
-    void async_read(net::span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    void async_read(net::span<T> buffer, CALLBACK_TYPE&& callback) const;
 
     // Immediately return and get a future to get the number of elements received at a later timepoint
-    std::future<size_t> promised_read(net::span<T>&& buffer) const;
+    std::future<size_t> promised_read(net::span<T> buffer) const;
     ```
 - Sending:
     ```cpp
     // Sends all data that is stored in the given buffer and blocks until all data is sent.
-    size_t send(net::span<T>&& buffer) const;
+    size_t send(net::span<T> buffer) const;
     
     // Immediately returns and invokes the callback after all in the given buffer is send. Caller is responsible to keep the data the span shows alive.
-    void async_send(net::span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    void async_send(net::span<T> buffer, CALLBACK_TYPE&& callback) const;
 
     // Immediately return and get a future to get the number of elements written at a later point in time
-    std::future<size_t> promised_send(net::span<T>&& buffer) const;
+    std::future<size_t> promised_send(net::span<T> buffer) const;
     ```
 - Shorthand identifier:
     ```cpp
@@ -241,30 +241,30 @@ Methods:
 - Reading:
     ```cpp
     // Block until data is read into the given buffer. Reads max the amount of elements that fits into the buffer.
-    std::pair<size_t, endpoint<IP_VER>> read(span<T>&& buffer) const;
+    std::pair<size_t, endpoint<IP_VER>> read(span<T> buffer) const;
     
     // Block until data is read into the given buffer or the delay is over. Reads max the amount of elements that fits into the buffer.
-    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
+    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& delay) const;
     
     // Immediately return and invoke the callback when data is read into the buffer. Caller is responsible to keep the underlying buffer alive.
-    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const;
 
     // Immediately return and get a future to get the number of elements read and the connection info of the sender at a later point in time
-    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T>&& buffer) const;
+    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T> buffer) const;
     ```
 - Writing:
     ```cpp
     // Send all data in the given buffer to a remote endpoint.
     size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
-    size_t send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer) const;
+    size_t send(const endpoint<IP_VER>& endpoint_to, span<T> buffer) const;
     
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
     void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
-    void async_send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
+    void async_send(const endpoint<IP_VER>& endpoint_to, span<T> buffer, CALLBACK_TYPE&& callback) const;
     
     // Immediately return and get a future to get the number of elements written at a later point in time
     std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
-    std::future<size_t> promised_send(const endpoint<IP_VER>& endpoint_to, span<T>&& buffer) const;
+    std::future<size_t> promised_send(const endpoint<IP_VER>& endpoint_to, span<T> buffer) const;
     ```
 - Shorthand identifier:
     ```cpp
