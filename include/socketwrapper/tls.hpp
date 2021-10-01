@@ -159,47 +159,45 @@ public:
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_send(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_send(span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
             detail::stream_write_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
+                this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
-    std::future<size_t> promised_send(span<T>&& buffer) const
+    std::future<size_t> promised_send(span<T> buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::stream_promised_write_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)});
+            detail::stream_promised_write_callback<tls_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
 
         return size_future;
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
             detail::stream_read_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
+                this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
-    std::future<size_t> promised_read(span<T>&& buffer) const
+    std::future<size_t> promised_read(span<T> buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_read_callback<tls_connection<IP_VER>, T> {
-                this, std::move(buffer), std::move(size_promise)});
+            detail::stream_promised_read_callback<tls_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
 
         return size_future;
     }
