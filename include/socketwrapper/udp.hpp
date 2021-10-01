@@ -97,14 +97,14 @@ public:
     }
 
     template <typename T>
-    size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
+    size_t send(const std::string_view addr, const uint16_t port, span<T> buffer) const
     {
         endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
-        return send(addr_to, std::move(buffer));
+        return send(addr_to, buffer);
     }
 
     template <typename T>
-    size_t send(const endpoint<IP_VER>& addr, span<T>&& buffer) const
+    size_t send(const endpoint<IP_VER>& addr, span<T> buffer) const
     {
         size_t total = 0;
         const size_t bytes_to_send = buffer.size() * sizeof(T);
@@ -126,43 +126,42 @@ public:
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_send(const std::string_view addr, const uint16_t port, span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
-        async_send(addr_to, std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
+        async_send(addr_to, buffer, std::forward<CALLBACK_TYPE>(callback));
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_send(const endpoint<IP_VER>& addr, span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_send(const endpoint<IP_VER>& addr, span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::dgram_write_callback<IP_VER, T> {
-                this, addr, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
+            detail::dgram_write_callback<IP_VER, T> {this, addr, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
-    std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const
+    std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T> buffer) const
     {
         endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
-        return promised_send(addr_to, std::move(buffer));
+        return promised_send(addr_to, buffer);
     }
 
     template <typename T>
-    std::future<size_t> promised_send(const endpoint<IP_VER>& addr, span<T>&& buffer) const
+    std::future<size_t> promised_send(const endpoint<IP_VER>& addr, span<T> buffer) const
     {
         std::promise<size_t> size_promise;
         std::future<size_t> size_future = size_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::dgram_promised_write_callback<IP_VER, T> {this, addr, std::move(buffer), std::move(size_promise)});
+            detail::dgram_promised_write_callback<IP_VER, T> {this, addr, buffer, std::move(size_promise)});
 
         return size_future;
     }
 
     template <typename T>
-    std::pair<size_t, endpoint<IP_VER>> read(span<T>&& buffer) const
+    std::pair<size_t, endpoint<IP_VER>> read(span<T> buffer) const
     {
         std::pair<size_t, endpoint<IP_VER>> pair {};
         if(const auto bytes =
@@ -179,8 +178,8 @@ public:
     }
 
     template <typename T>
-    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(
-        span<T>&& buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(span<T> buffer,
+        const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         auto& notifier = detail::message_notifier::instance();
         std::condition_variable cv;
@@ -193,28 +192,28 @@ public:
         notifier.remove(this->m_sockfd);
 
         if(ready)
-            return read(span<T> {buffer});
+            return read(buffer);
         else
             return std::make_pair(0, std::nullopt);
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_read(span<T>&& buffer, CALLBACK_TYPE&& callback) const
+    void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::dgram_read_callback<IP_VER, T> {this, std::move(buffer), std::forward<CALLBACK_TYPE>(callback)});
+            detail::dgram_read_callback<IP_VER, T> {this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
-    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T>&& buffer) const
+    std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T> buffer) const
     {
         std::promise<std::pair<size_t, endpoint<IP_VER>>> read_promise;
         std::future<std::pair<size_t, endpoint<IP_VER>>> read_future = read_promise.get_future();
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::dgram_promised_read_callback<IP_VER, T> {this, std::move(buffer), std::move(read_promise)});
+            detail::dgram_promised_read_callback<IP_VER, T> {this, buffer, std::move(read_promise)});
 
         return read_future;
     }
