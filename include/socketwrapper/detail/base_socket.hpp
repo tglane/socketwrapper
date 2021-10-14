@@ -1,32 +1,16 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
+#include "../socket_option.hpp"
 #include "async.hpp"
 #include "utility.hpp"
 
-#include "unistd.h"
+#include <type_traits>
+
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace net {
-
-enum class socket_option : int
-{
-    debug = SO_DEBUG,
-    accept_conn = SO_ACCEPTCONN,
-    broadcast = SO_BROADCAST,
-    reuse_addr = SO_REUSEADDR,
-    keep_alive = SO_KEEPALIVE,
-    linger = SO_LINGER, // struct linger
-    oob_inline = SO_OOBINLINE,
-    send_buff = SO_SNDBUF,
-    recv_buff = SO_RCVBUF,
-    error = SO_ERROR,
-    type = SO_TYPE,
-    dont_route = SO_DONTROUTE,
-    recv_lowat = SO_RCVLOWAT,
-    recv_timeout = SO_RCVTIMEO, // struct timeval
-    send_lowat = SO_SNDLOWAT,
-    send_timeout = SO_SNDTIMEO // struct timeval
-};
 
 namespace detail {
 
@@ -81,48 +65,39 @@ public:
     {
         if(m_sockfd > 0)
         {
-            // TODO only do this when the socket is still in the async context
             detail::async_context::instance().deregister(m_sockfd);
             ::close(m_sockfd);
         }
     }
 
-    template <typename OPTION_TYPE>
-    void set_option(socket_option opt_name, OPTION_TYPE&& opt_val)
+    template <typename OPTION_ENUM,
+        typename OPTION_TYPE,
+        typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
+                std::is_same_v<OPTION_TYPE, linger>,
+            bool>>
+    void set_option(OPTION_ENUM opt_name, OPTION_TYPE&& opt_val)
     {
-        // if(::setsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(opt_name), &opt_val, sizeof(OPTION_TYPE)) != 0)
-        if(::setsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(opt_name), &opt_val, sizeof(OPTION_TYPE)) != 0)
+        if(::setsockopt(
+               m_sockfd, option<OPTION_ENUM>::level, static_cast<int>(opt_name), &opt_val, sizeof(OPTION_TYPE)) != 0)
+        {
             throw std::runtime_error {"Failed to set socket option."};
-    }
-
-    template <socket_option OPT_NAME>
-    void set_option(const std::variant<int, timeval, linger>& opt_val)
-    {
-        if constexpr(OPT_NAME == socket_option::linger)
-        {
-            const linger& casted_val = std::get<linger>(opt_val);
-            ::setsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(OPT_NAME), &casted_val, sizeof(linger));
-        }
-        else if constexpr(OPT_NAME == socket_option::recv_timeout || OPT_NAME == socket_option::send_timeout)
-        {
-            const timeval& casted_val = std::get<timeval>(opt_val);
-            ::setsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(OPT_NAME), &casted_val, sizeof(timeval));
-        }
-        else
-        {
-            const int& casted_val = std::get<int>(opt_val);
-            ::setsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(OPT_NAME), &casted_val, sizeof(int));
         }
     }
 
-    template <typename OPTION_TYPE>
+    template <typename OPTION_ENUM,
+        typename OPTION_TYPE,
+        typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
+                std::is_same_v<OPTION_TYPE, linger>,
+            bool>>
     OPTION_TYPE get_option(socket_option opt_name) const
     {
         OPTION_TYPE opt_val {};
-        size_t opt_len {};
-        if(::getsockopt(m_sockfd, SOL_SOCKET, static_cast<int>(opt_name), &opt_val, &opt_len) != 0 ||
+        unsigned int opt_len = sizeof(OPTION_TYPE);
+        if(::getsockopt(m_sockfd, option<OPTION_ENUM>::level, static_cast<int>(opt_name), &opt_val, &opt_len) != 0 ||
             opt_len != sizeof(OPTION_TYPE))
+        {
             throw std::runtime_error {"Failed to receive socket option."};
+        }
         return opt_val;
     }
 
