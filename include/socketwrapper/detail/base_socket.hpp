@@ -1,8 +1,8 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
-#include "../socket_option.hpp"
 #include "async.hpp"
+#include "socket_option.hpp"
 #include "utility.hpp"
 
 #include <type_traits>
@@ -73,7 +73,7 @@ public:
     template <typename OPTION_ENUM,
         typename OPTION_TYPE,
         typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
-                std::is_same_v<OPTION_TYPE, linger>,
+                std::is_same_v<OPTION_TYPE, linger> || std::is_same_v<OPTION_TYPE, sockaddr>,
             bool>>
     void set_option(OPTION_ENUM opt_name, OPTION_TYPE&& opt_val)
     {
@@ -87,7 +87,7 @@ public:
     template <typename OPTION_ENUM,
         typename OPTION_TYPE,
         typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
-                std::is_same_v<OPTION_TYPE, linger>,
+                std::is_same_v<OPTION_TYPE, linger> || std::is_same_v<OPTION_TYPE, sockaddr>,
             bool>>
     OPTION_TYPE get_option(socket_option opt_name) const
     {

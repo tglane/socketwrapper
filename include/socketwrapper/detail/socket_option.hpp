@@ -27,10 +27,31 @@ enum class socket_option : int
 };
 
 enum class ipv4_option : int
-{};
+{
+    user_supplied_header = IP_HDRINCL,
+    options = IP_OPTIONS,
+    type_of_service = IP_TOS,
+    time_to_live = IP_TTL,
+    multicast_interface = IP_MULTICAST_IF,
+    multicast_time_to_live = IP_MULTICAST_TTL,
+    multicast_loop = IP_MULTICAST_LOOP,
+    multicast_add = IP_ADD_MEMBERSHIP,
+    multicast_drop = IP_DROP_MEMBERSHIP
+};
 
 enum class ipv6_option : int
-{};
+{
+    address_format = IPV6_ADDRFORM,
+    hop_limit = IPV6_HOPLIMIT,
+    hop_options = IPV6_HOPOPTS,
+    next_hop = IPV6_NEXTHOP,
+    packet_info = IPV6_PKTINFO,
+    multicast_interface = IPV6_MULTICAST_IF,
+    multicast_hops = IPV6_MULTICAST_HOPS,
+    multicast_loop = IPV6_MULTICAST_LOOP,
+    multicast_add = IPV6_ADD_MEMBERSHIP,
+    multicast_drop = IPV6_DROP_MEMBERSHIP
+};
 
 enum class tcp_option : int
 {
