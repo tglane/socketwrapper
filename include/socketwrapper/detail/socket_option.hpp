@@ -1,6 +1,8 @@
 #ifndef SOCKETWRAPPER_NET_SOCKET_OPTION_HPP
 #define SOCKETWRAPPER_NET_SOCKET_OPTION_HPP
 
+#include <type_traits>
+
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
@@ -60,34 +62,173 @@ enum class tcp_option : int
     // keep_alive = TCP_KEEPALIVE
 };
 
+
+enum class option_level : int
+{
+    socket = SOL_SOCKET,
+    tcp = IPPROTO_TCP,
+    ipv4 = IPPROTO_IP,
+    ipv6 = IPPROTO_IPV6
+};
+
+template <option_level, typename T>
+class option;
+
+template <option_level LEVEL>
+class option<LEVEL, int>
+{
+public:
+    using value_type = int;
+
+    static constexpr const option_level level = LEVEL;
+
+    option(int name)
+        : m_name {name}
+    {}
+
+    option(int name, int val)
+        : m_name {name}
+        , m_value {val}
+    {}
+
+    const int& name() const
+    {
+        return m_name;
+    }
+
+    const int& value() const
+    {
+        return m_value;
+    }
+
+    int& value()
+    {
+        return m_value;
+    }
+
+private:
+    int m_name;
+    int m_value;
+};
+
+template <option_level LEVEL>
+class option<LEVEL, bool>
+{
+    using value_type = bool;
+
+    static constexpr const option_level level = LEVEL;
+
+    option(int name)
+        : m_name {name}
+    {}
+
+    option(int name, bool val)
+        : m_name {name}
+        , m_value {val}
+    {}
+    const int& name() const
+    {
+        return m_name;
+    }
+
+    const bool& value() const
+    {
+        return m_value;
+    }
+
+    bool& value()
+    {
+        return m_value;
+    }
+
+private:
+    int m_name;
+    bool m_value;
+};
+
+template <option_level LEVEL>
+class option<LEVEL, linger>
+{
+public:
+    using value_type = linger;
+
+    static constexpr const option_level level = LEVEL;
+
+    option(int name)
+        : m_name {name}
+    {}
+
+    option(int name, const linger& val)
+        : m_name {name}
+        , m_value {val}
+    {}
+
+    const int& name() const
+    {
+        return m_name;
+    }
+
+    const linger& value() const
+    {
+        return m_value;
+    }
+
+    linger& value()
+    {
+        return m_value;
+    }
+
+private:
+    int m_name;
+    linger m_value;
+};
+
+template <option_level LEVEL>
+class option<LEVEL, sockaddr>
+{
+public:
+    using value_type = sockaddr;
+
+    static constexpr const option_level level = LEVEL;
+
+    option(int name)
+        : m_name {name}
+    {}
+
+    option(int name, const sockaddr& value)
+        : m_name {name}
+        , m_value {value}
+    {}
+
+    const int& name() const
+    {
+        return m_name;
+    }
+
+    const sockaddr& value() const
+    {
+        return m_value;
+    }
+
+    sockaddr& value()
+    {
+        return m_value;
+    }
+
+private:
+    int m_name;
+    sockaddr m_value;
+};
+
 namespace detail {
 
-template <typename OPTION_TYPE>
-struct option;
+template <typename TEST_TYPE, template <auto, typename> class REF_TYPE>
+struct is_template_of : std::false_type
+{};
 
-template <>
-struct option<socket_option>
-{
-    static constexpr const int level = SOL_SOCKET;
-};
-
-template <>
-struct option<ipv4_option>
-{
-    static constexpr const int level = IPPROTO_IP;
-};
-
-template <>
-struct option<ipv6_option>
-{
-    static constexpr const int level = IPPROTO_IPV6;
-};
-
-template <>
-struct option<tcp_option>
-{
-    static constexpr const int level = IPPROTO_TCP;
-};
+template <template <auto, typename> typename REF_TYPE, auto S, typename T>
+struct is_template_of<REF_TYPE<S, T>, REF_TYPE> : std::true_type
+{};
 
 } // namespace detail
 

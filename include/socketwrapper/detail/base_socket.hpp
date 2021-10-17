@@ -70,34 +70,49 @@ public:
         }
     }
 
-    template <typename OPTION_ENUM,
-        typename OPTION_TYPE,
-        typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
-                std::is_same_v<OPTION_TYPE, linger> || std::is_same_v<OPTION_TYPE, sockaddr>,
-            bool>>
-    void set_option(OPTION_ENUM opt_name, OPTION_TYPE&& opt_val)
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    void set_option(OPTION_TYPE&& option)
     {
-        if(::setsockopt(
-               m_sockfd, option<OPTION_ENUM>::level, static_cast<int>(opt_name), &opt_val, sizeof(OPTION_TYPE)) != 0)
+        if(::setsockopt(m_sockfd,
+               static_cast<int>(option.level),
+               option.name(),
+               reinterpret_cast<const char*>(&option.value()),
+               sizeof(option.value())) != 0)
         {
             throw std::runtime_error {"Failed to set socket option."};
         }
     }
 
-    template <typename OPTION_ENUM,
-        typename OPTION_TYPE,
-        typename = std::enable_if_t<std::is_same_v<OPTION_TYPE, int> || std::is_same_v<OPTION_TYPE, timeval> ||
-                std::is_same_v<OPTION_TYPE, linger> || std::is_same_v<OPTION_TYPE, sockaddr>,
-            bool>>
-    OPTION_TYPE get_option(socket_option opt_name) const
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    OPTION_TYPE get_option(int name) const
     {
-        OPTION_TYPE opt_val {};
-        unsigned int opt_len = sizeof(OPTION_TYPE);
-        if(::getsockopt(m_sockfd, option<OPTION_ENUM>::level, static_cast<int>(opt_name), &opt_val, &opt_len) != 0 ||
-            opt_len != sizeof(OPTION_TYPE))
+        OPTION_TYPE opt_val {name};
+        unsigned int opt_len = sizeof(opt_val);
+        if(::getsockopt(m_sockfd,
+               static_cast<int>(opt_val.level),
+               opt_val.name(),
+               reinterpret_cast<char*>(&opt_val.value()),
+               &opt_len) != 0)
         {
-            throw std::runtime_error {"Failed to receive socket option."};
+            throw std::runtime_error {"Failed to get socket option."};
         }
+        return opt_val;
+    }
+
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    typename OPTION_TYPE::value_type get_option_value(int name) const
+    {
+        typename OPTION_TYPE::value_type opt_val {};
+        unsigned int opt_len = sizeof(opt_val);
+        if(::getsockopt(
+               m_sockfd, static_cast<int>(OPTION_TYPE::level), name, reinterpret_cast<char*>(&opt_val), &opt_len) != 0)
+        {
+            throw std::runtime_error {"Failed to get socket option"};
+        }
+
         return opt_val;
     }
 
