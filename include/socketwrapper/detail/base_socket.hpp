@@ -75,7 +75,7 @@ public:
     void set_option(OPTION_TYPE&& option)
     {
         if(::setsockopt(m_sockfd,
-               static_cast<int>(option.level),
+               static_cast<int>(option.level()),
                option.name(),
                reinterpret_cast<const char*>(&option.value()),
                sizeof(option.value())) != 0)
@@ -84,14 +84,15 @@ public:
         }
     }
 
-    template <typename OPTION_TYPE,
-        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
-    OPTION_TYPE get_option(int name) const
+    template <typename OPTION_ENUM,
+        typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<option<OPTION_TYPE>, option>::value, bool>>
+    option<OPTION_TYPE> get_option(OPTION_ENUM name) const
     {
-        OPTION_TYPE opt_val {name};
-        unsigned int opt_len = sizeof(opt_val);
+        option<OPTION_TYPE> opt_val {name};
+        unsigned int opt_len = sizeof(opt_val.value());
         if(::getsockopt(m_sockfd,
-               static_cast<int>(opt_val.level),
+               static_cast<int>(opt_val.level()),
                opt_val.name(),
                reinterpret_cast<char*>(&opt_val.value()),
                &opt_len) != 0)
@@ -101,19 +102,12 @@ public:
         return opt_val;
     }
 
-    template <typename OPTION_TYPE,
-        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
-    typename OPTION_TYPE::value_type get_option_value(int name) const
+    template <typename OPTION_ENUM,
+        typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<option<OPTION_TYPE>, option>::value, bool>>
+    OPTION_TYPE get_option_value(OPTION_ENUM name) const
     {
-        typename OPTION_TYPE::value_type opt_val {};
-        unsigned int opt_len = sizeof(opt_val);
-        if(::getsockopt(
-               m_sockfd, static_cast<int>(OPTION_TYPE::level), name, reinterpret_cast<char*>(&opt_val), &opt_len) != 0)
-        {
-            throw std::runtime_error {"Failed to get socket option"};
-        }
-
-        return opt_val;
+        return get_option<OPTION_ENUM, OPTION_TYPE>(name).value();
     }
 
     int get() const

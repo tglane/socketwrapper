@@ -25,7 +25,7 @@ enum class ip_version : uint8_t
 
 enum class socket_type : uint8_t
 {
-    unspecified = PF_UNSPEC,
+    unspecified = AF_UNSPEC,
     stream = SOCK_STREAM,
     datagram = SOCK_DGRAM
 };

@@ -1,6 +1,11 @@
 #ifndef SOCKETWRAPPER_NET_SOCKET_OPTION_HPP
 #define SOCKETWRAPPER_NET_SOCKET_OPTION_HPP
 
+#include <algorithm>
+#include <array>
+#include <climits>
+#include <stdexcept>
+#include <string_view>
 #include <type_traits>
 
 #include <netinet/in.h>
@@ -14,18 +19,28 @@ enum class socket_option : int
     accept_conn = SO_ACCEPTCONN,
     broadcast = SO_BROADCAST,
     reuse_addr = SO_REUSEADDR,
+    reuse_port = SO_REUSEPORT,
     keep_alive = SO_KEEPALIVE,
     linger = SO_LINGER, // struct linger
     oob_inline = SO_OOBINLINE,
     send_buff_size = SO_SNDBUF,
     recv_buff_size = SO_RCVBUF,
+    recv_buff_size_force = SO_RCVBUFFORCE,
     error = SO_ERROR,
     type = SO_TYPE,
     dont_route = SO_DONTROUTE,
     recv_lowat = SO_RCVLOWAT,
     recv_timeout = SO_RCVTIMEO, // struct timeval
     send_lowat = SO_SNDLOWAT,
-    send_timeout = SO_SNDTIMEO // struct timeval
+    send_timeout = SO_SNDTIMEO, // struct timeval
+    busy_poll = SO_BUSY_POLL,
+    priority = SO_PRIORITY,
+    peek_offset = SO_PEEK_OFF,
+    peer_security_ctx = SO_PEERSEC,
+    peer_credentials = SO_PEERCRED,
+    pass_sec_msg = SO_PASSSEC,
+    pass_credentials = SO_PASSCRED,
+    select_cpu = SO_INCOMING_CPU
 };
 
 enum class ipv4_option : int
@@ -57,43 +72,90 @@ enum class ipv6_option : int
 
 enum class tcp_option : int
 {
-    // max_retransmission = TCP_MAXRT,
     max_seg_size = TCP_MAXSEG,
-    // keep_alive = TCP_KEEPALIVE
+    no_delay = TCP_NODELAY
 };
 
+namespace detail {
 
-enum class option_level : int
+template <typename OPTION_TYPE>
+struct option_level;
+
+template <>
+struct option_level<socket_option>
 {
-    socket = SOL_SOCKET,
-    tcp = IPPROTO_TCP,
-    ipv4 = IPPROTO_IP,
-    ipv6 = IPPROTO_IPV6
+    static constexpr const int value = SOL_SOCKET;
 };
 
-template <option_level, typename T>
+template <>
+struct option_level<ipv4_option>
+{
+    static constexpr const int value = IPPROTO_IP;
+};
+
+template <>
+struct option_level<ipv6_option>
+{
+    static constexpr const int value = IPPROTO_IPV6;
+};
+
+template <>
+struct option_level<tcp_option>
+{
+    static constexpr const int value = IPPROTO_TCP;
+};
+
+template <typename TEST_TYPE, template <typename> class REF_TYPE>
+struct is_template_of : std::false_type
+{};
+
+template <template <typename> typename REF_TYPE, typename T>
+struct is_template_of<REF_TYPE<T>, REF_TYPE> : std::true_type
+{};
+
+} // namespace detail
+
+template <typename T>
 class option;
 
-template <option_level LEVEL>
-class option<LEVEL, int>
+template <>
+class option<int>
 {
 public:
     using value_type = int;
 
-    static constexpr const option_level level = LEVEL;
-
-    option(int name)
+    option(int name, int level)
         : m_name {name}
+        , m_level {level}
     {}
 
-    option(int name, int val)
+    option(int name, int level, bool value)
         : m_name {name}
+        , m_level {level}
+        , m_value {value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name, int val)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
         , m_value {val}
     {}
 
     const int& name() const
     {
         return m_name;
+    }
+
+    const int& level() const
+    {
+        return m_level;
     }
 
     const int& value() const
@@ -108,27 +170,110 @@ public:
 
 private:
     int m_name;
+    int m_level;
     int m_value;
 };
 
-template <option_level LEVEL>
-class option<LEVEL, bool>
+template <>
+class option<char>
+{
+public:
+    using value_type = char;
+
+    option(int name, int level)
+        : m_name {name}
+        , m_level {level}
+    {}
+
+    option(int name, int level, std::string_view value)
+        : m_name {name}
+        , m_level {level}
+    {
+        if(value.size() <= NAME_MAX)
+            std::copy_n(value.begin(), value.size(), m_value.begin());
+        else
+            throw std::runtime_error {"Failed to create option from string_view."};
+    }
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name, std::string_view value)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {
+        if(value.size() <= NAME_MAX)
+            std::copy_n(value.begin(), value.size(), m_value.begin());
+        else
+            throw std::runtime_error {"Failed to create option from string_view."};
+    }
+
+    const int& name() const
+    {
+        return m_name;
+    }
+
+    const int& level() const
+    {
+        return m_level;
+    }
+
+    const char& value() const
+    {
+        return m_value.front();
+    }
+
+    char& value()
+    {
+        return m_value.front();
+    }
+
+private:
+    int m_name;
+    int m_level;
+    std::array<char, NAME_MAX> m_value;
+};
+
+template <>
+class option<bool>
 {
     using value_type = bool;
 
-    static constexpr const option_level level = LEVEL;
-
-    option(int name)
+    option(int name, int level)
         : m_name {name}
+        , m_level {level}
     {}
 
-    option(int name, bool val)
+    option(int name, int level, bool value)
         : m_name {name}
+        , m_level {level}
+        , m_value {value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name, bool val)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
         , m_value {val}
     {}
     const int& name() const
     {
         return m_name;
+    }
+
+    const int& level() const
+    {
+        return m_level;
     }
 
     const bool& value() const
@@ -143,29 +288,48 @@ class option<LEVEL, bool>
 
 private:
     int m_name;
+    int m_level;
     bool m_value;
 };
 
-template <option_level LEVEL>
-class option<LEVEL, linger>
+template <>
+class option<linger>
 {
 public:
     using value_type = linger;
 
-    static constexpr const option_level level = LEVEL;
-
-    option(int name)
+    option(int name, int level)
         : m_name {name}
+        , m_level {level}
     {}
 
-    option(int name, const linger& val)
+    option(int name, int level, const linger& value)
         : m_name {name}
+        , m_level {level}
+        , m_value {value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name, const linger& val)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
         , m_value {val}
     {}
 
     const int& name() const
     {
         return m_name;
+    }
+
+    const int& level() const
+    {
+        return m_level;
     }
 
     const linger& value() const
@@ -180,29 +344,48 @@ public:
 
 private:
     int m_name;
+    int m_level;
     linger m_value;
 };
 
-template <option_level LEVEL>
-class option<LEVEL, sockaddr>
+template <>
+class option<sockaddr>
 {
 public:
     using value_type = sockaddr;
 
-    static constexpr const option_level level = LEVEL;
-
-    option(int name)
+    option(int name, int level)
         : m_name {name}
+        , m_level {level}
     {}
 
-    option(int name, const sockaddr& value)
+    option(int name, int level, const sockaddr& value)
         : m_name {name}
+        , m_level {level}
+        , m_value {value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
+    {}
+
+    template <typename OPTION_ENUM>
+    option(OPTION_ENUM name, const sockaddr& value)
+        : m_name {static_cast<int>(name)}
+        , m_level {detail::option_level<OPTION_ENUM>::value}
         , m_value {value}
     {}
 
     const int& name() const
     {
         return m_name;
+    }
+
+    const int& level() const
+    {
+        return m_level;
     }
 
     const sockaddr& value() const
@@ -217,20 +400,9 @@ public:
 
 private:
     int m_name;
+    int m_level;
     sockaddr m_value;
 };
-
-namespace detail {
-
-template <typename TEST_TYPE, template <auto, typename> class REF_TYPE>
-struct is_template_of : std::false_type
-{};
-
-template <template <auto, typename> typename REF_TYPE, auto S, typename T>
-struct is_template_of<REF_TYPE<S, T>, REF_TYPE> : std::true_type
-{};
-
-} // namespace detail
 
 } // namespace net
 
