@@ -16,12 +16,6 @@ int main(int argc, char** argv)
         std::array<char, 10000> buffer;
         net::tcp_acceptor<net::ip_version::v4> acceptor {net::endpoint_v4 {"0.0.0.0", 4433}};
 
-        // Set and get socket option example socket option
-        acceptor.set_option(net::option<int> {net::socket_option::recv_buff_size, 50000});
-        auto recv_buff_size = acceptor.get_option_value<net::socket_option, int>(net::socket_option::recv_buff_size);
-
-        std::cout << "Recvbuff size for accepting socket: " << recv_buff_size << '\n';
-
         std::cout << "Waiting for accept\n";
         auto opt = acceptor.accept(std::chrono::milliseconds(5000));
         if(!opt)

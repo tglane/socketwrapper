@@ -5,6 +5,8 @@
 #include "socket_option.hpp"
 #include "utility.hpp"
 
+#include <iostream>
+
 #include <type_traits>
 
 #include <sys/socket.h>
@@ -72,42 +74,39 @@ public:
 
     template <typename OPTION_TYPE,
         typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
-    void set_option(OPTION_TYPE&& option)
+    void set_option(OPTION_TYPE&& opt_val)
     {
+        unsigned int opt_len = opt_val.size();
         if(::setsockopt(m_sockfd,
-               static_cast<int>(option.level()),
-               option.name(),
-               reinterpret_cast<const char*>(&option.value()),
-               sizeof(option.value())) != 0)
+               opt_val.level_native(),
+               opt_val.name(),
+               reinterpret_cast<const char*>(&opt_val.value()),
+               opt_len) != 0)
         {
             throw std::runtime_error {"Failed to set socket option."};
         }
     }
 
-    template <typename OPTION_ENUM,
-        typename OPTION_TYPE,
-        typename = std::enable_if_t<detail::is_template_of<option<OPTION_TYPE>, option>::value, bool>>
-    option<OPTION_TYPE> get_option(OPTION_ENUM name) const
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    OPTION_TYPE get_option() const
     {
-        option<OPTION_TYPE> opt_val {name};
-        unsigned int opt_len = sizeof(opt_val.value());
-        if(::getsockopt(m_sockfd,
-               static_cast<int>(opt_val.level()),
-               opt_val.name(),
-               reinterpret_cast<char*>(&opt_val.value()),
-               &opt_len) != 0)
+        OPTION_TYPE opt_val {};
+        unsigned int opt_len = opt_val.size();
+        if(::getsockopt(
+               m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(&opt_val.value()), &opt_len) !=
+            0)
         {
             throw std::runtime_error {"Failed to get socket option."};
         }
         return opt_val;
     }
 
-    template <typename OPTION_ENUM,
-        typename OPTION_TYPE,
-        typename = std::enable_if_t<detail::is_template_of<option<OPTION_TYPE>, option>::value, bool>>
-    OPTION_TYPE get_option_value(OPTION_ENUM name) const
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    typename OPTION_TYPE::value_type get_option_value() const
     {
-        return get_option<OPTION_ENUM, OPTION_TYPE>(name).value();
+        return get_option<OPTION_TYPE>().value();
     }
 
     int get() const

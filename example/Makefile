@@ -38,6 +38,10 @@ async_udp: async_udp_example.cpp
 span: span_example.cpp
 	$(cc) -o span_example $^ $(CFLAGS) $(LDFLAGS)
 
+.PHONY: options
+options: options_example.cpp
+	$(cc) -o options_example $^ $(CFLAGS) $(LDFLAGS)
+
 .PHONY: clean
 clean:
 	rm tls_example
@@ -47,3 +51,4 @@ clean:
 	rm udp_example
 	rm async_udp_example
 	rm span_example
+	rm options_example
