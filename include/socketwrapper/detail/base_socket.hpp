@@ -53,13 +53,9 @@ public:
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
 
-        const int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error {"Failed to set address reusable."};
-
+        set_option(option<option_level::socket, SO_REUSEADDR, int> {1});
 #ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error {"Failed to set port reusable."};
+        set_option(option<option_level::socket, SO_REUSEPORT, int> {1});
 #endif
     }
 
@@ -80,7 +76,7 @@ public:
         if(::setsockopt(m_sockfd,
                opt_val.level_native(),
                opt_val.name(),
-               reinterpret_cast<const char*>(&opt_val.value()),
+               reinterpret_cast<const char*>(opt_val.value()),
                opt_len) != 0)
         {
             throw std::runtime_error {"Failed to set socket option."};
@@ -94,7 +90,7 @@ public:
         OPTION_TYPE opt_val {};
         unsigned int opt_len = opt_val.size();
         if(::getsockopt(
-               m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(&opt_val.value()), &opt_len) !=
+               m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(opt_val.value()), &opt_len) !=
             0)
         {
             throw std::runtime_error {"Failed to get socket option."};
@@ -106,7 +102,7 @@ public:
         typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
     typename OPTION_TYPE::value_type get_option_value() const
     {
-        return get_option<OPTION_TYPE>().value();
+        return *get_option<OPTION_TYPE>().value();
     }
 
     int get() const

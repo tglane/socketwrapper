@@ -68,14 +68,14 @@ public:
         return static_cast<int>(LEVEL);
     }
 
-    const int& value() const
+    const int* value() const
     {
-        return m_value;
+        return &m_value;
     }
 
-    int& value()
+    int* value()
     {
-        return m_value;
+        return &m_value;
     }
 
 private:
@@ -116,14 +116,14 @@ public:
         return static_cast<int>(LEVEL);
     }
 
-    const char& value() const
+    const char* value() const
     {
-        return m_value.front();
+        return m_value.data();
     }
 
-    char& value()
+    char* value()
     {
-        return m_value.front();
+        return m_value.data();
     }
 
 private:
@@ -161,14 +161,14 @@ class option<LEVEL, NAME, bool>
         return static_cast<int>(LEVEL);
     }
 
-    const bool& value() const
+    const bool* value() const
     {
-        return m_value;
+        return &m_value;
     }
 
-    bool& value()
+    bool* value()
     {
-        return m_value;
+        return &m_value;
     }
 
 private:
@@ -207,14 +207,14 @@ public:
         return static_cast<int>(LEVEL);
     }
 
-    const linger& value() const
+    const linger* value() const
     {
-        return m_value;
+        return &m_value;
     }
 
-    linger& value()
+    linger* value()
     {
-        return m_value;
+        return &m_value;
     }
 
 private:
@@ -253,14 +253,14 @@ public:
         return static_cast<int>(LEVEL);
     }
 
-    const sockaddr& value() const
+    const sockaddr* value() const
     {
-        return m_value;
+        return &m_value;
     }
 
-    sockaddr& value()
+    sockaddr* value()
     {
-        return m_value;
+        return &m_value;
     }
 
 private:
