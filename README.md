@@ -102,11 +102,14 @@ This class is used in the methods ```base_socket::get_option```, ```base_socket:
 It is included implicitly with the class ```base_socket```.
 
 Methods:
+- Constructors:
     ```cpp
     option() = default;
     
     option(int value);
-    
+    ```
+- Accessors/Modifiers:
+    ```cpp
     size_t size() const;
     
     int name() const;
