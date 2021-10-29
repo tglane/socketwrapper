@@ -14,9 +14,9 @@ int main(int argc, char** argv)
         std::cout << "--- Receiver ---\n";
 
         std::array<char, 10000> buffer;
-        net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
+        net::tcp_acceptor<net::ip_version::v4> acceptor {net::endpoint_v4 {"0.0.0.0", 4433}};
+
         std::cout << "Waiting for accept\n";
-        // auto sock = acceptor.accept();
         auto opt = acceptor.accept(std::chrono::milliseconds(5000));
         if(!opt)
         {

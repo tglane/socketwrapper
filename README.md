@@ -23,7 +23,26 @@ Socket/connection classes all are not copyable but moveable and templated to dis
     {
         v4,
         v6
-    }
+    };
+```
+
+```cpp
+    enum class socket_type : uint8_t
+    {
+        unspecified = AF_UNSPEC,
+        stream = SOCK_STREAM,
+        datagram = SOCK_DGRAM
+    };
+```
+
+```cpp
+    enum class option_level : int
+    {
+        socket = SOL_SOCKET,
+        ipv4 = IPPROTO_IP
+        ipv6 = IPPROTO_IPV6
+        tcp = IPPROTO_TCP
+    };
 ```
 
 ### span<typename TYPE>
@@ -78,7 +97,70 @@ Methods:
     sockaddr& get_addr();
     ```
 
-### tcp_connection<ip_version IP_VER>
+### option<option_level LEVEL, int NAME, typename T>
+This class is used in the methods ```base_socket::get_option```, ```base_socket::get_option_value``` and ```base_socket::set_option``` to set and get socket options.
+It is included implicitly with the class ```base_socket```.
+
+Methods:
+- Constructors:
+    ```cpp
+    option() = default;
+    
+    option(int value);
+    ```
+- Accessors/Modifiers:
+    ```cpp
+    size_t size() const;
+    
+    int name() const;
+    
+    option_level level() const;
+    
+    int level_native() const;
+    
+    const int* value() const;
+    
+    int* value();
+    ```
+
+Valid template specializations for parameter T are:
+* int
+* bool
+* linger
+* sockaddr
+
+### base_socket
+This class is implicitly included with every socket class that inherits from the class ```base_socket```.
+
+Represents the basic functionalities of the native socket handle. The other high-level socket abstractions are all dervived from this class.
+Methods:
+- Set/get socket options:
+    ```cpp
+    // Set a socket option where the option is represented by a valid template specialization of net::option<net::option_level LEVEL, int NAME, typename T>
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    void set_option(OPTION_TYPE&& opt_val);
+    
+    // Get a current socket option where the option type needs to be a valid template specialization of net::option<net::option_level LEVEL, int NAME, typename T>
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    OPTION_TYPE get_option() const
+    
+    // Get the current value of a socket option where the option type needs to be a valid template specialization of net::option<net::option_level LEVEL, int NAME, typename T>
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    typename OPTION_TYPE::value_type get_option_value() const
+    ```
+- Other:
+    ```cpp
+    // Get the underlying socket handle
+    int get() const;
+    
+    // Get the ip version of the represented socket
+    ip_version family() const;
+    ```
+
+### tcp_connection<ip_version IP_VER> : public base_socket
 >#include "socketwrapper/tcp.hpp"
 
 Represents a TCP connection that can either be constructed with the IP address and port of the remote host or by a `tcp_acceptor<IP_VER>`s accept method.
@@ -130,7 +212,7 @@ Methods:
     using tcp_connection_v6 = tcp_connection<net::ip_version::v6>;
     ```
     
-### tcp_acceptor<ip_version IP_VER>
+### tcp_acceptor<ip_version IP_VER> public base_socket
 >#include "socketwrapper/tcp.hpp"
 
 Represents a listening TCP socket that accepts incoming connections. Returns a `tcp_connection<IP_VER>` for each accepted connection.
@@ -217,7 +299,7 @@ Methods:
     using tls_acceptor_v6 = tls_acceptor<net::ip_version::v6>;
     ```
 
-### udp_socket<ip_version IP_VER>
+### udp_socket<ip_version IP_VER> : public base_socket
 >#include "socketwrapper/udp.hpp"
 
 Represents an UDP socket that can either be in "server" or "client" position.

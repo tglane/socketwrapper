@@ -2,9 +2,15 @@
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
 #include "async.hpp"
+#include "socket_option.hpp"
 #include "utility.hpp"
 
-#include "unistd.h"
+#include <iostream>
+
+#include <type_traits>
+
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace net {
 
@@ -47,13 +53,9 @@ public:
         if(m_sockfd == -1)
             throw std::runtime_error {"Failed to create socket."};
 
-        const int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error {"Failed to set address reusable."};
-
+        set_option(option<option_level::socket, SO_REUSEADDR, int> {1});
 #ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error {"Failed to set port reusable."};
+        set_option(option<option_level::socket, SO_REUSEPORT, int> {1});
 #endif
     }
 
@@ -61,10 +63,46 @@ public:
     {
         if(m_sockfd > 0)
         {
-            // TODO only do this when the socket is still in the async context
             detail::async_context::instance().deregister(m_sockfd);
             ::close(m_sockfd);
         }
+    }
+
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    void set_option(OPTION_TYPE&& opt_val)
+    {
+        unsigned int opt_len = opt_val.size();
+        if(::setsockopt(m_sockfd,
+               opt_val.level_native(),
+               opt_val.name(),
+               reinterpret_cast<const char*>(opt_val.value()),
+               opt_len) != 0)
+        {
+            throw std::runtime_error {"Failed to set socket option."};
+        }
+    }
+
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    OPTION_TYPE get_option() const
+    {
+        OPTION_TYPE opt_val {};
+        unsigned int opt_len = opt_val.size();
+        if(::getsockopt(
+               m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(opt_val.value()), &opt_len) !=
+            0)
+        {
+            throw std::runtime_error {"Failed to get socket option."};
+        }
+        return opt_val;
+    }
+
+    template <typename OPTION_TYPE,
+        typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
+    typename OPTION_TYPE::value_type get_option_value() const
+    {
+        return *get_option<OPTION_TYPE>().value();
     }
 
     int get() const
