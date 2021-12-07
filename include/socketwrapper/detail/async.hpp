@@ -62,7 +62,7 @@ private:
     struct no_op_callback : public abstract_socket_callback
     {
         no_op_callback()
-            : abstract_socket_callback {nullptr}
+            : abstract_socket_callback{nullptr}
         {}
 
         void operator()() const override
@@ -90,7 +90,7 @@ public:
 
         // Wait until the handle store is empty. Condition variable notified in remove(...)
         std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
+        std::unique_lock<std::mutex> lock{mut};
         m_condition.wait(lock,
             [this]()
             {
@@ -117,7 +117,7 @@ public:
         }
         else
         {
-            auto [insert_it, success] = m_store.emplace(std::make_pair<>(sock_fd, socket_ctx {}));
+            auto [insert_it, success] = m_store.emplace(std::make_pair<>(sock_fd, socket_ctx{}));
             if(!success)
                 return false;
 
@@ -210,15 +210,15 @@ private:
     async_context()
     {
         if(m_epfd = ::epoll_create(1); m_epfd == -1)
-            throw std::runtime_error {"Failed to create epoll instance when instantiating message_notifier."};
+            throw std::runtime_error{"Failed to create epoll instance when instantiating message_notifier."};
 
         // Create pipe to stop select and add it to m_fds
         if(::pipe(m_pipe_fds.data()) < 0)
-            throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
+            throw std::runtime_error{"Failed to create pipe when instantiating class message_notifier."};
 
         // Add the pipe to the epoll monitoring set
         auto [pipe_item_it, success] =
-            m_store.emplace(m_pipe_fds[0], socket_ctx {epoll_event {}, no_op_callback {}, std::nullopt});
+            m_store.emplace(m_pipe_fds[0], socket_ctx{epoll_event{}, no_op_callback{}, std::nullopt});
         pipe_item_it->second.event.events = EPOLLIN;
         pipe_item_it->second.event.data.fd = m_pipe_fds[0];
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe_fds[0], &(pipe_item_it->second.event));
@@ -259,7 +259,7 @@ private:
                 if(ready_set[i].data.fd == m_pipe_fds[0])
                 {
                     // Stop signal to end the loop from the destructor
-                    uint8_t byte {0};
+                    uint8_t byte{0};
                     ::read(ready_set[i].data.fd, &byte, 1);
                     if(byte == EXIT_LOOP)
                         return;
@@ -306,15 +306,15 @@ private:
         }
     }
 
-    int m_epfd {};
+    int m_epfd{};
 
-    std::array<int, 2> m_pipe_fds {};
+    std::array<int, 2> m_pipe_fds{};
 
-    std::future<void> m_context_holder {};
+    std::future<void> m_context_holder{};
 
-    callback_store m_store {};
+    callback_store m_store{};
 
-    thread_pool m_pool {};
+    thread_pool m_pool{};
 
     std::condition_variable m_condition;
 };

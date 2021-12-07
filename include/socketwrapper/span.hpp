@@ -19,31 +19,31 @@ public:
     ~span() noexcept = default;
 
     span(T* start, size_t length) noexcept
-        : m_start {start}
-        , m_size {length}
+        : m_start{start}
+        , m_size{length}
     {}
 
     span(T* start, T* end) noexcept
-        : m_start {start}
-        , m_size {static_cast<size_t>(std::distance(start, end) + 1)}
+        : m_start{start}
+        , m_size{static_cast<size_t>(std::distance(start, end) + 1)}
     {}
 
     template <size_t S>
     span(T (&buffer)[S]) noexcept
-        : m_start {buffer}
-        , m_size {S}
+        : m_start{buffer}
+        , m_size{S}
     {}
 
     template <typename ITER>
     span(ITER start, ITER end) noexcept
-        : m_start {&(*start)}
-        , m_size {static_cast<size_t>(std::distance(&(*start), &(*end)))}
+        : m_start{&(*start)}
+        , m_size{static_cast<size_t>(std::distance(&(*start), &(*end)))}
     {}
 
     template <typename CONTAINER>
     span(CONTAINER&& con) noexcept
-        : m_start {con.data()}
-        , m_size {con.size()}
+        : m_start{con.data()}
+        , m_size{con.size()}
     {}
 
     constexpr T* get() const

@@ -36,13 +36,13 @@ public:
     udp_socket& operator=(const udp_socket&) = delete;
 
     udp_socket()
-        : detail::base_socket {socket_type::datagram, IP_VER}
-        , m_state {socket_state::non_bound}
-        , m_sockaddr {std::nullopt}
+        : detail::base_socket{socket_type::datagram, IP_VER}
+        , m_state{socket_state::non_bound}
+        , m_sockaddr{std::nullopt}
     {}
 
     udp_socket(udp_socket&& rhs) noexcept
-        : detail::base_socket {std::move(rhs)}
+        : detail::base_socket{std::move(rhs)}
     {
         m_state = rhs.m_state;
         m_sockaddr = std::move(rhs.m_sockaddr);
@@ -66,18 +66,18 @@ public:
     }
 
     udp_socket(const std::string_view bind_addr_str, const uint16_t port)
-        : detail::base_socket {socket_type::datagram, IP_VER}
-        , m_state {socket_state::non_bound}
-        , m_sockaddr {std::nullopt}
+        : detail::base_socket{socket_type::datagram, IP_VER}
+        , m_state{socket_state::non_bound}
+        , m_sockaddr{std::nullopt}
     {
-        endpoint<IP_VER> bind_addr {bind_addr_str, port, socket_type::datagram};
+        endpoint<IP_VER> bind_addr{bind_addr_str, port, socket_type::datagram};
         bind(bind_addr);
     }
 
     udp_socket(const endpoint<IP_VER>& bind_addr)
-        : detail::base_socket {socket_type::datagram, IP_VER}
-        , m_state {socket_state::non_bound}
-        , m_sockaddr {std::nullopt}
+        : detail::base_socket{socket_type::datagram, IP_VER}
+        , m_state{socket_state::non_bound}
+        , m_sockaddr{std::nullopt}
     {
         bind(bind_addr);
     }
@@ -90,7 +90,7 @@ public:
         m_sockaddr = bind_addr;
         if(auto res = ::bind(this->m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
         {
-            throw std::runtime_error {"Failed to bind."};
+            throw std::runtime_error{"Failed to bind."};
         }
 
         m_state = socket_state::bound;
@@ -99,7 +99,7 @@ public:
     template <typename T>
     size_t send(const std::string_view addr, const uint16_t port, span<T> buffer) const
     {
-        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to{addr, port, socket_type::datagram};
         return send(addr_to, buffer);
     }
 
@@ -118,7 +118,7 @@ public:
             }
             else
             {
-                throw std::runtime_error {"Failed to send."};
+                throw std::runtime_error{"Failed to send."};
             }
         }
 
@@ -128,7 +128,7 @@ public:
     template <typename T, typename CALLBACK_TYPE>
     void async_send(const std::string_view addr, const uint16_t port, span<T> buffer, CALLBACK_TYPE&& callback) const
     {
-        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to{addr, port, socket_type::datagram};
         async_send(addr_to, buffer, std::forward<CALLBACK_TYPE>(callback));
     }
 
@@ -137,13 +137,13 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::dgram_write_callback<IP_VER, T> {this, addr, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::dgram_write_callback<IP_VER, T>{this, addr, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
     std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T> buffer) const
     {
-        endpoint<IP_VER> addr_to {addr, port, socket_type::datagram};
+        endpoint<IP_VER> addr_to{addr, port, socket_type::datagram};
         return promised_send(addr_to, buffer);
     }
 
@@ -155,7 +155,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::dgram_promised_write_callback<IP_VER, T> {this, addr, buffer, std::move(size_promise)});
+            detail::dgram_promised_write_callback<IP_VER, T>{this, addr, buffer, std::move(size_promise)});
 
         return size_future;
     }
@@ -163,7 +163,7 @@ public:
     template <typename T>
     std::pair<size_t, endpoint<IP_VER>> read(span<T> buffer) const
     {
-        std::pair<size_t, endpoint<IP_VER>> pair {};
+        std::pair<size_t, endpoint<IP_VER>> pair{};
         if(const auto bytes =
                 read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T), &(pair.second));
             bytes >= 0)
@@ -173,7 +173,7 @@ public:
         }
         else
         {
-            throw std::runtime_error {"Failed to read."};
+            throw std::runtime_error{"Failed to read."};
         }
     }
 
@@ -184,7 +184,7 @@ public:
         auto& notifier = detail::message_notifier::instance();
         std::condition_variable cv;
         std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
+        std::unique_lock<std::mutex> lock{mut};
         notifier.add(this->m_sockfd, &cv);
 
         // Wait for given delay
@@ -202,7 +202,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::dgram_read_callback<IP_VER, T> {this, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::dgram_read_callback<IP_VER, T>{this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     template <typename T>
@@ -213,7 +213,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::dgram_promised_read_callback<IP_VER, T> {this, buffer, std::move(read_promise)});
+            detail::dgram_promised_read_callback<IP_VER, T>{this, buffer, std::move(read_promise)});
 
         return read_future;
     }

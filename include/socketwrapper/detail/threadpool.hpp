@@ -23,7 +23,7 @@ class thread_pool
 {
 public:
     thread_pool()
-        : m_pool_size {std::thread::hardware_concurrency()}
+        : m_pool_size{std::thread::hardware_concurrency()}
     {
         m_workers.reserve(m_pool_size);
         for(size_t i = 0; i < m_pool_size; ++i)
@@ -31,7 +31,7 @@ public:
     }
 
     thread_pool(size_t size)
-        : m_pool_size {size}
+        : m_pool_size{size}
     {
         m_workers.reserve(m_pool_size);
         for(size_t i = 0; i < m_pool_size; ++i)
@@ -71,8 +71,8 @@ public:
     void add_job(USER_JOB&& func)
     {
         {
-            const std::lock_guard<std::mutex> lock {m_qmutex};
-            m_queue.push(std::packaged_task<void()> {std::forward<USER_JOB>(func)});
+            const std::lock_guard<std::mutex> lock{m_qmutex};
+            m_queue.push(std::packaged_task<void()>{std::forward<USER_JOB>(func)});
         }
         m_cv.notify_one();
     }
@@ -90,7 +90,7 @@ private:
         while(m_running || !m_queue.empty())
         {
             {
-                std::unique_lock<std::mutex> lock {m_qmutex};
+                std::unique_lock<std::mutex> lock{m_qmutex};
                 m_cv.wait(lock, [this]() { return (!m_queue.empty() || !m_running); });
                 if(!m_running && m_queue.empty())
                     return;

@@ -15,7 +15,7 @@ namespace detail {
 inline constexpr bool is_big_endian()
 {
     constexpr uint32_t big_endian = 0x03020100;
-    constexpr std::array<unsigned char, 4> host_data {0, 1, 2, 3};
+    constexpr std::array<unsigned char, 4> host_data{0, 1, 2, 3};
     constexpr uint32_t host_endian = (host_data[0] >> 24) | (host_data[1] >> 16) | (host_data[2] >> 8) | host_data[3];
     return host_endian == big_endian;
 }
@@ -23,7 +23,7 @@ inline constexpr bool is_big_endian()
 inline constexpr bool is_little_endian()
 {
     constexpr uint32_t little_endian = 0x00010203;
-    constexpr std::array<unsigned char, 4> host_data {0, 1, 2, 3};
+    constexpr std::array<unsigned char, 4> host_data{0, 1, 2, 3};
     constexpr uint32_t host_endian = (host_data[0] >> 24) | (host_data[1] >> 16) | (host_data[2] >> 8) | host_data[3];
     return host_endian == little_endian;
 }

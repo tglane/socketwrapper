@@ -30,7 +30,7 @@ public:
     bool add(int sock_fd, std::condition_variable* cv)
     {
         if(auto [inserted, success] =
-                m_store.emplace(sock_fd, std::pair<std::condition_variable*, epoll_event> {cv, epoll_event {}});
+                m_store.emplace(sock_fd, std::pair<std::condition_variable*, epoll_event>{cv, epoll_event{}});
             success)
         {
             auto& ev = inserted->second.second;
@@ -60,11 +60,11 @@ private:
     message_notifier()
     {
         if(m_epfd = ::epoll_create(1); m_epfd == -1)
-            throw std::runtime_error {"Failed to create epoll instance when instantiating message_notifier."};
+            throw std::runtime_error{"Failed to create epoll instance when instantiating message_notifier."};
 
         // Create pipe to stop select and add it to m_fds
         if(::pipe(m_pipe_fds.data()) < 0)
-            throw std::runtime_error {"Failed to create pipe when instantiating class message_notifier."};
+            throw std::runtime_error{"Failed to create pipe when instantiating class message_notifier."};
 
         // Add the pipe to the epoll monitoring set
         m_pipe_event.events = EPOLLIN;

@@ -33,16 +33,16 @@ protected:
 
 public:
     tcp_connection()
-        : detail::base_socket {socket_type::stream, IP_VER}
-        , m_peer {std::nullopt}
-        , m_connection {connection_status::closed}
+        : detail::base_socket{socket_type::stream, IP_VER}
+        , m_peer{std::nullopt}
+        , m_connection{connection_status::closed}
     {}
 
     tcp_connection(const tcp_connection&) = delete;
     tcp_connection& operator=(const tcp_connection&) = delete;
 
     tcp_connection(tcp_connection&& rhs) noexcept
-        : detail::base_socket {std::move(rhs)}
+        : detail::base_socket{std::move(rhs)}
     {
         m_peer = std::move(rhs.m_peer);
         m_connection = rhs.m_connection;
@@ -67,16 +67,16 @@ public:
     }
 
     tcp_connection(const std::string_view conn_addr, const uint16_t port_to)
-        : detail::base_socket {socket_type::stream, IP_VER}
-        , m_connection {connection_status::closed}
+        : detail::base_socket{socket_type::stream, IP_VER}
+        , m_connection{connection_status::closed}
     {
-        endpoint<IP_VER> addr {conn_addr, port_to, socket_type::stream};
+        endpoint<IP_VER> addr{conn_addr, port_to, socket_type::stream};
         connect(addr);
     }
 
     tcp_connection(const endpoint<IP_VER>& conn_addr)
-        : detail::base_socket {socket_type::stream, IP_VER}
-        , m_connection {connection_status::closed}
+        : detail::base_socket{socket_type::stream, IP_VER}
+        , m_connection{connection_status::closed}
     {
         connect(conn_addr);
     }
@@ -88,7 +88,7 @@ public:
 
         m_peer = conn_addr;
         if(auto res = ::connect(this->m_sockfd, &(m_peer->get_addr()), m_peer->addr_size); res != 0)
-            throw std::runtime_error {"Failed to connect."};
+            throw std::runtime_error{"Failed to connect."};
 
         m_connection = connection_status::connected;
     }
@@ -97,7 +97,7 @@ public:
     size_t send(span<T> buffer) const
     {
         if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
+            throw std::runtime_error{"Connection already closed."};
 
         size_t total = 0;
         const size_t bytes_to_send = buffer.size() * sizeof(T);
@@ -109,7 +109,7 @@ public:
             {
                 case -1:
                     // TODO Check for errors that must be handled
-                    throw std::runtime_error {"Failed to read."};
+                    throw std::runtime_error{"Failed to read."};
                 case 0:
                     m_connection = connection_status::closed;
                     total += bytes;
@@ -127,7 +127,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::stream_write_callback<tcp_connection<IP_VER>, T> {
+            detail::stream_write_callback<tcp_connection<IP_VER>, T>{
                 this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
@@ -139,7 +139,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::stream_promised_write_callback<tcp_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
+            detail::stream_promised_write_callback<tcp_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
 
         return size_future;
     }
@@ -148,14 +148,14 @@ public:
     size_t read(span<T> buffer) const
     {
         if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
+            throw std::runtime_error{"Connection already closed."};
 
         switch(const auto bytes = read_from_socket(reinterpret_cast<char*>(buffer.get()), buffer.size() * sizeof(T));
                bytes)
         {
             case -1:
                 // TODO Maybe handle errno to get some error code?
-                throw std::runtime_error {"Failed to read."};
+                throw std::runtime_error{"Failed to read."};
             case 0:
                 m_connection = connection_status::closed;
                 // fall through
@@ -168,12 +168,12 @@ public:
     size_t read(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& delay) const
     {
         if(m_connection == connection_status::closed)
-            throw std::runtime_error {"Connection already closed."};
+            throw std::runtime_error{"Connection already closed."};
 
         auto& notifier = detail::message_notifier::instance();
         std::condition_variable cv;
         std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
+        std::unique_lock<std::mutex> lock{mut};
         notifier.add(this->m_sockfd, &cv);
 
         // Wait for given delay
@@ -191,7 +191,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_read_callback<tcp_connection<IP_VER>, T> {
+            detail::stream_read_callback<tcp_connection<IP_VER>, T>{
                 this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
@@ -203,16 +203,16 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_read_callback<tcp_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
+            detail::stream_promised_read_callback<tcp_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
 
         return size_future;
     }
 
 protected:
     tcp_connection(const int socket_fd, const endpoint<IP_VER>& peer_addr)
-        : detail::base_socket {socket_fd, IP_VER}
-        , m_peer {peer_addr}
-        , m_connection {connection_status::connected}
+        : detail::base_socket{socket_fd, IP_VER}
+        , m_peer{peer_addr}
+        , m_connection{connection_status::connected}
     {}
 
     virtual int read_from_socket(char* const buffer_to, size_t bytes_to_read) const
@@ -249,17 +249,17 @@ protected:
 
 public:
     tcp_acceptor()
-        : detail::base_socket {socket_type::stream, IP_VER}
-        , m_sockaddr {std::nullopt}
-        , m_state {acceptor_state::non_bound}
+        : detail::base_socket{socket_type::stream, IP_VER}
+        , m_sockaddr{std::nullopt}
+        , m_state{acceptor_state::non_bound}
     {}
 
     tcp_acceptor(const tcp_acceptor&) = delete;
     tcp_acceptor& operator=(const tcp_acceptor&) = delete;
 
     tcp_acceptor(tcp_acceptor&& rhs) noexcept
-        : detail::base_socket {std::move(rhs)}
-        , m_state {acceptor_state::non_bound}
+        : detail::base_socket{std::move(rhs)}
+        , m_state{acceptor_state::non_bound}
     {
         m_sockaddr = std::move(rhs.m_sockaddr);
     }
@@ -278,15 +278,15 @@ public:
     }
 
     tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
-        : detail::base_socket {socket_type::stream, IP_VER}
-        , m_state {acceptor_state::non_bound}
+        : detail::base_socket{socket_type::stream, IP_VER}
+        , m_state{acceptor_state::non_bound}
     {
-        endpoint<IP_VER> addr {bind_addr, port, socket_type::stream};
+        endpoint<IP_VER> addr{bind_addr, port, socket_type::stream};
         activate(addr, backlog);
     }
 
     tcp_acceptor(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
-        : detail::base_socket {socket_type::stream, IP_VER}
+        : detail::base_socket{socket_type::stream, IP_VER}
     {
         activate(bind_addr, backlog);
     }
@@ -298,10 +298,10 @@ public:
 
         m_sockaddr = bind_addr;
         if(auto res = ::bind(this->m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
-            throw std::runtime_error {"Failed to bind."};
+            throw std::runtime_error{"Failed to bind."};
 
         if(const auto res = ::listen(this->m_sockfd, backlog); res != 0)
-            throw std::runtime_error {"Failed to initiate listen."};
+            throw std::runtime_error{"Failed to initiate listen."};
 
         m_state = acceptor_state::bound;
     }
@@ -309,18 +309,18 @@ public:
     tcp_connection<IP_VER> accept() const
     {
         if(m_state == acceptor_state::non_bound)
-            throw std::runtime_error {"Socket not in listening state."};
+            throw std::runtime_error{"Socket not in listening state."};
 
         endpoint<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
         if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
             sock > 0 && addr_len == client_addr.addr_size)
         {
-            return tcp_connection<IP_VER> {sock, client_addr};
+            return tcp_connection<IP_VER>{sock, client_addr};
         }
         else
         {
-            throw std::runtime_error {"Accept operation failed."};
+            throw std::runtime_error{"Accept operation failed."};
         }
     }
 
@@ -329,7 +329,7 @@ public:
         auto& notifier = detail::message_notifier::instance();
         std::condition_variable cv;
         std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
+        std::unique_lock<std::mutex> lock{mut};
         notifier.add(this->m_sockfd, &cv);
 
         // Wait for given delay
@@ -337,7 +337,7 @@ public:
         notifier.remove(this->m_sockfd);
 
         if(ready)
-            return std::optional<tcp_connection<IP_VER>> {accept()};
+            return std::optional<tcp_connection<IP_VER>>{accept()};
         else
             return std::nullopt;
     }
@@ -347,7 +347,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_accept_callback<tcp_acceptor<IP_VER>> {this, std::forward<CALLBACK_TYPE>(callback)});
+            detail::stream_accept_callback<tcp_acceptor<IP_VER>>{this, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     std::future<tcp_connection<IP_VER>> promised_accept() const
@@ -357,7 +357,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_accept_callback<tcp_acceptor<IP_VER>> {this, std::move(acc_promise)});
+            detail::stream_promised_accept_callback<tcp_acceptor<IP_VER>>{this, std::move(acc_promise)});
 
         return acc_future;
     }

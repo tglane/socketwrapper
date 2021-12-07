@@ -12,9 +12,9 @@ int main(int argc, char** argv)
     if(strcmp(argv[1], "r") == 0)
     {
         std::cout << "--- Receiver ---\n";
-        net::tcp_acceptor<net::ip_version::v4> acceptor_two {"0.0.0.0", 4556};
+        net::tcp_acceptor<net::ip_version::v4> acceptor_two{"0.0.0.0", 4556};
 
-        net::tcp_acceptor<net::ip_version::v4> acceptor {"0.0.0.0", 4433};
+        net::tcp_acceptor<net::ip_version::v4> acceptor{"0.0.0.0", 4433};
         std::cout << "Waiting for accept\n";
 
         // Make sure to prevent calling the callback on a moved-from (invalid) socket if you use references to async
@@ -39,7 +39,7 @@ int main(int argc, char** argv)
                 //         '\n';
                 //     });
                 // });
-                auto read_fut = sock.promised_read(net::span {buffer});
+                auto read_fut = sock.promised_read(net::span{buffer});
 
                 acceptor.async_accept(
                     [&conns](net::tcp_connection<net::ip_version::v4>&& conn)
@@ -49,9 +49,9 @@ int main(int argc, char** argv)
                         conns.push_back(std::move(conn));
                         auto& sock = conns.back();
 
-                        sock.async_read(net::span {buffer},
+                        sock.async_read(net::span{buffer},
                             [&buffer](size_t br) {
-                                std::cout << "Received: " << br << " -.- " << std::string_view {buffer.data(), br}
+                                std::cout << "Received: " << br << " -.- " << std::string_view{buffer.data(), br}
                                           << '\n';
                             });
                     });
@@ -59,7 +59,7 @@ int main(int argc, char** argv)
                 // Read data from buffer when read promise is resolved
                 size_t bytes_read = read_fut.get();
                 std::cout << "Promised read resolved! Read " << bytes_read << " bytes. -- "
-                          << std::string_view {buffer.data(), bytes_read} << '\n';
+                          << std::string_view{buffer.data(), bytes_read} << '\n';
             });
 
         std::cout << "Wait for data ...\n";
@@ -70,29 +70,29 @@ int main(int argc, char** argv)
     {
         {
             std::cout << "--- Sender ---\n";
-            net::tcp_connection<net::ip_version::v4> sock {"127.0.0.1", 4433};
+            net::tcp_connection<net::ip_version::v4> sock{"127.0.0.1", 4433};
             std::cout << "Connected\n";
-            std::vector<char> vec {'H', 'e', 'l', 'l', 'o'};
+            std::vector<char> vec{'H', 'e', 'l', 'l', 'o'};
 
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-            std::string_view buffer {"Hello String_view-World"};
-            sock.send(net::span {buffer.begin(), buffer.end()});
+            std::string_view buffer{"Hello String_view-World"};
+            sock.send(net::span{buffer.begin(), buffer.end()});
             std::cout << "Sent\n";
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            sock.send(net::span {std::string_view {"Test, test, 123"}});
+            sock.send(net::span{std::string_view{"Test, test, 123"}});
         }
         {
             std::cout << "--- Sender ---\n";
-            net::tcp_connection<net::ip_version::v4> sock {"127.0.0.1", 4433};
+            net::tcp_connection<net::ip_version::v4> sock{"127.0.0.1", 4433};
             std::cout << "Connected\n";
-            std::vector<char> vec {'H', 'e', 'l', 'l', 'o'};
+            std::vector<char> vec{'H', 'e', 'l', 'l', 'o'};
             // sock.send(net::span {vec});
             // sock.send(net::span {std::string {"Hello World"}});
 
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-            std::string_view buffer {"Hello world from the second accepted connection!"};
-            sock.async_send(net::span {buffer.begin(), buffer.end()}, [](size_t) { std::cout << "Message sent\n"; });
+            std::string_view buffer{"Hello world from the second accepted connection!"};
+            sock.async_send(net::span{buffer.begin(), buffer.end()}, [](size_t) { std::cout << "Message sent\n"; });
 
             std::cout << "Sent\n";
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));

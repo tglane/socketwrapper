@@ -42,15 +42,15 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
                 SSL_CTX_free(ctx);
         });
     if(!ctx)
-        throw std::runtime_error {"Failed to create TLS context."};
+        throw std::runtime_error{"Failed to create TLS context."};
 
     SSL_CTX_set_mode(ctx.get(), SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_ecdh_auto(ctx.get(), 1);
 
     if(SSL_CTX_use_certificate_file(ctx.get(), cert.data(), SSL_FILETYPE_PEM) <= 0)
-        throw std::runtime_error {"Failed to set certificate."};
+        throw std::runtime_error{"Failed to set certificate."};
     if(SSL_CTX_use_PrivateKey_file(ctx.get(), key.data(), SSL_FILETYPE_PEM) <= 0)
-        throw std::runtime_error {"Failed to set private key."};
+        throw std::runtime_error{"Failed to set private key."};
 }
 
 } // namespace detail
@@ -64,7 +64,7 @@ public:
     tls_connection& operator=(const tls_connection&) = delete;
 
     tls_connection(tls_connection&& rhs) noexcept
-        : tcp_connection<IP_VER> {std::move(rhs)}
+        : tcp_connection<IP_VER>{std::move(rhs)}
     {
         m_context = std::move(rhs.m_context);
         m_ssl = rhs.m_ssl;
@@ -92,9 +92,9 @@ public:
     }
 
     tls_connection(std::string_view cert_path, std::string_view key_path)
-        : tcp_connection<IP_VER> {}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+        : tcp_connection<IP_VER>{}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -103,23 +103,23 @@ public:
     }
 
     tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr_str, uint16_t port)
-        : tcp_connection<IP_VER> {}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+        : tcp_connection<IP_VER>{}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
         // TODO Change configure function to use the cert and key string not the path
         detail::configure_ssl_ctx(m_context, cert_path, key_path, false);
 
-        endpoint<IP_VER> conn_addr {conn_addr_str, port, socket_type::stream};
+        endpoint<IP_VER> conn_addr{conn_addr_str, port, socket_type::stream};
         connect(conn_addr);
     }
 
     tls_connection(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& conn_addr)
-        : tcp_connection<IP_VER> {}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+        : tcp_connection<IP_VER>{}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -145,7 +145,7 @@ public:
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
         {
             this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
-            throw std::runtime_error {"Failed to instatiate SSL structure."};
+            throw std::runtime_error{"Failed to instatiate SSL structure."};
         }
         SSL_set_fd(m_ssl, this->m_sockfd);
 
@@ -154,7 +154,7 @@ public:
             this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
             ret = SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
-            throw std::runtime_error {"Failed to connect TLS connection."};
+            throw std::runtime_error{"Failed to connect TLS connection."};
         }
     }
 
@@ -163,7 +163,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::stream_write_callback<tls_connection<IP_VER>, T> {
+            detail::stream_write_callback<tls_connection<IP_VER>, T>{
                 this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
@@ -175,7 +175,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::WRITE,
-            detail::stream_promised_write_callback<tls_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
+            detail::stream_promised_write_callback<tls_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
 
         return size_future;
     }
@@ -185,7 +185,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_read_callback<tls_connection<IP_VER>, T> {
+            detail::stream_read_callback<tls_connection<IP_VER>, T>{
                 this, buffer, std::forward<CALLBACK_TYPE>(callback)});
     }
 
@@ -197,25 +197,25 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_read_callback<tls_connection<IP_VER>, T> {this, buffer, std::move(size_promise)});
+            detail::stream_promised_read_callback<tls_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
 
         return size_future;
     }
 
 private:
     tls_connection(int socketfd, const endpoint<IP_VER>& peer_addr, std::shared_ptr<SSL_CTX> context)
-        : tcp_connection<IP_VER> {socketfd, peer_addr}
-        , m_context {std::move(context)}
+        : tcp_connection<IP_VER>{socketfd, peer_addr}
+        , m_context{std::move(context)}
     {
         if(m_ssl = SSL_new(m_context.get()); m_ssl == nullptr)
-            throw std::runtime_error {"Failed to instatiate SSL structure."};
+            throw std::runtime_error{"Failed to instatiate SSL structure."};
         SSL_set_fd(m_ssl, this->m_sockfd);
 
         if(const auto ret = SSL_accept(m_ssl); ret != 1)
         {
             SSL_get_error(m_ssl, ret);
             ERR_print_errors_fp(stderr);
-            throw std::runtime_error {"Failed to accept TLS connection."};
+            throw std::runtime_error{"Failed to accept TLS connection."};
         }
     }
 
@@ -252,7 +252,7 @@ public:
     tls_acceptor operator=(const tls_acceptor&) = delete;
 
     tls_acceptor(tls_acceptor& rhs) noexcept
-        : tcp_acceptor<IP_VER> {std::move(rhs)}
+        : tcp_acceptor<IP_VER>{std::move(rhs)}
     {
         m_certificate = std::move(rhs.m_certificate);
         m_private_key = std::move(rhs.m_private_key);
@@ -280,9 +280,9 @@ public:
     }
 
     tls_acceptor(std::string_view cert_path, std::string_view key_path)
-        : tcp_acceptor<IP_VER> {}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+        : tcp_acceptor<IP_VER>{}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -290,11 +290,14 @@ public:
         detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
     }
 
-    tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port,
+    tls_acceptor(std::string_view cert_path,
+        std::string_view key_path,
+        std::string_view bind_addr,
+        uint16_t port,
         size_t backlog = 5)
-        : tcp_acceptor<IP_VER> {bind_addr, port, backlog}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+        : tcp_acceptor<IP_VER>{bind_addr, port, backlog}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -302,11 +305,13 @@ public:
         detail::configure_ssl_ctx(m_context, cert_path, key_path, true);
     }
 
-    tls_acceptor(
-        std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& bind_addr, size_t backlog = 5)
-        : tcp_acceptor<IP_VER> {bind_addr, backlog}
-        , m_certificate {detail::read_file(cert_path)}
-        , m_private_key {detail::read_file(key_path)}
+    tls_acceptor(std::string_view cert_path,
+        std::string_view key_path,
+        const endpoint<IP_VER>& bind_addr,
+        size_t backlog = 5)
+        : tcp_acceptor<IP_VER>{bind_addr, backlog}
+        , m_certificate{detail::read_file(cert_path)}
+        , m_private_key{detail::read_file(key_path)}
     {
         detail::init_ssl_system();
 
@@ -326,18 +331,18 @@ public:
     tls_connection<IP_VER> accept() const
     {
         if(this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
-            throw std::runtime_error {"Socket not in listening state."};
+            throw std::runtime_error{"Socket not in listening state."};
 
         endpoint<IP_VER> client_addr;
         socklen_t addr_len = client_addr.addr_size;
         if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
             sock > 0 && addr_len == client_addr.addr_size)
         {
-            return tls_connection<IP_VER> {sock, client_addr, m_context};
+            return tls_connection<IP_VER>{sock, client_addr, m_context};
         }
         else
         {
-            throw std::runtime_error {"Accept operation failed."};
+            throw std::runtime_error{"Accept operation failed."};
         }
     }
 
@@ -346,7 +351,7 @@ public:
         auto& notifier = detail::message_notifier::instance();
         std::condition_variable cv;
         std::mutex mut;
-        std::unique_lock<std::mutex> lock {mut};
+        std::unique_lock<std::mutex> lock{mut};
         notifier.add(this->m_sockfd, &cv);
 
         // Wait for given delay
@@ -354,7 +359,7 @@ public:
         notifier.remove(this->m_sockfd);
 
         if(ready)
-            return std::optional<tls_connection<IP_VER>> {accept()};
+            return std::optional<tls_connection<IP_VER>>{accept()};
         else
             return std::nullopt;
     }
@@ -364,7 +369,7 @@ public:
     {
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_accept_callback<tls_acceptor<IP_VER>> {this, std::forward<CALLBACK_TYPE>(callback)});
+            detail::stream_accept_callback<tls_acceptor<IP_VER>>{this, std::forward<CALLBACK_TYPE>(callback)});
     }
 
     std::future<tls_connection<IP_VER>> promised_accept() const
@@ -374,7 +379,7 @@ public:
 
         detail::async_context::instance().add(this->m_sockfd,
             detail::async_context::READ,
-            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>> {this, std::move(acc_promise)});
+            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>>{this, std::move(acc_promise)});
 
         return acc_future;
     }

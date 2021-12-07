@@ -27,25 +27,25 @@ public:
     endpoint() = default;
 
     explicit endpoint(const sockaddr_in& addr)
-        : m_up_to_date {true}
-        , m_addr {addr}
+        : m_up_to_date{true}
+        , m_addr{addr}
     {
         std::tie(m_addr_string, m_port) =
             detail::resolve_addrinfo<ip_version::v4>(reinterpret_cast<const sockaddr*>(&m_addr));
     }
 
     endpoint(std::string_view addr, uint16_t port, socket_type conn_type = socket_type::unspecified)
-        : m_up_to_date {true}
-        , m_addr {detail::resolve_hostname<ip_version::v4>(addr, port, conn_type)}
-        , m_addr_string {addr.begin(), addr.end()}
-        , m_port {port}
+        : m_up_to_date{true}
+        , m_addr{detail::resolve_hostname<ip_version::v4>(addr, port, conn_type)}
+        , m_addr_string{addr.begin(), addr.end()}
+        , m_port{port}
     {}
 
     endpoint(const std::array<uint8_t, 4>& addr_bytes, uint16_t port)
-        : m_up_to_date {false}
-        , m_addr {}
-        , m_addr_string {}
-        , m_port {}
+        : m_up_to_date{false}
+        , m_addr{}
+        , m_addr_string{}
+        , m_port{}
     {
         m_addr.sin_port = host_to_network<uint16_t>(port);
         m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
@@ -55,10 +55,10 @@ public:
     }
 
     endpoint(uint8_t (&addr_bytes)[4], uint16_t port)
-        : m_up_to_date {false}
-        , m_addr {}
-        , m_addr_string {}
-        , m_port {}
+        : m_up_to_date{false}
+        , m_addr{}
+        , m_addr_string{}
+        , m_port{}
     {
         m_addr.sin_port = host_to_network<uint16_t>(port);
         m_addr.sin_family = static_cast<uint8_t>(ip_version::v4);
@@ -127,25 +127,25 @@ public:
     endpoint() = default;
 
     explicit endpoint(const sockaddr_in6& addr)
-        : m_up_to_date {true}
-        , m_addr {addr}
+        : m_up_to_date{true}
+        , m_addr{addr}
     {
         std::tie(m_addr_string, m_port) =
             detail::resolve_addrinfo<ip_version::v6>(reinterpret_cast<const sockaddr*>(&m_addr));
     }
 
     endpoint(std::string_view addr, uint16_t port, socket_type conn_type = socket_type::unspecified)
-        : m_up_to_date {true}
-        , m_addr {detail::resolve_hostname<ip_version::v6>(addr, port, conn_type)}
-        , m_addr_string {addr.begin(), addr.end()}
-        , m_port {port}
+        : m_up_to_date{true}
+        , m_addr{detail::resolve_hostname<ip_version::v6>(addr, port, conn_type)}
+        , m_addr_string{addr.begin(), addr.end()}
+        , m_port{port}
     {}
 
     endpoint(const std::array<uint8_t, 16>& addr_bytes, uint16_t port)
-        : m_up_to_date {false}
-        , m_addr {}
-        , m_addr_string {}
-        , m_port {}
+        : m_up_to_date{false}
+        , m_addr{}
+        , m_addr_string{}
+        , m_port{}
     {
         m_addr.sin6_port = host_to_network<uint16_t>(port);
         m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);
@@ -155,10 +155,10 @@ public:
     }
 
     endpoint(uint8_t (&addr_bytes)[16], uint16_t port)
-        : m_up_to_date {false}
-        , m_addr {}
-        , m_addr_string {}
-        , m_port {}
+        : m_up_to_date{false}
+        , m_addr{}
+        , m_addr_string{}
+        , m_port{}
     {
         m_addr.sin6_port = host_to_network<uint16_t>(port);
         m_addr.sin6_family = static_cast<uint8_t>(ip_version::v4);

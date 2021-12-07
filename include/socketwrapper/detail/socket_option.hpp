@@ -45,7 +45,7 @@ public:
     option() = default;
 
     option(int value)
-        : m_value {value}
+        : m_value{value}
     {}
 
     size_t size() const
@@ -138,7 +138,7 @@ class option<LEVEL, NAME, bool>
     option() = default;
 
     option(bool value)
-        : m_value {value}
+        : m_value{value}
     {}
 
     size_t size() const
@@ -184,7 +184,7 @@ public:
     option() = default;
 
     option(const linger& value)
-        : m_value {value}
+        : m_value{value}
     {}
 
     size_t size() const
@@ -230,7 +230,7 @@ public:
     option() = default;
 
     option(const sockaddr& value)
-        : m_value {value}
+        : m_value{value}
     {}
 
     size_t size() const
