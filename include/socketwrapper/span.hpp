@@ -62,7 +62,7 @@ public:
 
     constexpr bool empty() const
     {
-        return m_size > 0;
+        return m_size == 0;
     }
 
     constexpr T& operator[](size_t index)
