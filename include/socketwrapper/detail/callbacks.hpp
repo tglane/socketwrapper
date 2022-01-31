@@ -83,7 +83,7 @@ public:
     void operator()() const override
     {
         const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_read = ptr->read(span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_read = ptr->read(m_buffer);
         m_func(bytes_read);
     }
 
@@ -105,7 +105,7 @@ public:
     void operator()() const override
     {
         const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_read = ptr->read(span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_read = ptr->read(m_buffer);
 
         m_promise.set_value(bytes_read);
     }
@@ -129,7 +129,7 @@ public:
     void operator()() const override
     {
         const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_written = ptr->send(m_buffer);
         m_func(bytes_written);
     }
 
@@ -151,7 +151,7 @@ public:
     void operator()() const override
     {
         const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_written = ptr->send(m_buffer);
 
         m_promise.set_value(bytes_written);
     }
@@ -220,7 +220,7 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        dgram_operation_res ret = ptr->read(span<T>{m_buffer.get(), m_buffer.size()});
+        dgram_operation_res ret = ptr->read(m_buffer);
         m_func(ret.first, std::move(ret.second));
     }
 
@@ -246,7 +246,7 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        dgram_operation_res ret = ptr->read(span<T>{m_buffer.get(), m_buffer.size()});
+        dgram_operation_res ret = ptr->read(m_buffer);
 
         m_promise.set_value(std::move(ret));
     }
@@ -271,7 +271,7 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(m_addr, span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_written = ptr->send(m_addr, m_buffer);
         m_func(bytes_written);
     }
 
@@ -298,7 +298,7 @@ public:
     void operator()() const override
     {
         const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
-        size_t bytes_written = ptr->send(m_addr, span<T>{m_buffer.get(), m_buffer.size()});
+        size_t bytes_written = ptr->send(m_addr, m_buffer);
 
         m_promise.set_value(bytes_written);
     }
