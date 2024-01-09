@@ -7,6 +7,7 @@ int main()
 {
     int ix[5] = {3, 5, 3, 77, 11};
     net::span s_one{ix};
+
     std::cout << "Size of span from int[5]: " << s_one.size() << '\n';
 
     std::vector<char> empty_vec{};

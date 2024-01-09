@@ -18,6 +18,24 @@ class endpoint;
 template <>
 class endpoint<ip_version::v4>
 {
+    mutable bool m_up_to_date = false;
+
+    sockaddr_in m_addr;
+
+    mutable std::string m_addr_string;
+
+    mutable uint16_t m_port;
+
+    void update() const
+    {
+        if(!m_up_to_date)
+        {
+            std::tie(m_addr_string, m_port) =
+                detail::resolve_addrinfo<ip_version::v4>(reinterpret_cast<const sockaddr*>(&m_addr));
+            m_up_to_date = true;
+        }
+    }
+
 public:
     using addr_type = sockaddr_in;
     static constexpr const size_t addr_size = sizeof(sockaddr_in);
@@ -75,7 +93,7 @@ public:
 
     std::array<uint8_t, 4> get_addr_bytes() const
     {
-        std::array<uint8_t, 4> bytes;
+        auto bytes = std::array<uint8_t, 4>{};
         std::copy_n(reinterpret_cast<const uint8_t*>(&m_addr.sin_addr.s_addr), 4, bytes.data());
         return bytes;
     }
@@ -96,28 +114,30 @@ public:
         m_up_to_date = false;
         return reinterpret_cast<sockaddr&>(m_addr);
     }
-
-private:
-    void update() const
-    {
-        if(!m_up_to_date)
-        {
-            std::tie(m_addr_string, m_port) =
-                detail::resolve_addrinfo<ip_version::v4>(reinterpret_cast<const sockaddr*>(&m_addr));
-            m_up_to_date = true;
-        }
-    }
-
-    mutable bool m_up_to_date = false;
-    sockaddr_in m_addr;
-    mutable std::string m_addr_string;
-    mutable uint16_t m_port;
 };
 
 /// Template specialization for ip v6 connections
 template <>
 class endpoint<ip_version::v6>
 {
+    mutable bool m_up_to_date = false;
+
+    sockaddr_in6 m_addr;
+
+    mutable std::string m_addr_string;
+
+    mutable uint16_t m_port;
+
+    void update() const
+    {
+        if(!m_up_to_date)
+        {
+            std::tie(m_addr_string, m_port) =
+                detail::resolve_addrinfo<ip_version::v6>(reinterpret_cast<const sockaddr*>(&m_addr));
+            m_up_to_date = true;
+        }
+    }
+
 public:
     using addr_type = sockaddr_in6;
     static constexpr const size_t addr_size = sizeof(sockaddr_in6);
@@ -175,7 +195,7 @@ public:
 
     std::array<uint8_t, 16> get_addr_bytes() const
     {
-        std::array<unsigned char, 16> bytes;
+        auto bytes = std::array<unsigned char, 16>{};
         std::copy_n(reinterpret_cast<const uint8_t*>(&m_addr.sin6_addr.s6_addr), 16, bytes.data());
         return bytes;
     }
@@ -196,22 +216,6 @@ public:
         m_up_to_date = false;
         return reinterpret_cast<sockaddr&>(m_addr);
     }
-
-private:
-    void update() const
-    {
-        if(!m_up_to_date)
-        {
-            std::tie(m_addr_string, m_port) =
-                detail::resolve_addrinfo<ip_version::v6>(reinterpret_cast<const sockaddr*>(&m_addr));
-            m_up_to_date = true;
-        }
-    }
-
-    mutable bool m_up_to_date = false;
-    sockaddr_in6 m_addr;
-    mutable std::string m_addr_string;
-    mutable uint16_t m_port;
 };
 
 /// Shorthand using-declarations for endpoint class template specializations

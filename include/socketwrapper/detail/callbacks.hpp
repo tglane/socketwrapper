@@ -5,9 +5,9 @@
 #include "../span.hpp"
 #include "./utility.hpp"
 
+#include <condition_variable>
 #include <functional>
 #include <future>
-#include <memory>
 
 namespace net {
 
@@ -20,53 +20,63 @@ namespace detail {
 /// Forward declarations
 class base_socket;
 
+/// Type erased callback for all asynchronous operations
+class async_callback
+{
+public:
+    async_callback() = default;
+    async_callback(const async_callback&) = delete;
+    async_callback& operator=(const async_callback&) = delete;
+    async_callback(async_callback&&) = default;
+    async_callback& operator=(async_callback&&) = default;
+    virtual ~async_callback() = default;
+
+    virtual void invoke() const = 0;
+
+    virtual void reset_socket_ptr(const base_socket*)
+    {
+        // Blank base implementation because we do not need a socket pointer in every callback type
+    }
+};
+
+class condition_fullfilled_callback : public async_callback
+{
+    std::condition_variable* m_cv;
+
+public:
+    condition_fullfilled_callback(std::condition_variable& cv)
+        : async_callback{}
+        , m_cv{&cv}
+    {}
+
+    void invoke() const override
+    {
+        m_cv->notify_one();
+    }
+};
+
 /// Abstract callback type providing a pointer to the socket that issued the callback
 //      to "move" active asynchronous operations with a moved socket
-struct abstract_socket_callback
+class abstract_socket_callback : public async_callback
 {
+protected:
+    const base_socket* m_socket_ptr;
+
+public:
     abstract_socket_callback(const base_socket* ptr)
-        : socket_ptr{ptr}
+        : m_socket_ptr{ptr}
     {}
 
     abstract_socket_callback(const abstract_socket_callback&) = delete;
     abstract_socket_callback& operator=(const abstract_socket_callback&) = delete;
     abstract_socket_callback(abstract_socket_callback&&) = default;
     abstract_socket_callback& operator=(abstract_socket_callback&&) = default;
-
     virtual ~abstract_socket_callback() = default;
 
-    virtual void operator()() const = 0;
-
-    const base_socket* socket_ptr;
-};
-
-/// Type erased callback for all asynchronous operations
-class async_callback final
-{
-public:
-    template <typename DERIVED_CALLBACK>
-    async_callback(DERIVED_CALLBACK&& cb)
-        : m_ptr{std::make_unique<DERIVED_CALLBACK>(std::forward<DERIVED_CALLBACK>(cb))}
-    {}
-
-    async_callback(const async_callback&) = delete;
-    async_callback& operator=(const async_callback&) = delete;
-    async_callback(async_callback&&) = default;
-    async_callback& operator=(async_callback&&) = default;
-    ~async_callback() = default;
-
-    void operator()() const
+    void reset_socket_ptr(const base_socket* ptr) override
     {
-        (*m_ptr)();
+        m_socket_ptr = ptr;
     }
-
-    void reset_socket_ptr(const base_socket* new_ptr)
-    {
-        m_ptr->socket_ptr = new_ptr;
-    }
-
-private:
-    std::unique_ptr<abstract_socket_callback> m_ptr;
 };
 
 template <typename SOCK_TYPE, typename T>
@@ -80,9 +90,9 @@ public:
         , m_func{std::forward<USER_CALLBACK>(cb)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         size_t bytes_read = ptr->read(m_buffer);
         m_func(bytes_read);
     }
@@ -102,9 +112,9 @@ public:
         , m_promise{std::move(promise)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         size_t bytes_read = ptr->read(m_buffer);
 
         m_promise.set_value(bytes_read);
@@ -126,9 +136,9 @@ public:
         , m_func{std::forward<USER_CALLBACK>(cb)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         size_t bytes_written = ptr->send(m_buffer);
         m_func(bytes_written);
     }
@@ -148,9 +158,9 @@ public:
         , m_promise{std::move(promise)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         size_t bytes_written = ptr->send(m_buffer);
 
         m_promise.set_value(bytes_written);
@@ -173,9 +183,9 @@ public:
         , m_func{std::forward<USER_CALLBACK>(cb)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         m_func(ptr->accept());
     }
 
@@ -194,9 +204,9 @@ public:
         , m_promise{std::move(promise)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->socket_ptr);
+        const SOCK_TYPE* ptr = static_cast<const SOCK_TYPE*>(this->m_socket_ptr);
         m_promise.set_value(ptr->accept());
     }
 
@@ -217,9 +227,9 @@ public:
         , m_func{std::forward<USER_CALLBACK>(cb)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->m_socket_ptr);
         dgram_operation_res ret = ptr->read(m_buffer);
         m_func(ret.first, std::move(ret.second));
     }
@@ -243,9 +253,9 @@ public:
         , m_promise{std::move(promise)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->m_socket_ptr);
         dgram_operation_res ret = ptr->read(m_buffer);
 
         m_promise.set_value(std::move(ret));
@@ -268,9 +278,9 @@ public:
         , m_func{std::forward<USER_CALLBACK>(cb)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->m_socket_ptr);
         size_t bytes_written = ptr->send(m_addr, m_buffer);
         m_func(bytes_written);
     }
@@ -290,14 +300,14 @@ public:
         span<T> view,
         std::promise<size_t> promise)
         : detail::abstract_socket_callback{sock_ptr}
-        , m_addr{addr}
+        , m_addr{std::move(addr)}
         , m_buffer{std::move(view)}
         , m_promise{std::move(promise)}
     {}
 
-    void operator()() const override
+    void invoke() const override
     {
-        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->socket_ptr);
+        const udp_socket<IP_VER>* ptr = static_cast<const udp_socket<IP_VER>*>(this->m_socket_ptr);
         size_t bytes_written = ptr->send(m_addr, m_buffer);
 
         m_promise.set_value(bytes_written);

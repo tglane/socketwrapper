@@ -14,39 +14,41 @@ int main(int argc, char** argv)
         net::udp_socket<net::ip_version::v4> sock{"0.0.0.0", 4433};
 
         std::array<char, 1024> buffer;
-        sock.async_read(net::span{buffer},
-            [&sock, &buffer](size_t bytes, net::endpoint_v4)
-            {
-                std::cout << "Received " << bytes << " bytes. -- " << std::string_view{buffer.data(), bytes} << '\n';
 
-                sock.async_read(net::span{buffer},
-                    [&buffer](size_t bytes, net::endpoint_v4) {
-                        std::cout << "Inner received " << bytes << " bytes. -- "
-                                  << std::string_view{buffer.data(), bytes} << '\n';
-                    });
-            });
+        // Test the read timeout
+        std::cout << "Started receiving\n";
+        const auto [size, from] = sock.read(net::span{buffer}, std::chrono::milliseconds(10000));
+        std::cout << "Received within timeframe: " << std::string_view{buffer.data(), size} << '\n';
 
         sock.async_read(net::span{buffer},
             [&sock, &buffer](size_t bytes, net::endpoint_v4)
             {
-                std::cout << "Received " << bytes << " bytes. -- " << std::string_view{buffer.data(), bytes} << '\n';
+                std::cout << "1. Received " << bytes << " bytes. -- " << std::string_view{buffer.data(), bytes} << '\n';
 
                 sock.async_read(net::span{buffer},
                     [&sock, &buffer](size_t bytes, net::endpoint_v4)
                     {
-                        std::cout << "Inner received " << bytes << " bytes. -- "
-                                  << std::string_view{buffer.data(), bytes} << '\n';
+                        std::cout << "2. Received " << bytes << " bytes. -- " << std::string_view{buffer.data(), bytes}
+                                  << '\n';
 
                         sock.async_read(net::span{buffer},
-                            [&buffer](size_t bytes, net::endpoint_v4) {
-                                std::cout << "Nested received " << bytes << " bytes. -- "
+                            [&sock, &buffer](size_t bytes, net::endpoint_v4)
+                            {
+                                std::cout << "Inner received " << bytes << " bytes. -- "
                                           << std::string_view{buffer.data(), bytes} << '\n';
+
+                                sock.async_read(net::span{buffer},
+                                    [&buffer](size_t bytes, net::endpoint_v4) {
+                                        std::cout << "Nested inner received " << bytes << " bytes. -- "
+                                                  << std::string_view{buffer.data(), bytes} << '\n';
+                                    });
                             });
                     });
             });
 
         std::cout << "Waiting ...\n";
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        net::async_run();
     }
     else if(strcmp(argv[1], "s") == 0)
     {
@@ -54,7 +56,8 @@ int main(int argc, char** argv)
         net::udp_socket<net::ip_version::v4> sock{};
 
         std::string str{"Hello async UDP world!"};
-        sock.send("127.0.0.1", 4433, net::span{str});
+        // sock.send("127.0.0.1", 4433, net::span{str});
+        auto first_send = sock.promised_send("127.0.0.1", 4433, net::span{str});
 
         sock.send("127.0.0.1", 4433, net::span{"KekW"});
         std::cout << "All messages sent!\n";
@@ -62,5 +65,7 @@ int main(int argc, char** argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         sock.send("127.0.0.1", 4433, net::span{str});
         std::cout << "Another message sent!\n";
+
+        first_send.wait();
     }
 }

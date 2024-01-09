@@ -29,8 +29,8 @@ int main()
     test_con.send(net::span{std::string_view{"Hello world"}});
 
     // Get the peer security ctx
-    auto peer_ctx_opt = test_con.get_option<net::option<net::option_level::socket, SO_PEERSEC, char>>();
-    std::cout << peer_ctx_opt.value() << '\n';
+    // auto peer_ctx_opt = test_con.get_option<net::option<net::option_level::socket, SO_PEERSEC, char>>();
+    // std::cout << peer_ctx_opt.value() << '\n';
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }

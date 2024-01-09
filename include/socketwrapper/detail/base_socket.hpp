@@ -1,11 +1,9 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
-#include "async.hpp"
+#include "executor.hpp"
 #include "socket_option.hpp"
 #include "utility.hpp"
-
-#include <iostream>
 
 #include <type_traits>
 
@@ -19,6 +17,34 @@ namespace detail {
 /// Very simple socket base class
 class base_socket
 {
+protected:
+    int m_sockfd;
+
+    ip_version m_family;
+
+    base_socket(int sockfd, ip_version ip_ver)
+        : m_sockfd{sockfd}
+        , m_family{ip_ver}
+    {
+        if(m_sockfd == -1)
+        {
+            throw std::runtime_error{"Failed to create socket."};
+        }
+
+        const int reuse = 1;
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+        {
+            throw std::runtime_error{"Failed to set address reusable."};
+        }
+
+#ifdef SO_REUSEPORT
+        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
+        {
+            throw std::runtime_error{"Failed to set port reusable."};
+        }
+#endif
+    }
+
 public:
     base_socket(const base_socket&) = delete;
     base_socket& operator=(const base_socket&) = delete;
@@ -37,7 +63,8 @@ public:
             m_sockfd = rhs.m_sockfd;
             m_family = rhs.m_family;
 
-            async_context::instance().callback_update_socket(m_sockfd, this);
+            auto& exec = executor::instance();
+            exec.callback_update_socket(m_sockfd, this);
 
             rhs.m_sockfd = -1;
         }
@@ -51,7 +78,9 @@ public:
         detail::init_socket_system();
 
         if(m_sockfd == -1)
+        {
             throw std::runtime_error{"Failed to create socket."};
+        }
 
         set_option(option<option_level::socket, SO_REUSEADDR, int>{1});
 #ifdef SO_REUSEPORT
@@ -63,7 +92,8 @@ public:
     {
         if(m_sockfd > 0)
         {
-            detail::async_context::instance().deregister(m_sockfd);
+            auto& exec = executor::instance();
+            exec.deregister(m_sockfd);
             ::close(m_sockfd);
         }
     }
@@ -72,12 +102,11 @@ public:
         typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
     void set_option(OPTION_TYPE&& opt_val)
     {
-        unsigned int opt_len = opt_val.size();
         if(::setsockopt(m_sockfd,
                opt_val.level_native(),
                opt_val.name(),
                reinterpret_cast<const char*>(opt_val.value()),
-               opt_len) != 0)
+               opt_val.size()) != 0)
         {
             throw std::runtime_error{"Failed to set socket option."};
         }
@@ -105,6 +134,13 @@ public:
         return *get_option<OPTION_TYPE>().value();
     }
 
+    void cancel() const
+    {
+        // Cancel all pending async operations
+        auto& exec = detail::executor::instance();
+        exec.deregister(m_sockfd);
+    }
+
     int get() const
     {
         return m_sockfd;
@@ -114,28 +150,6 @@ public:
     {
         return m_family;
     }
-
-protected:
-    base_socket(int sockfd, ip_version ip_ver)
-        : m_sockfd{sockfd}
-        , m_family{ip_ver}
-    {
-        if(m_sockfd == -1)
-            throw std::runtime_error{"Failed to create socket."};
-
-        const int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error{"Failed to set address reusable."};
-
-#ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
-            throw std::runtime_error{"Failed to set port reusable."};
-#endif
-    }
-
-    int m_sockfd;
-
-    ip_version m_family;
 };
 
 } // namespace detail
