@@ -92,7 +92,7 @@ public:
 
     option(std::string_view value)
     {
-        if(value.size() <= NAME_MAX)
+        if (value.size() <= NAME_MAX)
             std::copy_n(value.begin(), value.size(), m_value.begin());
     }
 

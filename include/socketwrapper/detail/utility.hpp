@@ -44,7 +44,7 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
 
     std::array<char, 6> port_buffer{0, 0, 0, 0, 0, '\0'};
     auto [_, ec] = std::to_chars(port_buffer.begin(), port_buffer.end(), port);
-    if(ec != std::errc())
+    if (ec != std::errc())
         throw std::runtime_error{"Ill formed address."};
 
     std::string_view port_str{port_buffer.begin(), std::distance(port_buffer.begin(), port_buffer.end())};
@@ -55,7 +55,7 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
     ret = ::getaddrinfo(host_name.data(), port_str.data(), &hints, &tmp_resultlist);
     resultlist_owner.reset(tmp_resultlist);
 
-    if(ret == 0)
+    if (ret == 0)
         return reinterpret_cast<typename endpoint<IP_VER>::addr_type&>(*resultlist_owner->ai_addr);
     else
         throw std::runtime_error{"Error while resolving hostname."};
@@ -70,19 +70,19 @@ inline std::pair<std::string, uint16_t> resolve_addrinfo(const sockaddr* addr_in
     std::array<char, NI_MAXSERV> port_buffer;
 
     // Parse the ip address represented by addr_in
-    if(::getnameinfo(addr_in,
-           endpoint<IP_VER>::addr_size,
-           peer.first.data(),
-           peer.first.capacity(),
-           port_buffer.data(),
-           port_buffer.size(),
-           NI_NUMERICHOST | NI_NUMERICSERV) != 0)
+    if (::getnameinfo(addr_in,
+            endpoint<IP_VER>::addr_size,
+            peer.first.data(),
+            peer.first.capacity(),
+            port_buffer.data(),
+            port_buffer.size(),
+            NI_NUMERICHOST | NI_NUMERICSERV) != 0)
     {
         throw std::runtime_error{"Failed to resolve address info."};
     }
 
     auto [_, ec] = std::from_chars(port_buffer.begin(), port_buffer.end(), peer.second);
-    if(ec != std::errc())
+    if (ec != std::errc())
         throw std::runtime_error{"Failed to resolve port."};
 
     return peer;
@@ -105,7 +105,7 @@ inline std::string read_file(std::string_view path)
 inline void init_socket_system()
 {
     static bool initialized = false;
-    if(!initialized)
+    if (!initialized)
     {
         std::signal(SIGPIPE, SIG_IGN);
 
@@ -121,7 +121,7 @@ constexpr inline T swap_byteorder(T in)
     uint8_t* in_ptr = reinterpret_cast<uint8_t*>(&in);
     uint8_t* out_ptr = reinterpret_cast<uint8_t*>(&out);
 
-    for(size_t i = 0; i < limit; ++i)
+    for (size_t i = 0; i < limit; ++i)
         out_ptr[i] = in_ptr[limit - i - 1];
 
     return out;
@@ -131,7 +131,7 @@ template <typename T>
 constexpr inline void swap_byteorder(const T* in, T* out, size_t elements)
 {
     size_t limit = sizeof(T) * elements;
-    for(size_t i = 0; i < limit; ++i)
+    for (size_t i = 0; i < limit; ++i)
         out[i] = in[limit - i - 1];
 }
 

@@ -23,6 +23,7 @@ AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
 BinPackParameters: false
 BitFieldColonSpacing: Both
+  # BreakBeforeBraces: Allman
 BreakBeforeBraces: Custom
 BraceWrapping:
     AfterCaseLabel: false
@@ -34,6 +35,7 @@ BraceWrapping:
     AfterStruct: true
     AfterUnion: true
     AfterExternBlock: false
+    BeforeCatch: true
     BeforeElse: true
     BeforeLambdaBody: true
     BeforeWhile: false
@@ -70,7 +72,7 @@ SortUsingDeclarations: false
 SpaceAfterCStyleCast: true
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: true
-SpaceBeforeParens: Never
+SpaceBeforeParens: ControlStatements
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: false

@@ -1,7 +1,7 @@
 # cc = g++
 cc = clang++
 
-CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic
+CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic -g -fsanitize=undefined -fsanitize=address
 LDFLAGS = -lpthread
 
 %.o: %.cpp

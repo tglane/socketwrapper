@@ -10,7 +10,7 @@ int main()
 {
     std::cout << "--- Options example ---\n";
 
-    net::tcp_acceptor<net::ip_version::v4> acceptor{net::endpoint_v4{"0.0.0.0", 4433}};
+    auto acceptor = net::tcp_acceptor_v4(net::endpoint_v4("0.0.0.0", 4433));
 
     // Set and get socket option example socket option for receive buffer size
     acceptor.set_option(net::option<net::option_level::socket, SO_RCVBUF, int>{10000});
@@ -18,14 +18,14 @@ int main()
     std::cout << "Recvbuff size for accepting socket: " << recv_buff_size << '\n';
 
     acceptor.async_accept(
-        [](auto sock)
+        [](auto sock, std::exception_ptr)
         {
-            std::array<char, 1024> buffer{};
-            auto len = sock.read(net::span{buffer});
-            std::cout << "Message read: " << std::string_view{buffer.data(), len} << '\n';
+            auto buffer = std::array<char, 1024>{};
+            auto len = sock.read(net::span(buffer));
+            std::cout << "Message read: " << std::string_view(buffer.data(), len) << '\n';
         });
 
-    net::tcp_connection_v4 test_con{net::endpoint_v4{"127.0.0.1", 4433, net::socket_type::stream}};
+    auto test_con = net::tcp_connection_v4(net::endpoint_v4("127.0.0.1", 4433, net::socket_type::stream));
     test_con.send(net::span{std::string_view{"Hello world"}});
 
     // Get the peer security ctx

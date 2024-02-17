@@ -28,7 +28,7 @@ class endpoint<ip_version::v4>
 
     void update() const
     {
-        if(!m_up_to_date)
+        if (!m_up_to_date)
         {
             std::tie(m_addr_string, m_port) =
                 detail::resolve_addrinfo<ip_version::v4>(reinterpret_cast<const sockaddr*>(&m_addr));
@@ -130,7 +130,7 @@ class endpoint<ip_version::v6>
 
     void update() const
     {
-        if(!m_up_to_date)
+        if (!m_up_to_date)
         {
             std::tie(m_addr_string, m_port) =
                 detail::resolve_addrinfo<ip_version::v6>(reinterpret_cast<const sockaddr*>(&m_addr));

@@ -30,28 +30,70 @@ class udp_socket : public detail::base_socket
         non_bound
     };
 
+    template <typename T>
+    struct dgram_write_operation
+    {
+        span<T> m_buffer_from;
+        endpoint<IP_VER> m_dest;
+
+        dgram_write_operation(span<T> buffer, endpoint<IP_VER> dest)
+            : m_buffer_from(buffer)
+            , m_dest(std::move(dest))
+        {}
+
+        size_t operator()(const int fd) const
+        {
+            size_t total = 0;
+            const size_t bytes_to_send = m_buffer_from.size() * sizeof(T);
+            const auto* buffer_start = reinterpret_cast<const char*>(m_buffer_from.get());
+            while (total < bytes_to_send)
+            {
+                if (const auto bytes = ::sendto(
+                        fd, buffer_start + total, bytes_to_send - total, 0, &m_dest.get_addr(), m_dest.addr_size);
+                    bytes >= 0)
+                {
+                    total += bytes;
+                }
+                else
+                {
+                    throw std::runtime_error{"Failed to send."};
+                }
+            }
+
+            return total / sizeof(T);
+        }
+    };
+
+    template <typename T>
+    struct dgram_read_operation
+    {
+        span<T> m_buffer_to;
+
+        explicit dgram_read_operation(span<T> buffer)
+            : m_buffer_to(buffer)
+        {}
+
+        std::pair<size_t, endpoint<IP_VER>> operator()(const int fd)
+        {
+            auto peer = endpoint<IP_VER>();
+            socklen_t addr_len = peer.addr_size;
+            auto* buffer_start = reinterpret_cast<char*>(m_buffer_to.get());
+            if (const auto bytes =
+                    ::recvfrom(fd, buffer_start, m_buffer_to.size() * sizeof(T), 0, &peer.get_addr(), &addr_len);
+                bytes >= 0)
+            {
+                return std::make_pair(bytes / sizeof(T), std::move(peer));
+            }
+            else
+            {
+                throw std::runtime_error{"Failed to read."};
+            }
+        }
+    };
+
     socket_state m_state;
 
     std::optional<endpoint<IP_VER>> m_sockaddr;
-
-    int read_from_socket(char* const buffer, const size_t size, endpoint<IP_VER>* peer_data = nullptr) const
-    {
-        if(peer_data)
-        {
-            socklen_t addr_len = peer_data->addr_size;
-            const auto bytes = ::recvfrom(this->m_sockfd, buffer, size, 0, &(peer_data->get_addr()), &addr_len);
-            return bytes;
-        }
-        else
-        {
-            return ::recvfrom(this->m_sockfd, buffer, size, 0, nullptr, nullptr);
-        }
-    }
-
-    int write_to_socket(const endpoint<IP_VER>& addr_to, const char* buffer, size_t length) const
-    {
-        return ::sendto(this->m_sockfd, buffer, length, 0, &(addr_to.get_addr()), addr_to.addr_size);
-    }
 
 public:
     udp_socket(const udp_socket&) = delete;
@@ -75,7 +117,7 @@ public:
     udp_socket& operator=(udp_socket&& rhs) noexcept
     {
         // Provide custom move assginment operator to prevent moved object from closing underlying file descriptor
-        if(this != &rhs)
+        if (this != &rhs)
         {
             detail::base_socket::operator=(std::move(rhs));
 
@@ -106,11 +148,13 @@ public:
 
     void bind(const endpoint<IP_VER>& bind_addr)
     {
-        if(m_state == socket_state::bound)
+        if (m_state == socket_state::bound)
+        {
             return;
+        }
 
         m_sockaddr = bind_addr;
-        if(auto res = ::bind(this->m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
+        if (auto res = ::bind(this->m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
         {
             throw std::runtime_error{"Failed to bind."};
         }
@@ -126,60 +170,72 @@ public:
     }
 
     template <typename T>
-    size_t send(const endpoint<IP_VER>& addr, span<T> buffer) const
+    size_t send(endpoint<IP_VER> addr, span<T> buffer) const
     {
-        size_t total = 0;
-        const size_t bytes_to_send = buffer.size() * sizeof(T);
-        while(total < bytes_to_send)
-        {
-            if(auto bytes =
-                    write_to_socket(addr, reinterpret_cast<const char*>(buffer.get()) + total, bytes_to_send - total);
-                bytes >= 0)
-            {
-                total += bytes;
-            }
-            else
-            {
-                throw std::runtime_error{"Failed to send."};
-            }
-        }
+        auto write_op = dgram_write_operation<T>(buffer, std::move(addr));
+        return write_op(m_sockfd);
+    }
 
-        return total / sizeof(T);
+    template <typename T>
+    std::optional<std::pair<size_t, endpoint<IP_VER>>>
+    send(endpoint<IP_VER> addr, span<T> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    {
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>(mut);
+
+        auto& exec = detail::executor::instance();
+        exec.add(
+            m_sockfd, detail::event_type::WRITE, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+
+        // Wait for given timeout or data is ready to read
+        const auto condition_status = cv.wait_for(lock, timeout);
+        if (condition_status == std::cv_status::no_timeout)
+        {
+            return send(std::move(addr), buffer);
+        }
+        else
+        {
+            exec.remove(m_sockfd, detail::event_type::WRITE);
+            return std::nullopt;
+        }
     }
 
     template <typename T, typename CALLBACK_TYPE>
     void async_send(const std::string_view addr, const uint16_t port, span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         const auto addr_to = endpoint<IP_VER>{addr, port, socket_type::datagram};
-        async_send(addr_to, buffer, std::forward<CALLBACK_TYPE>(callback));
+        async_send(addr_to, std::move(buffer), std::forward<CALLBACK_TYPE>(callback));
     }
 
     template <typename T, typename CALLBACK_TYPE>
-    void async_send(const endpoint<IP_VER>& addr, span<T> buffer, CALLBACK_TYPE&& callback) const
+    void async_send(endpoint<IP_VER> addr, span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd,
+        exec.add(m_sockfd,
             detail::event_type::WRITE,
-            detail::dgram_write_callback<IP_VER, T>{this, addr, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::callback_completion_handler<size_t>(
+                dgram_write_operation<T>(buffer, std::move(addr)), std::forward<CALLBACK_TYPE>(callback)));
     }
 
     template <typename T>
     std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T> buffer) const
     {
         const auto addr_to = endpoint<IP_VER>{addr, port, socket_type::datagram};
-        return promised_send(addr_to, buffer);
+        return promised_send(std::move(addr_to), buffer);
     }
 
     template <typename T>
-    std::future<size_t> promised_send(const endpoint<IP_VER>& addr, span<T> buffer) const
+    std::future<size_t> promised_send(endpoint<IP_VER> addr, span<T> buffer) const
     {
         auto size_promise = std::promise<size_t>();
         auto size_future = size_promise.get_future();
 
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd,
+        exec.add(m_sockfd,
             detail::event_type::WRITE,
-            detail::dgram_promised_write_callback<IP_VER, T>{this, addr, buffer, std::move(size_promise)});
+            detail::promise_completion_handler(
+                dgram_write_operation<T>(buffer, std::move(addr)), std::move(size_promise)));
 
         return size_future;
     }
@@ -187,44 +243,32 @@ public:
     template <typename T>
     std::pair<size_t, endpoint<IP_VER>> read(span<T> buffer) const
     {
-        auto result = std::pair<size_t, endpoint<IP_VER>>{};
-        auto* buffer_start = reinterpret_cast<char*>(buffer.get());
-        if(const auto bytes = read_from_socket(buffer_start, buffer.size() * sizeof(T), &(result.second)); bytes >= 0)
-        {
-            result.first = bytes / sizeof(T);
-            return result;
-        }
-        else
-        {
-            throw std::runtime_error{"Failed to read."};
-        }
+        auto read_op = dgram_read_operation<T>(buffer);
+        return read_op(m_sockfd);
     }
 
     template <typename T>
-    std::pair<size_t, std::optional<endpoint<IP_VER>>> read(span<T> buffer,
-        const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::optional<std::pair<size_t, endpoint<IP_VER>>> read(span<T> buffer,
+        const std::chrono::duration<int64_t, std::milli>& timeout) const
     {
-        // start timeout with callback as completion handler
-        // inside callback have a condition variable
-        // in this function use std::condition_variable::wait_for(delay)
-        // when that returns no_timeout we read
-        // otherwise we return
         auto mut = std::mutex();
         auto cv = std::condition_variable();
         auto lock = std::unique_lock<std::mutex>(mut);
 
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd, detail::event_type::READ, detail::condition_fullfilled_callback(cv));
+        exec.add(
+            m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
 
-        // Wait for given delay or data is ready to read
-        const auto condition_status = cv.wait_for(lock, delay);
-        if(condition_status == std::cv_status::no_timeout)
+        // Wait for given timeout or data is ready to read
+        const auto condition_status = cv.wait_for(lock, timeout);
+        if (condition_status == std::cv_status::no_timeout)
         {
             return read(buffer);
         }
         else
         {
-            return std::make_pair(0, std::nullopt);
+            exec.remove(m_sockfd, detail::event_type::READ);
+            return std::nullopt;
         }
     }
 
@@ -232,21 +276,22 @@ public:
     void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const
     {
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd,
+        exec.add(m_sockfd,
             detail::event_type::READ,
-            detail::dgram_read_callback<IP_VER, T>{this, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::callback_completion_handler<std::pair<size_t, endpoint<IP_VER>>>(
+                dgram_read_operation<T>(buffer), std::forward<CALLBACK_TYPE>(callback)));
     }
 
     template <typename T>
     std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T> buffer) const
     {
         auto read_promise = std::promise<std::pair<size_t, endpoint<IP_VER>>>();
-        const auto read_future = read_promise.get_future();
+        auto read_future = read_promise.get_future();
 
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd,
+        exec.add(m_sockfd,
             detail::event_type::READ,
-            detail::dgram_promised_read_callback<IP_VER, T>{this, buffer, std::move(read_promise)});
+            detail::promise_completion_handler(dgram_read_operation<T>(buffer), std::move(read_promise)));
 
         return read_future;
     }

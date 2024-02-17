@@ -14,7 +14,7 @@ namespace net {
 
 namespace detail {
 
-/// Very simple socket base class
+/// Socket base class
 class base_socket
 {
 protected:
@@ -26,19 +26,19 @@ protected:
         : m_sockfd{sockfd}
         , m_family{ip_ver}
     {
-        if(m_sockfd == -1)
+        if (m_sockfd == -1)
         {
             throw std::runtime_error{"Failed to create socket."};
         }
 
         const int reuse = 1;
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
         {
             throw std::runtime_error{"Failed to set address reusable."};
         }
 
 #ifdef SO_REUSEPORT
-        if(::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
         {
             throw std::runtime_error{"Failed to set port reusable."};
         }
@@ -58,13 +58,10 @@ public:
     {
         // Provide custom move assginment operator to prevent the moved socket from closing the underlying file
         // descriptor
-        if(this != &rhs)
+        if (this != &rhs)
         {
             m_sockfd = rhs.m_sockfd;
             m_family = rhs.m_family;
-
-            auto& exec = executor::instance();
-            exec.callback_update_socket(m_sockfd, this);
 
             rhs.m_sockfd = -1;
         }
@@ -77,7 +74,7 @@ public:
     {
         detail::init_socket_system();
 
-        if(m_sockfd == -1)
+        if (m_sockfd == -1)
         {
             throw std::runtime_error{"Failed to create socket."};
         }
@@ -90,7 +87,7 @@ public:
 
     virtual ~base_socket()
     {
-        if(m_sockfd > 0)
+        if (m_sockfd > 0)
         {
             auto& exec = executor::instance();
             exec.deregister(m_sockfd);
@@ -102,11 +99,11 @@ public:
         typename = std::enable_if_t<detail::is_template_of<OPTION_TYPE, option>::value, bool>>
     void set_option(OPTION_TYPE&& opt_val)
     {
-        if(::setsockopt(m_sockfd,
-               opt_val.level_native(),
-               opt_val.name(),
-               reinterpret_cast<const char*>(opt_val.value()),
-               opt_val.size()) != 0)
+        if (::setsockopt(m_sockfd,
+                opt_val.level_native(),
+                opt_val.name(),
+                reinterpret_cast<const char*>(opt_val.value()),
+                opt_val.size()) != 0)
         {
             throw std::runtime_error{"Failed to set socket option."};
         }
@@ -118,8 +115,8 @@ public:
     {
         OPTION_TYPE opt_val{};
         unsigned int opt_len = opt_val.size();
-        if(::getsockopt(
-               m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(opt_val.value()), &opt_len) !=
+        if (::getsockopt(
+                m_sockfd, opt_val.level_native(), opt_val.name(), reinterpret_cast<char*>(opt_val.value()), &opt_len) !=
             0)
         {
             throw std::runtime_error{"Failed to get socket option."};

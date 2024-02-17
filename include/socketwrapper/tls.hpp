@@ -21,7 +21,7 @@ namespace detail {
 inline void init_ssl_system()
 {
     static bool initialized = false;
-    if(!initialized)
+    if (!initialized)
     {
         SSL_library_init();
         SSL_load_error_strings();
@@ -36,12 +36,12 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
     ctx.reset(::SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()),
         [](SSL_CTX* ctx_raw)
         {
-            if(ctx_raw != nullptr)
+            if (ctx_raw != nullptr)
             {
                 SSL_CTX_free(ctx_raw);
             }
         });
-    if(ctx == nullptr)
+    if (ctx == nullptr)
     {
         throw std::runtime_error{"Failed to create TLS context."};
     }
@@ -49,21 +49,21 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
     SSL_CTX_set_mode(ctx.get(), SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_ecdh_auto(ctx.get(), 1);
 
-    if(::SSL_CTX_use_certificate_file(ctx.get(), cert.data(), SSL_FILETYPE_PEM) <= 0)
+    if (::SSL_CTX_use_certificate_file(ctx.get(), cert.data(), SSL_FILETYPE_PEM) <= 0)
     {
         throw std::runtime_error{"Failed to configure certificate from PEM file."};
     }
-    if(::SSL_CTX_use_PrivateKey_file(ctx.get(), key.data(), SSL_FILETYPE_PEM) <= 0)
+    if (::SSL_CTX_use_PrivateKey_file(ctx.get(), key.data(), SSL_FILETYPE_PEM) <= 0)
     {
         throw std::runtime_error{"Failed to configure private key from PEM file."};
     }
 }
 
-struct ssl_deleter
+struct ssl_raw_deleter
 {
     void operator()(SSL* ssl_raw)
     {
-        if(ssl_raw != nullptr)
+        if (ssl_raw != nullptr)
         {
             ::SSL_shutdown(ssl_raw);
             ::SSL_free(ssl_raw);
@@ -81,14 +81,14 @@ class tls_connection : public tcp_connection<IP_VER>
         , m_context{std::move(context)}
     {
         SSL* ssl_raw = SSL_new(m_context.get());
-        if(ssl_raw == nullptr)
+        if (ssl_raw == nullptr)
         {
             throw std::runtime_error{"Failed to instatiate SSL structure."};
         }
         m_ssl.reset(ssl_raw);
         ::SSL_set_fd(m_ssl.get(), this->m_sockfd);
 
-        if(const auto ret = SSL_accept(m_ssl.get()); ret != 1)
+        if (const auto ret = SSL_accept(m_ssl.get()); ret != 1)
         {
             ::SSL_get_error(m_ssl.get(), ret);
             ::ERR_print_errors_fp(stderr);
@@ -96,18 +96,70 @@ class tls_connection : public tcp_connection<IP_VER>
         }
     }
 
-    int read_from_socket(char* const buffer_to, const size_t bytes_to_read) const override
+    template <typename T>
+    struct stream_write_operation
     {
-        return ::SSL_read(m_ssl.get(), buffer_to, bytes_to_read);
-    }
+        SSL& m_ssl;
+        span<T> m_buffer_to;
 
-    int write_to_socket(const char* buffer_from, const size_t bytes_to_write) const override
+        stream_write_operation(SSL& ssl, span<T> buffer)
+            : m_ssl(ssl)
+            , m_buffer_to(buffer)
+        {}
+
+        size_t operator()(const int) const
+        {
+            size_t total = 0;
+            const size_t bytes_to_send = m_buffer_to.size() * sizeof(T);
+            while (total < bytes_to_send)
+            {
+                switch (const auto bytes = ::SSL_write(&m_ssl,
+                            reinterpret_cast<const char*>(m_buffer_to.get()) + total,
+                            m_buffer_to.size() * sizeof(T));
+                        bytes)
+                {
+                    case -1:
+                        throw std::runtime_error{"Failed to read."};
+                    case 0:
+                        total += bytes;
+                        break;
+                    default:
+                        total += bytes;
+                }
+            }
+            return total / sizeof(T);
+        }
+    };
+
+    template <typename T>
+    struct stream_read_operation
     {
-        return ::SSL_write(m_ssl.get(), buffer_from, bytes_to_write);
-    }
+        SSL& m_ssl;
+        span<T> m_buffer_from;
+
+        stream_read_operation(SSL& ssl, span<T> buffer)
+            : m_ssl(ssl)
+            , m_buffer_from(buffer)
+        {}
+
+        size_t operator()(const int)
+        {
+            switch (const auto bytes = ::SSL_read(
+                        &m_ssl, reinterpret_cast<char*>(m_buffer_from.get()), m_buffer_from.size() * sizeof(T));
+                    bytes)
+            {
+                case -1:
+                    throw std::runtime_error{"Failed to read."};
+                case 0:
+                    // fall through
+                default:
+                    return bytes / sizeof(T);
+            }
+        }
+    };
 
     std::shared_ptr<SSL_CTX> m_context = nullptr;
-    std::unique_ptr<SSL, detail::ssl_deleter> m_ssl = nullptr;
+    std::unique_ptr<SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
 
     std::string m_certificate;
     std::string m_private_key;
@@ -132,7 +184,7 @@ public:
     tls_connection& operator=(tls_connection&& rhs) noexcept
     {
         // Provide custom move assginment operator to prevent moved object from deleting SSL context pointers
-        if(this != &rhs)
+        if (this != &rhs)
         {
             tcp_connection<IP_VER>::operator=(std::move(rhs));
 
@@ -189,7 +241,7 @@ public:
         tcp_connection<IP_VER>::connect(conn_addr);
 
         SSL* ssl_raw = SSL_new(m_context.get());
-        if(ssl_raw == nullptr)
+        if (ssl_raw == nullptr)
         {
             this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
             throw std::runtime_error{"Failed to instatiate SSL structure."};
@@ -197,12 +249,54 @@ public:
         m_ssl.reset(ssl_raw);
         ::SSL_set_fd(m_ssl.get(), this->m_sockfd);
 
-        if(auto ret = SSL_connect(m_ssl.get()); ret != 1)
+        if (auto ret = SSL_connect(m_ssl.get()); ret != 1)
         {
             this->m_connection = tcp_connection<IP_VER>::connection_status::closed;
             ret = ::SSL_get_error(m_ssl.get(), ret);
             ::ERR_print_errors_fp(stderr);
             throw std::runtime_error{"Failed to connect TLS connection."};
+        }
+    }
+
+    template <typename T>
+    size_t send(span<T> buffer) const
+    {
+        if (this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+        {
+            throw std::runtime_error{"Connection already closed."};
+        }
+
+        auto write_op = stream_write_operation<T>(*m_ssl, buffer);
+        return write_op(this->m_sockfd);
+    }
+
+    template <typename T>
+    std::optional<size_t> send(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    {
+        if (this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+        {
+            throw std::runtime_error{"Connection already closed."};
+        }
+
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>{mut};
+
+        auto& exec = detail::executor::instance();
+        exec.add(this->m_sockfd,
+            detail::event_type::WRITE,
+            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+
+        // Wait for given timeout
+        const auto condition_status = cv.wait_for(lock, timeout);
+        if (condition_status == std::cv_status::no_timeout)
+        {
+            return send(buffer);
+        }
+        else
+        {
+            exec.remove(this->m_sockfd, detail::event_type::WRITE);
+            return std::nullopt;
         }
     }
 
@@ -212,8 +306,8 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::WRITE,
-            detail::stream_write_callback<tls_connection<IP_VER>, T>{
-                this, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::callback_completion_handler<size_t>(
+                stream_write_operation<T>(*m_ssl, buffer), std::forward<CALLBACK_TYPE>(callback)));
     }
 
     template <typename T>
@@ -225,9 +319,52 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::WRITE,
-            detail::stream_promised_write_callback<tls_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
+            detail::promise_completion_handler<size_t>(
+                stream_write_operation<T>(*m_ssl, buffer), std::move(size_promise)));
 
         return size_future;
+    }
+
+    template <typename T>
+    size_t read(span<T> buffer) const
+    {
+        if (this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+        {
+            throw std::runtime_error{"Connection already closed."};
+        }
+
+        auto read_op = stream_read_operation<T>(*m_ssl, buffer);
+        return read_op(this->m_sockfd);
+    }
+
+    template <typename T>
+    std::optional<size_t> read(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    {
+        if (this->m_connection == tcp_connection<IP_VER>::connection_status::closed)
+        {
+            throw std::runtime_error{"Connection already closed."};
+        }
+
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>{mut};
+
+        auto& exec = detail::executor::instance();
+        exec.add(this->m_sockfd,
+            detail::event_type::READ,
+            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+
+        // Wait for given timeout
+        const auto condition_status = cv.wait_for(lock, timeout);
+        if (condition_status == std::cv_status::no_timeout)
+        {
+            return read(buffer);
+        }
+        else
+        {
+            exec.remove(this->m_sockfd, detail::event_type::READ);
+            return std::nullopt;
+        }
     }
 
     template <typename T, typename CALLBACK_TYPE>
@@ -236,8 +373,8 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::READ,
-            detail::stream_read_callback<tls_connection<IP_VER>, T>{
-                this, buffer, std::forward<CALLBACK_TYPE>(callback)});
+            detail::callback_completion_handler<size_t>(
+                stream_read_operation<T>(*m_ssl, buffer), std::forward<CALLBACK_TYPE>(callback)));
     }
 
     template <typename T>
@@ -249,7 +386,8 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::READ,
-            detail::stream_promised_read_callback<tls_connection<IP_VER>, T>{this, buffer, std::move(size_promise)});
+            detail::promise_completion_handler<size_t>(
+                stream_read_operation<T>(*m_ssl, buffer), std::move(size_promise)));
 
         return size_future;
     }
@@ -263,11 +401,35 @@ template <ip_version IP_VER>
 class tls_acceptor : public tcp_acceptor<IP_VER>
 {
 private:
+    struct stream_accept_operation
+    {
+        std::shared_ptr<SSL_CTX> m_context;
+
+        stream_accept_operation(std::shared_ptr<SSL_CTX> context)
+            : m_context(std::move(context))
+        {}
+
+        tls_connection<IP_VER> operator()(const int fd) const
+        {
+            auto client_addr = endpoint<IP_VER>();
+            socklen_t addr_len = client_addr.addr_size;
+            if (const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
+                sock > 0 && addr_len == client_addr.addr_size)
+            {
+                return tls_connection<IP_VER>{sock, client_addr, m_context};
+            }
+            else
+            {
+                throw std::runtime_error{"Accept operation failed."};
+            }
+        }
+    };
+
     std::string m_certificate;
     std::string m_private_key;
 
     std::shared_ptr<SSL_CTX> m_context;
-    std::unique_ptr<SSL, detail::ssl_deleter> m_ssl = nullptr;
+    std::unique_ptr<SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
 
 public:
     tls_acceptor() = delete;
@@ -286,7 +448,7 @@ public:
     tls_acceptor& operator=(tls_acceptor&& rhs) noexcept
     {
         // Provide custom move assginment operator to prevent moved object from deleting underlying SSL context
-        if(this != &rhs)
+        if (this != &rhs)
         {
             tcp_acceptor<IP_VER>::operator=(std::move(rhs));
 
@@ -342,39 +504,33 @@ public:
 
     tls_connection<IP_VER> accept() const
     {
-        if(this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
+        if (this->m_state == tcp_acceptor<IP_VER>::acceptor_state::non_bound)
             throw std::runtime_error{"Socket not in listening state."};
 
-        auto client_addr = endpoint<IP_VER>();
-        socklen_t addr_len = client_addr.addr_size;
-        if(const int sock = ::accept(this->m_sockfd, &(client_addr.get_addr()), &addr_len);
-            sock > 0 && addr_len == client_addr.addr_size)
-        {
-            return tls_connection<IP_VER>{sock, client_addr, m_context};
-        }
-        else
-        {
-            throw std::runtime_error{"Accept operation failed."};
-        }
+        auto accept_op = stream_accept_operation(m_context);
+        return accept_op(this->m_sockfd);
     }
 
-    std::optional<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& delay) const
+    std::optional<tls_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& timeout) const
     {
         auto cv = std::condition_variable();
         auto mut = std::mutex();
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::executor::instance();
-        exec.add(this->m_sockfd, detail::event_type::READ, detail::condition_fullfilled_callback(cv));
+        exec.add(this->m_sockfd,
+            detail::event_type::READ,
+            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
 
-        // Wait for given delay
-        const auto condition_status = cv.wait_for(lock, delay);
-        if(condition_status == std::cv_status::no_timeout)
+        // Wait for given timeout
+        const auto condition_status = cv.wait_for(lock, timeout);
+        if (condition_status == std::cv_status::no_timeout)
         {
             return std::optional<tls_connection<IP_VER>>{accept()};
         }
         else
         {
+            exec.remove(this->m_sockfd, detail::event_type::READ);
             return std::nullopt;
         }
     }
@@ -385,7 +541,8 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::READ,
-            detail::stream_accept_callback<tls_acceptor<IP_VER>>{this, std::forward<CALLBACK_TYPE>(callback)});
+            detail::callback_completion_handler<tls_connection<IP_VER>>(
+                stream_accept_operation(m_context), std::forward<CALLBACK_TYPE>(callback)));
     }
 
     std::future<tls_connection<IP_VER>> promised_accept() const
@@ -396,7 +553,8 @@ public:
         auto& exec = detail::executor::instance();
         exec.add(this->m_sockfd,
             detail::event_type::READ,
-            detail::stream_promised_accept_callback<tls_acceptor<IP_VER>>{this, std::move(acc_promise)});
+            detail::promise_completion_handler<tls_connection<IP_VER>>(
+                stream_accept_operation(m_context), std::move(acc_promise)));
 
         return acc_future;
     }

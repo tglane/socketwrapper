@@ -78,6 +78,11 @@ public:
         return m_size;
     }
 
+    constexpr size_t byte_size() const
+    {
+        return m_size * sizeof(T);
+    }
+
     constexpr bool empty() const
     {
         return m_size == 0;

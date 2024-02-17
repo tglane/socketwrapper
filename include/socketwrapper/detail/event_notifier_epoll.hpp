@@ -2,7 +2,6 @@
 #define SOCKETWRAPPER_NET_INTERNAL_MESSAGE_NOTIFIER_EPOLL_HPP
 
 #include <array>
-#include <future>
 #include <map>
 #include <optional>
 
@@ -13,8 +12,6 @@ namespace net {
 
 namespace detail {
 
-using event_t = struct ::epoll_event;
-
 enum class event_type : int16_t
 {
     READ = EPOLLIN,
@@ -23,6 +20,8 @@ enum class event_type : int16_t
 
 class event_notifier_epoll
 {
+    using event_t = struct ::epoll_event;
+
     enum class control : uint8_t
     {
         NO_OP = 0,
@@ -40,20 +39,20 @@ public:
     event_notifier_epoll()
         : m_epoll_fd{::epoll_create(1)}
     {
-        if(m_epoll_fd == -1)
+        if (m_epoll_fd == -1)
         {
             throw std::runtime_error{"Failed to create epoll instance when instantiating event_notifier_epoll."};
         }
 
         // Create pipe to stop select and add it to m_fds
-        if(::pipe(m_control_pipes.data()) < 0)
+        if (::pipe(m_control_pipes.data()) < 0)
             throw std::runtime_error{"Failed to create pipe when instantiating class event_notifier_epoll."};
 
         // Add the pipe to the epoll monitoring set
         event_t pipe_event{};
         pipe_event.events = static_cast<uint32_t>(event_type::READ);
         pipe_event.data.fd = m_control_pipes[0];
-        if(::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_control_pipes[0], &pipe_event) == -1)
+        if (::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_control_pipes[0], &pipe_event) == -1)
         {
             throw std::runtime_error{"Failed to add stop event for message notifier to epoll queue."};
         }
@@ -74,13 +73,13 @@ public:
         ::write(m_control_pipes[1], reinterpret_cast<const void*>(&stop_byte), 1);
 
         // Unregister all registered events
-        for(const auto& event_pair : m_events)
+        for (const auto& event_pair : m_events)
         {
-            if(event_pair.second.events & static_cast<uint32_t>(event_type::READ))
+            if (event_pair.second.events & static_cast<uint32_t>(event_type::READ))
             {
                 unwatch(event_pair.first, event_type::READ);
             }
-            if(event_pair.second.events & static_cast<uint32_t>(event_type::WRITE))
+            if (event_pair.second.events & static_cast<uint32_t>(event_type::WRITE))
             {
                 unwatch(event_pair.first, event_type::WRITE);
             }
@@ -96,14 +95,14 @@ public:
         ::close(m_control_pipes[1]);
     }
 
-    bool watch(int sock_fd, event_type watch_for)
+    bool watch(int fd, event_type watch_for)
     {
-        if(const auto it = m_events.find(sock_fd); it != m_events.end())
+        if (const auto it = m_events.find(fd); it != m_events.end())
         {
             // Modify the epoll event that is already registered for the socket
             auto& event_data = it->second;
             event_data.events |= static_cast<uint32_t>(watch_for);
-            if(::epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, sock_fd, &event_data) == -1)
+            if (::epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, fd, &event_data) == -1)
             {
                 return false;
             }
@@ -114,13 +113,13 @@ public:
 
             // Assign new event to epoll queue
             event_data.events = static_cast<uint32_t>(watch_for) | EPOLLET;
-            event_data.data.fd = sock_fd;
-            if(::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, sock_fd, &event_data) == -1)
+            event_data.data.fd = fd;
+            if (::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &event_data) == -1)
             {
                 return false;
             }
 
-            m_events.insert_or_assign(sock_fd, event_data);
+            m_events.insert_or_assign(fd, event_data);
         }
 
         // Restart loop with updated fd set
@@ -130,17 +129,17 @@ public:
         return true;
     }
 
-    bool unwatch(int sock_fd, event_type watched_for)
+    bool unwatch(int fd, event_type watched_for)
     {
-        if(const auto& it = m_events.find(sock_fd); it != m_events.end())
+        if (const auto& it = m_events.find(fd); it != m_events.end())
         {
             auto& event_data = it->second;
 
             // Remove the inparam event type from the epoll queue for this socket
             event_data.events &= ~static_cast<uint32_t>(watched_for);
-            if(event_data.events == EPOLLET)
+            if (event_data.events == EPOLLET)
             {
-                if(::epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, sock_fd, nullptr) == -1)
+                if (::epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, fd, nullptr) == -1)
                 {
                     return false;
                 }
@@ -148,7 +147,7 @@ public:
             }
             else
             {
-                if(::epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, sock_fd, &event_data) == -1)
+                if (::epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, fd, &event_data) == -1)
                 {
                     return false;
                 }
@@ -166,27 +165,27 @@ public:
     std::optional<std::pair<int, event_type>> next_event()
     {
         auto ready_set = std::array<epoll_event, 64>{};
-        while(true)
+        while (true)
         {
             int num_ready = ::epoll_wait(m_epoll_fd, ready_set.data(), 64, -1);
-            for(int i = 0; i < num_ready; ++i)
+            for (int i = 0; i < num_ready; ++i)
             {
-                if(ready_set[i].data.fd == m_control_pipes[0])
+                if (ready_set[i].data.fd == m_control_pipes[0])
                 {
                     // Internal stop for reloading event queue after add/remove
                     auto control_byte = control::NO_OP;
                     ::read(ready_set[i].data.fd, reinterpret_cast<void*>(&control_byte), 1);
-                    if(control_byte == control::EXIT_LOOP)
+                    if (control_byte == control::EXIT_LOOP)
                     {
                         return std::nullopt;
                     }
                 }
-                else if(ready_set[i].events & static_cast<uint32_t>(event_type::READ))
+                else if (ready_set[i].events & static_cast<uint32_t>(event_type::READ))
                 {
                     unwatch(ready_set[i].data.fd, event_type::READ);
                     return std::make_pair(ready_set[i].data.fd, event_type::READ);
                 }
-                else if(ready_set[i].events & static_cast<uint32_t>(event_type::WRITE))
+                else if (ready_set[i].events & static_cast<uint32_t>(event_type::WRITE))
                 {
                     unwatch(ready_set[i].data.fd, event_type::WRITE);
                     return std::make_pair(ready_set[i].data.fd, event_type::WRITE);

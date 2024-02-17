@@ -46,7 +46,7 @@ inline constexpr T to_little_endian(T in)
 template <typename T>
 inline constexpr T host_to_network(T in)
 {
-    if constexpr(detail::is_big_endian())
+    if constexpr (detail::is_big_endian())
         return in;
     else
         return detail::swap_byteorder<T>(in);
@@ -55,7 +55,7 @@ inline constexpr T host_to_network(T in)
 template <typename T>
 inline constexpr T network_to_host(T in)
 {
-    if constexpr(detail::is_little_endian())
+    if constexpr (detail::is_little_endian())
         return detail::swap_byteorder<T>(in);
     else
         return in;
