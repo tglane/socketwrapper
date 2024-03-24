@@ -38,7 +38,7 @@ class thread_pool
             worker_lock.unlock();
             if (m_paused && m_queue.empty())
             {
-                m_job_done.notify_all(); // TODO Test if this works
+                m_job_done.notify_all();
             }
 
             worker_lock.lock();
@@ -116,8 +116,8 @@ public:
         m_paused = false;
     }
 
-    template <typename USER_JOB>
-    void add_job(USER_JOB&& job_task)
+    template <typename job_type>
+    void add_job(job_type&& job_task)
     {
         if (!m_running)
         {
@@ -127,7 +127,7 @@ public:
         // TODO Return a stop token that can be used to stop/cancel a job from the outside
         {
             const auto queue_lock = std::lock_guard<std::mutex>(m_job_mut);
-            m_queue.emplace(std::forward<USER_JOB>(job_task));
+            m_queue.emplace(std::forward<job_type>(job_task));
         }
         m_job_available.notify_one();
     }

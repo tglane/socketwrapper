@@ -37,7 +37,7 @@ inline bool operator<(const int lhs, const std::pair<int, event_type>& rhs)
 }
 
 /// Class to manage all asynchronous socket io operations
-class executor
+class event_loop
 {
     enum class context_control : uint8_t
     {
@@ -60,12 +60,12 @@ class executor
 
     std::multimap<std::pair<int, event_type>, std::unique_ptr<completion_handler>, std::less<>> m_completion_handlers{};
 
-    executor(size_t num_threads = std::thread::hardware_concurrency())
+    event_loop(size_t num_threads = std::thread::hardware_concurrency())
         : m_pool{num_threads}
-        , m_background_poll{std::async(std::launch::async, &executor::event_handling_loop, this)}
+        , m_background_poll{std::async(std::launch::async, &event_loop::event_handling_loop, this)}
     {}
 
-    ~executor()
+    ~event_loop()
     {
         // Remove all events from the event notifier and join its background task
         for (const auto& it : m_completion_handlers)
@@ -102,16 +102,16 @@ class executor
     }
 
 public:
-    static executor& instance()
+    static event_loop& instance()
     {
-        static auto handler = executor();
+        static auto handler = event_loop();
         return handler;
     }
 
-    executor(const executor&) = delete;
-    executor& operator=(executor&) = delete;
-    executor(executor&&) = delete;
-    executor& operator=(executor&&) = delete;
+    event_loop(const event_loop&) = delete;
+    event_loop& operator=(event_loop&) = delete;
+    event_loop(event_loop&&) = delete;
+    event_loop& operator=(event_loop&&) = delete;
 
     void run()
     {
@@ -130,12 +130,12 @@ public:
         m_pool.flush();
     }
 
-    template <typename CALLBACK_TYPE>
-    bool add(const int sock_fd, const event_type type, CALLBACK_TYPE&& callback)
+    template <typename callback_type>
+    bool add(const int sock_fd, const event_type type, callback_type&& callback)
     {
         auto lock = std::lock_guard<std::mutex>(m_waker_mutex);
         m_completion_handlers.insert(std::make_pair(
-            std::make_pair(sock_fd, type), std::make_unique<CALLBACK_TYPE>(std::forward<CALLBACK_TYPE>(callback))));
+            std::make_pair(sock_fd, type), std::make_unique<callback_type>(std::forward<callback_type>(callback))));
         const auto res = m_waker.watch(sock_fd, type);
         return res;
     }
@@ -149,15 +149,16 @@ public:
                 it != m_completion_handlers.end())
             {
                 m_completion_handlers.erase(it);
+                result = m_waker.unwatch(sock_fd, type);
+                m_stop_condition.notify_one();
             }
-            result = m_waker.unwatch(sock_fd, type);
         }
-        m_stop_condition.notify_one();
         return result;
     }
 
     void deregister(const int sock_fd)
     {
+        auto lock = std::lock_guard<std::mutex>(m_waker_mutex);
         const auto fd_range = m_completion_handlers.equal_range(sock_fd);
         for (auto it = fd_range.first; it != fd_range.second;)
         {
@@ -175,10 +176,10 @@ public:
 
 } // namespace detail
 
-/// Free function to easily wait until the executor runs out of registered events
+/// Free function to easily wait until the event_loop runs out of registered events
 inline void async_run()
 {
-    detail::executor::instance().run();
+    detail::event_loop::instance().run();
 }
 
 } // namespace net

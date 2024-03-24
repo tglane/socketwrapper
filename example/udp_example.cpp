@@ -49,6 +49,7 @@ int main(int argc, char** argv)
 
         auto vec = std::vector<char>{'A', 'B', 'C'};
         sock.send(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span(vec));
+        sock.send(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span("KekWWW"));
         std::cout << "All messages sent. Again." << std::endl;
     }
 }

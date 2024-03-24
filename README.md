@@ -48,7 +48,8 @@ Socket/connection classes all are not copyable but moveable and templated to dis
 ### span<typename TYPE>
 >#include "socketwrapper/span.hpp" (also included by all socket headers)
 
-Non owning abstraction of a view to memory used to generalize the interface to the reading and sending methods of the socket classes. Can be created from various container/array types.
+Non owning abstraction of a view to memory used to generalize the interface to the reading and sending methods of the socket classes.
+Can be created from all container types that can be represented by a pointer and a length.
 The interface of the span class is the same as for most std container classes (providing begin(), end(), front(), back(), empty(), size(), get(), data()).
 Methods:
 - Constructor:
@@ -170,15 +171,12 @@ Methods:
     // Default constructor of a not connected tcp connection
     tcp_connection();
     
-    // Construct a tcp connection that immediately connects to the remote in the constructor defined by the parameters.
-    tcp_connection(const std::string_view remote_address, const uint16_t remote_port);
-    
     // Construct a tcp connection from a net::endpoint<IP_VER>
     tcp_connection(const endpoint<IP_VER>& endpoint);
     ```
 - Config:
     ```cpp
-    // Connect a not connected socket to a given endpoint
+    // Connect a default constructed socket to a given endpoint
     void connect(const endpoint<IP_VER>& endpoint);
     ```
 - Reading:
@@ -192,6 +190,10 @@ Methods:
     // Immediately return and call the callback function after there is data available.
     void async_read(net::span<T> buffer, CALLBACK_TYPE&& callback) const;
 
+    // Immediately returns an awaitable that can be co_awaited in a C++20 coroutine
+    // Only available when compiling with C++20 or higher
+    net::op_awaitable<size_t, net::tcp_connection::stream_read_operation<T>> async_read(net::span<T> buffer) const;
+
     // Immediately return and get a future to get the number of elements received at a later timepoint
     std::future<size_t> promised_read(net::span<T> buffer) const;
     ```
@@ -202,6 +204,10 @@ Methods:
     
     // Immediately returns and invokes the callback after all in the given buffer is send. Caller is responsible to keep the data the span shows alive.
     void async_send(net::span<T> buffer, CALLBACK_TYPE&& callback) const;
+
+    // Immediately returns an awaitable that can be co_awaited in a C++20 coroutine
+    // Only available when compiling with C++20 or higher
+    net::op_awaitable<size_t, net::tcp_connection::stream_write_operation<T>> async_send(net::span<T> buffer) const;
 
     // Immediately return and get a future to get the number of elements written at a later point in time
     std::future<size_t> promised_send(net::span<T> buffer) const;
@@ -223,7 +229,7 @@ Methods:
     tcp_acceptor();
     
     // Immediately creates a socket that listens on the given address and port with a connection backlog of `backlog`
-    tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5);
+    tcp_acceptor(const endpoint<IP_VER>& endpoint, const size_t backlog = 5);
     ```
 - Config:
     ```cpp
@@ -240,6 +246,10 @@ Methods:
     
     // Immediately returns and invokes the callback when a new connection is established
     void async_accept(CALLBACK_TYPE&& callback) const;
+
+    // Immediately returns an awaitable that can be co_awaited in a C++20 coroutine
+    // Only available when compiling with C++20 or higher
+    net::op_awaitable<net::tcp_connection<IP_VER>, net::tcp_acceptor::stream_accept_operation> async_accept() const;
 
     // Immediately return and get a future to access the accepted socket at a later point in time
     std::future<net::tcp_connection<IP_VER>> promised_accept() const;
@@ -259,9 +269,6 @@ Methods:
     ```cpp
     // Construct a non connected tls connection
     tls_connection(std::string_view cert_path, std::string_view key_path);
-    
-    // Construct a tls connection that immediately connects to the remote in the constructor defined by the parameters.
-    tls_connection(std::string_view cert_path, std::string_view key_path, std::string_view conn_addr, uint16_t port);
     
     // Construct a tls connection from an endpoint and immediately connect it
     tls_connection(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& endpoint);
@@ -285,9 +292,6 @@ Methods:
     // Construct a non-bound tls_acceptor
     tls_acceptor(std::string_view cert_path, std::string_view key_path);
     
-    // Construct a tls acceptor from address string and port and set it into listening state
-    tls_acceptor(std::string_view cert_path, std::string_view key_path, std::string_view bind_addr, uint16_t port, size_t backlog = 5);
-    
     // Construct a tls acceptor from an endpoint and set it into listening state
     tls_acceptor(std::string_view cert_path, std::string_view key_path, const endpoint<IP_VER>& endpoint);
     ```
@@ -309,9 +313,6 @@ Methods:
     // Creates a non-bound UDP socket that is ready to send data but can not receive data.
     udp_socket();
     
-    // Creates a UDP socket that is bound to a given address and port so it can send and receive data after construction.
-    udp_socket(const std::string_view bind_addr, const uint16_t port);
-    
     // Creates a UDP socket that is bound to a given endpoint so it can send and receive data directly after construction
     udp_socket(const endpoint<IP_VER>& endpoint);
     ```
@@ -331,21 +332,26 @@ Methods:
     // Immediately return and invoke the callback when data is read into the buffer. Caller is responsible to keep the underlying buffer alive.
     void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const;
 
+    // Immediately returns an awaitable that can be co_awaited in a C++20 coroutine
+    // Only available when compiling with C++20 or higher
+    net::op_awaitable<std::pair<size_t, std::optional<endpoint<IP_VER>>>, net::udp_socket::dgram_read_operation<T>> async_read(span<T> buffer) const;
+
     // Immediately return and get a future to get the number of elements read and the connection info of the sender at a later point in time
     std::future<std::pair<size_t, endpoint<IP_VER>>> promised_read(span<T> buffer) const;
     ```
 - Writing:
     ```cpp
     // Send all data in the given buffer to a remote endpoint.
-    size_t send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
     size_t send(const endpoint<IP_VER>& endpoint_to, span<T> buffer) const;
     
     // Immediately return and invoke the callback after the data is sent to a remote represented by the given address and port parameter.
-    void async_send(const std::string_view addr, const uint16_t port, span<T>&& buffer, CALLBACK_TYPE&& callback) const;
     void async_send(const endpoint<IP_VER>& endpoint_to, span<T> buffer, CALLBACK_TYPE&& callback) const;
     
+    // Immediately returns an awaitable that can be co_awaited in a C++20 coroutine
+    // Only available when compiling with C++20 or higher
+    net::op_awaitable<size_t, net::udp_socket::dgram_write_operation<T>> async_write(const endpoint<IP_VER>& endpoint_to, span<T> buffer) const;
+
     // Immediately return and get a future to get the number of elements written at a later point in time
-    std::future<size_t> promised_send(const std::string_view addr, const uint16_t port, span<T>&& buffer) const;
     std::future<size_t> promised_send(const endpoint<IP_VER>& endpoint_to, span<T> buffer) const;
     ```
 - Shorthand identifier:
@@ -353,6 +359,29 @@ Methods:
     using udp_socket_v4 = udp_socket<net::ip_version::v4>;
     using udp_socket_v6 = udp_socket<net::ip_version::v6>;
     ```
+
+### task<return_type>
+>#include "socketwrapper/task.hpp"
+
+Representation of a lazily evaluated coroutine without any special functionality that holds a `std::coroutine_handle` of the parent coroutine frame.
+It defines a `promise_type` and implements the `awaitable` which allows awaiting this type.
+To start execution, this type needs to be awaited by a parent coroutine.
+User can use `net::block_on()` or `net::to_future()` to transform a coroutine that returns a `net::task` into a synchronous function.
+This is a helper class to give a user a coroutine class to utilize the networking functions that return an `net::op_awaitable`.
+This class is only available when compiling with C++20 or higher
+
+Example of a coroutine that returns `net::task`:
+```cpp
+net::task<size_t> example(size_t input)
+{
+    co_return input * 2;
+}
+
+net::task<void> example_two()
+{
+    auto number = co_await example(5);
+}
+```
 
 ## Utility Functions:
 >#include "socketwrapper/utility.hpp"
@@ -378,12 +407,25 @@ All of the following functions live in the namespace `net`
     inline constexpr T network_to_host(T in);
     ```
 
-## Async helper functions:
-This functions are implicitly included with every socket class.
+## Runtime helper functions:
+This functions are implicitly included with every socket header file.
 
 - Run the asynchronous context until all callbacks are handled:
     ```cpp
-    // Blocks until the asynchronous context runs out of registered callbacks.
+    // Blocks until all registered async operations are handled and all completion handlers finished execution.
     void async_run();
     ```
-
+- Block the current thread until the coroutine represented by the `net::task` parameter is completely evaluated.
+Only available when compiling with C++20 or higher
+    ```cpp
+    template <typename return_type>
+    return_type block_on(net::task<return_type> awaitable_task);
+    ```
+- Convert a lazily evaluated coroutine that is represented by `net::task` into an eagerly evaluated future.
+By performing this conversion the task starts execution right away until it reaches its first suspension point while
+the task itself would normally be suspended right away and only starts execution if it is awaited.
+Only available when compiling with C++20 or higher
+    ```cpp
+    template <typename return_type>
+    std::future<return_type> spawn(net::task<return_type> awaitable_task);
+    ```

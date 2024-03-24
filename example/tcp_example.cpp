@@ -43,8 +43,6 @@ int main(int argc, char** argv)
         auto sock = net::tcp_connection<net::ip_version::v4>();
         std::cout << "Socket created\n";
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
         sock.connect(net::endpoint_v4{"127.0.0.1", 4433, net::socket_type::stream});
         std::cout << "Connected\n";
 

@@ -4,6 +4,10 @@
 #include <thread>
 #include <vector>
 
+extern "C" {
+    int pid_shutdown_sockets(int, int);
+}
+
 int main(int argc, char** argv)
 {
     if (argc <= 1)
@@ -12,8 +16,8 @@ int main(int argc, char** argv)
     if (strcmp(argv[1], "r") == 0)
     {
         std::cout << "--- Receiver ---\n";
-        auto acceptor = net::tcp_acceptor<net::ip_version::v4>("0.0.0.0", 4433);
-        auto acceptor_two = net::tcp_acceptor<net::ip_version::v4>("0.0.0.0", 4556);
+        auto acceptor = net::tcp_acceptor<net::ip_version::v4>(net::endpoint_v4("0.0.0.0", 4433));
+        auto acceptor_two = net::tcp_acceptor<net::ip_version::v4>(net::endpoint_v4("0.0.0.0", 4556));
 
         std::cout << "Waiting for accept\n";
 
@@ -23,27 +27,21 @@ int main(int argc, char** argv)
         conns.reserve(2);
 
         acceptor.async_accept(
-            [&acceptor, &conns](net::tcp_connection<net::ip_version::v4>&& conn, std::exception_ptr)
+            [&acceptor, &conns](net::tcp_connection<net::ip_version::v4>&& conn, std::exception_ptr ex)
             {
                 auto buffer_one = std::array<char, 1024>{};
                 auto buffer_two = std::array<char, 1024>{};
 
                 std::cout << "Accepted\n";
+                if (ex != nullptr)
+                {
+                    std::cout << "But with error so not really accepted :(\n";
+                    return;
+                }
 
                 conns.push_back(std::move(conn));
                 auto& sock = conns.back();
 
-                // sock.async_read(net::span{buffer},
-                //     [&sock, &buffer](size_t br, std::exception_ptr)
-                //     {
-                //         std::cout << "Received: " << br << " - " << std::string_view{buffer.data(), br} << '\n';
-
-                //         sock.async_read(net::span{buffer},
-                //             [&buffer](size_t br) {
-                //                 std::cout << "Inner receive: " << br << " - " << std::string_view{buffer.data(), br}
-                //                           << '\n';
-                //             });
-                //     });
                 auto read_fut_one = sock.promised_read(net::span{buffer_one});
 
                 acceptor.async_accept(
@@ -91,7 +89,7 @@ int main(int argc, char** argv)
     {
         std::cout << "--- Sender ---\n";
         {
-            auto sock = net::tcp_connection<net::ip_version::v4>("127.0.0.1", 4433);
+            auto sock = net::tcp_connection<net::ip_version::v4>(net::endpoint_v4("127.0.0.1", 4433));
             std::cout << "Connected\n";
             auto vec = std::vector<char>{'H', 'e', 'l', 'l', 'o'};
 
@@ -105,7 +103,7 @@ int main(int argc, char** argv)
             std::cout << "Sent first connection second message\n";
         }
         {
-            auto sock = net::tcp_connection<net::ip_version::v4>("127.0.0.1", 4433);
+            auto sock = net::tcp_connection<net::ip_version::v4>(net::endpoint_v4("127.0.0.1", 4433));
             std::cout << "Connected again\n";
             std::vector<char> vec{'H', 'e', 'l', 'l', 'o'};
 

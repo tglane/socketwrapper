@@ -1,26 +1,28 @@
 #ifndef SOCKETWRAPPER_NET_TCP_HPP
 #define SOCKETWRAPPER_NET_TCP_HPP
 
-#include "detail/base_socket.hpp"
-#include "detail/executor.hpp"
-#include "detail/utility.hpp"
-#include "endpoint.hpp"
-#include "span.hpp"
-
 #include <condition_variable>
 #include <future>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
-#include <string_view>
 
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "detail/base_socket.hpp"
+#include "detail/event_loop.hpp"
+#include "detail/utility.hpp"
+#include "endpoint.hpp"
+#include "span.hpp"
+#if __cplusplus >= 202002L
+#include "awaitable.hpp"
+#endif
+
 namespace net {
 
-template <ip_version IP_VER>
+template <ip_version ip_ver_v>
 class tcp_connection : public detail::base_socket
 {
 protected:
@@ -30,29 +32,29 @@ protected:
         connected
     };
 
-    template <typename T>
+    template <typename data_type>
     struct stream_write_operation
     {
-        span<T> m_buffer_to;
+        span<data_type> m_buffer_to;
 
-        stream_write_operation(span<T> buffer)
+        stream_write_operation(span<data_type> buffer)
             : m_buffer_to(buffer)
         {}
 
         size_t operator()(const int fd) const
         {
             size_t total = 0;
-            const size_t bytes_to_send = m_buffer_to.size() * sizeof(T);
+            const size_t bytes_to_send = m_buffer_to.size() * sizeof(data_type);
             while (total < bytes_to_send)
             {
                 switch (const auto bytes = ::send(fd,
                             reinterpret_cast<const char*>(m_buffer_to.get()) + total,
-                            m_buffer_to.size() * sizeof(T),
+                            m_buffer_to.size() * sizeof(data_type),
                             0);
                         bytes)
                 {
                     case -1:
-                        throw std::runtime_error{"Failed to read."};
+                        throw std::runtime_error{"Failed to write."};
                     case 0:
                         total += bytes;
                         break;
@@ -60,23 +62,23 @@ protected:
                         total += bytes;
                 }
             }
-            return total / sizeof(T);
+            return total / sizeof(data_type);
         }
     };
 
-    template <typename T>
+    template <typename data_type>
     struct stream_read_operation
     {
-        span<T> m_buffer_from;
+        span<data_type> m_buffer_from;
 
-        stream_read_operation(span<T> buffer)
+        stream_read_operation(span<data_type> buffer)
             : m_buffer_from(buffer)
         {}
 
         size_t operator()(const int fd)
         {
-            switch (const auto bytes =
-                        ::recv(fd, reinterpret_cast<char*>(m_buffer_from.get()), m_buffer_from.size() * sizeof(T), 0);
+            switch (const auto bytes = ::recv(
+                        fd, reinterpret_cast<char*>(m_buffer_from.get()), m_buffer_from.size() * sizeof(data_type), 0);
                     bytes)
             {
                 case -1:
@@ -84,17 +86,17 @@ protected:
                 case 0:
                     // fall through
                 default:
-                    return bytes / sizeof(T);
+                    return bytes / sizeof(data_type);
             }
         }
     };
 
-    std::optional<endpoint<IP_VER>> m_peer;
+    std::optional<endpoint<ip_ver_v>> m_peer;
 
     mutable connection_status m_connection;
 
-    tcp_connection(const int socket_fd, const endpoint<IP_VER>& peer_addr)
-        : detail::base_socket{socket_fd, IP_VER}
+    tcp_connection(const int socket_fd, const endpoint<ip_ver_v>& peer_addr)
+        : detail::base_socket{socket_fd, ip_ver_v}
         , m_peer{peer_addr}
         , m_connection{connection_status::connected}
     {}
@@ -104,7 +106,7 @@ protected:
 
 public:
     tcp_connection()
-        : detail::base_socket{socket_type::stream, IP_VER}
+        : detail::base_socket{socket_type::stream, ip_ver_v}
         , m_peer{std::nullopt}
         , m_connection{connection_status::closed}
     {}
@@ -137,22 +139,14 @@ public:
         return *this;
     }
 
-    tcp_connection(const std::string_view conn_addr, const uint16_t port_to)
-        : detail::base_socket{socket_type::stream, IP_VER}
-        , m_connection{connection_status::closed}
-    {
-        const auto addr = endpoint<IP_VER>{conn_addr, port_to, socket_type::stream};
-        connect(addr);
-    }
-
-    tcp_connection(const endpoint<IP_VER>& conn_addr)
-        : detail::base_socket{socket_type::stream, IP_VER}
+    tcp_connection(const endpoint<ip_ver_v>& conn_addr)
+        : detail::base_socket{socket_type::stream, ip_ver_v}
         , m_connection{connection_status::closed}
     {
         connect(conn_addr);
     }
 
-    virtual void connect(const endpoint<IP_VER>& conn_addr)
+    virtual void connect(const endpoint<ip_ver_v>& conn_addr)
     {
         if (m_connection != connection_status::closed)
         {
@@ -168,20 +162,20 @@ public:
         m_connection = connection_status::connected;
     }
 
-    template <typename T>
-    size_t send(span<T> buffer) const
+    template <typename data_type>
+    size_t send(span<data_type> buffer) const
     {
         if (m_connection == connection_status::closed)
         {
             throw std::runtime_error{"Connection already closed."};
         }
 
-        auto write_op = stream_write_operation<T>(buffer);
+        auto write_op = stream_write_operation<data_type>(buffer);
         return write_op(m_sockfd);
     }
 
-    template <typename T>
-    std::optional<size_t> send(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    template <typename data_type>
+    std::optional<size_t> send(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
     {
         if (m_connection == connection_status::closed)
         {
@@ -192,7 +186,7 @@ public:
         auto cv = std::condition_variable();
         auto lock = std::unique_lock<std::mutex>{mut};
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(
             m_sockfd, detail::event_type::WRITE, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
 
@@ -209,44 +203,54 @@ public:
         }
     }
 
-    template <typename T, typename CALLBACK_TYPE>
-    void async_send(span<T> buffer, CALLBACK_TYPE&& callback) const
+    template <typename data_type, typename callback_type>
+    void async_send(span<data_type> buffer, callback_type&& callback) const
     {
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::WRITE,
             detail::callback_completion_handler<size_t>(
-                stream_write_operation<T>(buffer), std::forward<CALLBACK_TYPE>(callback)));
+                stream_write_operation<data_type>(buffer), std::forward<callback_type>(callback)));
     }
 
-    template <typename T>
-    std::future<size_t> promised_send(span<T> buffer) const
+#if __cplusplus >= 202002L
+    template <typename data_type>
+    op_awaitable<size_t, stream_write_operation<data_type>> async_send(span<data_type> buffer) const
+    {
+        return op_awaitable<size_t, stream_write_operation<data_type>>(
+            m_sockfd, stream_write_operation<data_type>(buffer), detail::event_type::WRITE);
+    }
+#endif
+
+    template <typename data_type>
+    std::future<size_t> promised_send(span<data_type> buffer) const
     {
         auto size_promise = std::promise<size_t>();
         auto size_future = size_promise.get_future();
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::WRITE,
-            detail::promise_completion_handler<size_t>(stream_write_operation<T>(buffer), std::move(size_promise)));
+            detail::promise_completion_handler<size_t>(
+                stream_write_operation<data_type>(buffer), std::move(size_promise)));
 
         return size_future;
     }
 
-    template <typename T>
-    size_t read(span<T> buffer) const
+    template <typename data_type>
+    size_t read(span<data_type> buffer) const
     {
         if (m_connection == connection_status::closed)
         {
             throw std::runtime_error{"Connection already closed."};
         }
 
-        auto read_op = stream_read_operation<T>(buffer);
+        auto read_op = stream_read_operation<data_type>(buffer);
         return read_op(m_sockfd);
     }
 
-    template <typename T>
-    std::optional<size_t> read(span<T> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    template <typename data_type>
+    std::optional<size_t> read(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
     {
         if (m_connection == connection_status::closed)
         {
@@ -257,7 +261,7 @@ public:
         auto cv = std::condition_variable();
         auto lock = std::unique_lock<std::mutex>{mut};
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(
             m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
 
@@ -274,26 +278,36 @@ public:
         }
     }
 
-    template <typename T, typename CALLBACK_TYPE>
-    void async_read(span<T> buffer, CALLBACK_TYPE&& callback) const
+    template <typename data_type, typename callback_type>
+    void async_read(span<data_type> buffer, callback_type&& callback) const
     {
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::READ,
             detail::callback_completion_handler<size_t>(
-                stream_read_operation<T>(buffer), std::forward<CALLBACK_TYPE>(callback)));
+                stream_read_operation<data_type>(buffer), std::forward<callback_type>(callback)));
     }
 
-    template <typename T>
-    std::future<size_t> promised_read(span<T> buffer) const
+#if __cplusplus >= 202002L
+    template <typename data_type>
+    op_awaitable<size_t, stream_read_operation<data_type>> async_read(span<data_type> buffer) const
+    {
+        return op_awaitable<size_t, stream_read_operation<data_type>>(
+            m_sockfd, stream_read_operation<data_type>(buffer), detail::event_type::READ);
+    }
+#endif
+
+    template <typename data_type>
+    std::future<size_t> promised_read(span<data_type> buffer) const
     {
         auto size_promise = std::promise<size_t>();
         auto size_future = size_promise.get_future();
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::READ,
-            detail::promise_completion_handler<size_t>(stream_read_operation<T>(buffer), std::move(size_promise)));
+            detail::promise_completion_handler<size_t>(
+                stream_read_operation<data_type>(buffer), std::move(size_promise)));
 
         return size_future;
     }
@@ -303,7 +317,7 @@ public:
 using tcp_connection_v4 = tcp_connection<ip_version::v4>;
 using tcp_connection_v6 = tcp_connection<ip_version::v6>;
 
-template <ip_version IP_VER>
+template <ip_version ip_ver_v>
 class tcp_acceptor : public detail::base_socket
 {
 protected:
@@ -315,14 +329,14 @@ protected:
 
     struct stream_accept_operation
     {
-        tcp_connection<IP_VER> operator()(const int fd) const
+        tcp_connection<ip_ver_v> operator()(const int fd) const
         {
-            auto client_addr = endpoint<IP_VER>();
+            auto client_addr = endpoint<ip_ver_v>();
             socklen_t addr_len = client_addr.addr_size;
             if (const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
                 sock > 0 && addr_len == client_addr.addr_size)
             {
-                return tcp_connection<IP_VER>{sock, client_addr};
+                return std::move(tcp_connection<ip_ver_v>{sock, client_addr});
             }
             else
             {
@@ -331,13 +345,13 @@ protected:
         }
     };
 
-    std::optional<endpoint<IP_VER>> m_sockaddr;
+    std::optional<endpoint<ip_ver_v>> m_sockaddr;
 
     acceptor_state m_state = acceptor_state::non_bound;
 
 public:
     tcp_acceptor()
-        : detail::base_socket{socket_type::stream, IP_VER}
+        : detail::base_socket{socket_type::stream, ip_ver_v}
         , m_sockaddr{std::nullopt}
         , m_state{acceptor_state::non_bound}
     {}
@@ -365,21 +379,13 @@ public:
         return *this;
     }
 
-    tcp_acceptor(const std::string_view bind_addr, const uint16_t port, const size_t backlog = 5)
-        : detail::base_socket{socket_type::stream, IP_VER}
-        , m_state{acceptor_state::non_bound}
-    {
-        const auto addr = endpoint<IP_VER>{bind_addr, port, socket_type::stream};
-        activate(addr, backlog);
-    }
-
-    tcp_acceptor(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
-        : detail::base_socket{socket_type::stream, IP_VER}
+    tcp_acceptor(const endpoint<ip_ver_v>& bind_addr, const size_t backlog = 5)
+        : detail::base_socket{socket_type::stream, ip_ver_v}
     {
         activate(bind_addr, backlog);
     }
 
-    void activate(const endpoint<IP_VER>& bind_addr, const size_t backlog = 5)
+    void activate(const endpoint<ip_ver_v>& bind_addr, const size_t backlog = 5)
     {
         if (m_state == acceptor_state::bound)
         {
@@ -400,7 +406,7 @@ public:
         m_state = acceptor_state::bound;
     }
 
-    tcp_connection<IP_VER> accept() const
+    tcp_connection<ip_ver_v> accept() const
     {
         if (m_state == acceptor_state::non_bound)
         {
@@ -411,13 +417,13 @@ public:
         return accept_op(m_sockfd);
     }
 
-    std::optional<tcp_connection<IP_VER>> accept(const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<tcp_connection<ip_ver_v>> accept(const std::chrono::duration<int64_t, std::milli>& timeout) const
     {
         auto cv = std::condition_variable();
         auto mut = std::mutex();
         auto lock = std::unique_lock<std::mutex>{mut};
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(
             m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
 
@@ -425,7 +431,7 @@ public:
         const auto condition_status = cv.wait_for(lock, timeout);
         if (condition_status == std::cv_status::no_timeout)
         {
-            return std::optional<tcp_connection<IP_VER>>{accept()};
+            return std::optional<tcp_connection<ip_ver_v>>{accept()};
         }
         else
         {
@@ -434,25 +440,33 @@ public:
         }
     }
 
-    template <typename CALLBACK_TYPE>
-    void async_accept(CALLBACK_TYPE&& callback) const
+    template <typename callback_type>
+    void async_accept(callback_type&& callback) const
     {
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::READ,
-            detail::callback_completion_handler<tcp_connection<IP_VER>>(
-                stream_accept_operation(), std::forward<CALLBACK_TYPE>(callback)));
+            detail::callback_completion_handler<tcp_connection<ip_ver_v>>(
+                stream_accept_operation(), std::forward<callback_type>(callback)));
     }
 
-    std::future<tcp_connection<IP_VER>> promised_accept() const
+#if __cplusplus >= 202002L
+    op_awaitable<tcp_connection<ip_ver_v>, stream_accept_operation> async_accept() const
     {
-        auto acc_promise = std::promise<tcp_connection<IP_VER>>();
+        return op_awaitable<tcp_connection<ip_ver_v>, stream_accept_operation>(
+            m_sockfd, stream_accept_operation(), detail::event_type::READ);
+    }
+#endif
+
+    std::future<tcp_connection<ip_ver_v>> promised_accept() const
+    {
+        auto acc_promise = std::promise<tcp_connection<ip_ver_v>>();
         auto acc_future = acc_promise.get_future();
 
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.add(m_sockfd,
             detail::event_type::READ,
-            detail::promise_completion_handler<tcp_connection<IP_VER>>(
+            detail::promise_completion_handler<tcp_connection<ip_ver_v>>(
                 stream_accept_operation(), std::move(acc_promise)));
 
         return acc_future;

@@ -2,6 +2,7 @@
 #define SOCKETWRAPPER_NET_INTERNAL_MESSAGE_NOTIFIER_KQUEUE_HPP
 
 #include <array>
+#include <iostream>
 #include <map>
 #include <optional>
 

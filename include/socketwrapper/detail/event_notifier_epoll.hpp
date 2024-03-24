@@ -165,6 +165,7 @@ public:
     std::optional<std::pair<int, event_type>> next_event()
     {
         auto ready_set = std::array<epoll_event, 64>{};
+
         while (true)
         {
             int num_ready = ::epoll_wait(m_epoll_fd, ready_set.data(), 64, -1);

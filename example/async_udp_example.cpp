@@ -1,6 +1,7 @@
 #include "../include/socketwrapper/udp.hpp"
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <thread>
 
 int main(int argc, char** argv)
@@ -11,7 +12,7 @@ int main(int argc, char** argv)
     if (strcmp(argv[1], "r") == 0)
     {
         std::cout << "--- Receiver ---\n";
-        auto sock = net::udp_socket<net::ip_version::v4>("0.0.0.0", 4433);
+        auto sock = net::udp_socket<net::ip_version::v4>(net::endpoint_v4("0.0.0.0", 4433));
 
         auto buffer = std::array<char, 1024>{};
 
@@ -67,23 +68,29 @@ int main(int argc, char** argv)
     }
     else if (strcmp(argv[1], "s") == 0)
     {
+        auto io_loop = std::thread([]() { net::async_run(); });
+
+        int port = (argc > 2) ? std::stoi(argv[2]) : 4433;
+        std::cout << "Port: " << port << '\n';
+
         std::cout << "--- Sender ---\n";
         auto sock = net::udp_socket<net::ip_version::v4>();
 
         auto str = std::string("Hello async UDP world!");
-        // sock.send("127.0.0.1", 4433, net::span{str});
-        auto first_send = sock.promised_send("127.0.0.1", 4433, net::span{str});
+        // sock.send(net::endpoint_v4("127.0.0.1", port), net::span{str});
+        auto first_send = sock.promised_send(net::endpoint_v4("127.0.0.1", port), net::span{str});
         first_send.wait();
         std::cout << "First message send\n";
 
-        sock.send("127.0.0.1", 4433, net::span{"KekW"});
+        sock.send(net::endpoint_v4("127.0.0.1", port), net::span{"KekW"});
         std::cout << "Second message send\n";
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-        sock.send("127.0.0.1", 4433, net::span{"Third message"});
+        sock.send(net::endpoint_v4("127.0.0.1", port), net::span{"Third message"});
         std::cout << "Last message sent!\n";
 
-        net::async_run();
+        // net::async_run();
+        io_loop.join();
     }
 }

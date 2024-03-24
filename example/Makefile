@@ -1,14 +1,16 @@
 # cc = g++
 cc = clang++
 
-CFLAGS = -std=c++17 -fpic -Wall -Werror -Wextra -pedantic -g -fsanitize=undefined -fsanitize=address
+CFLAGS = -std=c++20 -fpic -Wall -Werror -Wextra -pedantic -g -fsanitize=undefined -fsanitize=address
+# -fsanitize=thread
+
 LDFLAGS = -lpthread
 
 %.o: %.cpp
 	$(cc) -c $< -o $@ $(CFLAGS)
 
 .PHONY: all
-all: tls async_tls tcp async_tcp udp async_udp span options
+all: tls async_tls tcp async_tcp udp async_udp coroutine_udp span options
 
 .PHONY: tls
 tls: tls_example.cpp
@@ -26,6 +28,10 @@ tcp: tcp_example.cpp
 async_tcp: async_tcp_example.cpp
 	$(cc) -o async_tcp_example $^ $(CFLAGS) $(LDFLAGS)
 
+.PHONY: coroutine_tcp
+coroutine_tcp: coroutine_tcp_example.cpp
+	$(cc) -o coroutine_tcp_example $^ $(CFLAGS) $(LDFLAGS)
+
 .PHONY: udp
 udp: udp_example.cpp
 	$(cc) -o udp_example $^ $(CFLAGS) $(LDFLAGS)
@@ -33,6 +39,10 @@ udp: udp_example.cpp
 .PHONY: async_udp
 async_udp: async_udp_example.cpp
 	$(cc) -o async_udp_example $^ $(CFLAGS) $(LDFLAGS)
+
+.PHONY: coroutine_udp
+coroutine_udp: coroutine_udp_example.cpp
+	$(cc) -o coroutine_udp_example $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: span
 span: span_example.cpp

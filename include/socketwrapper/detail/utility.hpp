@@ -30,16 +30,16 @@ enum class socket_type : uint8_t
     datagram = SOCK_DGRAM
 };
 
-template <ip_version IP_VER>
+template <ip_version ip_ver_v>
 class endpoint;
 
 namespace detail {
 
-template <ip_version IP_VER>
+template <ip_version ip_ver_v>
 inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_type type = socket_type::unspecified)
 {
     addrinfo hints{};
-    hints.ai_family = static_cast<uint8_t>(IP_VER);
+    hints.ai_family = static_cast<uint8_t>(ip_ver_v);
     hints.ai_socktype = static_cast<uint8_t>(type);
 
     std::array<char, 6> port_buffer{0, 0, 0, 0, 0, '\0'};
@@ -56,22 +56,22 @@ inline auto resolve_hostname(std::string_view host_name, uint16_t port, socket_t
     resultlist_owner.reset(tmp_resultlist);
 
     if (ret == 0)
-        return reinterpret_cast<typename endpoint<IP_VER>::addr_type&>(*resultlist_owner->ai_addr);
+        return reinterpret_cast<typename endpoint<ip_ver_v>::addr_type&>(*resultlist_owner->ai_addr);
     else
         throw std::runtime_error{"Error while resolving hostname."};
 }
 
-template <ip_version IP_VER>
+template <ip_version ip_ver_v>
 inline std::pair<std::string, uint16_t> resolve_addrinfo(const sockaddr* addr_in)
 {
     std::pair<std::string, uint16_t> peer{};
-    peer.first.resize(endpoint<IP_VER>::addr_str_len);
+    peer.first.resize(endpoint<ip_ver_v>::addr_str_len);
 
     std::array<char, NI_MAXSERV> port_buffer;
 
     // Parse the ip address represented by addr_in
     if (::getnameinfo(addr_in,
-            endpoint<IP_VER>::addr_size,
+            endpoint<ip_ver_v>::addr_size,
             peer.first.data(),
             peer.first.capacity(),
             port_buffer.data(),
@@ -113,11 +113,11 @@ inline void init_socket_system()
     }
 }
 
-template <typename T>
-constexpr inline T swap_byteorder(T in)
+template <typename data_type>
+constexpr inline data_type swap_byteorder(data_type in)
 {
-    T out;
-    constexpr size_t limit = sizeof(T);
+    data_type out;
+    constexpr size_t limit = sizeof(data_type);
     uint8_t* in_ptr = reinterpret_cast<uint8_t*>(&in);
     uint8_t* out_ptr = reinterpret_cast<uint8_t*>(&out);
 
@@ -127,10 +127,10 @@ constexpr inline T swap_byteorder(T in)
     return out;
 }
 
-template <typename T>
-constexpr inline void swap_byteorder(const T* in, T* out, size_t elements)
+template <typename data_type>
+constexpr inline void swap_byteorder(const data_type* in, data_type* out, size_t elements)
 {
-    size_t limit = sizeof(T) * elements;
+    size_t limit = sizeof(data_type) * elements;
     for (size_t i = 0; i < limit; ++i)
         out[i] = in[limit - i - 1];
 }

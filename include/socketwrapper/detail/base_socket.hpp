@@ -1,14 +1,15 @@
 #ifndef SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 #define SOCKETWRAPPER_NET_INTERNAL_BASE_SOCKET_HPP
 
-#include "executor.hpp"
-#include "socket_option.hpp"
-#include "utility.hpp"
-
 #include <type_traits>
 
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include "event_loop.hpp"
+#include "socket_option.hpp"
+#include "utility.hpp"
 
 namespace net {
 
@@ -89,7 +90,7 @@ public:
     {
         if (m_sockfd > 0)
         {
-            auto& exec = executor::instance();
+            auto& exec = event_loop::instance();
             exec.deregister(m_sockfd);
             ::close(m_sockfd);
         }
@@ -131,10 +132,17 @@ public:
         return *get_option<OPTION_TYPE>().value();
     }
 
+    size_t bytes_available() const
+    {
+        size_t bytes = 0;
+        ::ioctl(m_sockfd, FIONREAD, &bytes);
+        return bytes;
+    }
+
     void cancel() const
     {
         // Cancel all pending async operations
-        auto& exec = detail::executor::instance();
+        auto& exec = detail::event_loop::instance();
         exec.deregister(m_sockfd);
     }
 

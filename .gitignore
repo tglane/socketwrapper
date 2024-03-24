@@ -4,3 +4,15 @@
 *.so
 .idea
 .vscode
+example/*.dSYM
+example/udp_example
+example/tcp_example
+example/tls_example
+example/async_udp_example
+example/async_tcp_example
+example/async_tls_example
+example/coroutine_udp_example
+example/coroutine_tcp_example
+example/coroutine_tls_example
+example/span_example
+example/options_example
