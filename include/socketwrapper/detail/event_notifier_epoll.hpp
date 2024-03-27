@@ -183,13 +183,15 @@ public:
                 }
                 else if (ready_set[i].events & static_cast<uint32_t>(event_type::READ))
                 {
-                    unwatch(ready_set[i].data.fd, event_type::READ);
-                    return std::make_pair(ready_set[i].data.fd, event_type::READ);
+                    int fd = ready_set[i].data.fd;
+                    unwatch(fd, event_type::READ);
+                    return std::make_pair(fd, event_type::READ);
                 }
                 else if (ready_set[i].events & static_cast<uint32_t>(event_type::WRITE))
                 {
-                    unwatch(ready_set[i].data.fd, event_type::WRITE);
-                    return std::make_pair(ready_set[i].data.fd, event_type::WRITE);
+                    int fd = ready_set[i].data.fd;
+                    unwatch(fd, event_type::WRITE);
+                    return std::make_pair(fd, event_type::WRITE);
                 }
             }
         }
