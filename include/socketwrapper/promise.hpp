@@ -1,20 +1,16 @@
-#ifndef SOCKETWRAPPER_NET_TASK_HPP
-#define SOCKETWRAPPER_NET_TASK_HPP
+#ifndef SOCKETWRAPPER_NET_PROMISE_HPP
+#define SOCKETWRAPPER_NET_PROMISE_HPP
 
 #include <coroutine>
-#include <exception>
-#include <future>
-#include <utility>
-#include <variant>
+#include <type_traits>
 
 #include "detail/final_awaiter.hpp"
+#include "task.hpp"
 
 namespace net {
 
-/// General purpose coroutine task that can will execute lazily (you need to await it in order to make the internal
-/// coroutine to start executing)
 template <typename return_type>
-class [[nodiscard]] task
+class [[nodiscard]] promise
 {
 public:
     struct promise_type
@@ -32,16 +28,16 @@ public:
         promise_type(const promise_type&) = delete;
         void operator=(const promise_type&) = delete;
 
-        task get_return_object()
+        promise get_return_object()
         {
             // Invoked when we first enter a coroutine. We initialize the precursor handle
             // with a resume point from where the task is ultimately suspended
-            return task(std::coroutine_handle<promise_type>::from_promise(*this));
+            return promise(std::coroutine_handle<promise_type>::from_promise(*this));
         }
 
-        std::suspend_always initial_suspend() noexcept
+        std::suspend_never initial_suspend() noexcept
         {
-            // Initially suspend the task so that it only starts execution when it is awaited
+            // We dont want to suspend the promise initially so that it is eagerly evaluated without being awaited
             return {};
         }
 
@@ -62,22 +58,22 @@ public:
         }
     };
 
-    task() = default;
+    promise() = default;
 
-    task(const task&) = delete;
-    task& operator=(const task&) = delete;
+    promise(const promise&) = delete;
+    promise& operator=(const promise&) = delete;
 
-    task(task&& other)
+    promise(promise&& other)
         : m_handle(std::exchange(other.m_handle, {}))
     {}
 
-    task& operator=(task&& other)
+    promise& operator=(promise&& other)
     {
         m_handle = std::exchange(other.m_handle, {});
         return *this;
     }
 
-    ~task()
+    ~promise()
     {
         if (m_handle)
         {
@@ -116,7 +112,7 @@ public:
     template <typename return_type_t = return_type, typename = std::enable_if_t<!std::is_same_v<void, return_type_t>>>
     return_type_t await_resume() const
     {
-        // The returned value here is what `co_await our_task` evaluates to
+        // The returned value here is what `co_await our_promise` evaluates to
         // return std::move(m_handle.promise().m_result);
 
         auto result = std::exchange(m_handle.promise().m_result, std::monostate());
@@ -135,7 +131,7 @@ public:
         }
     }
 
-    template <typename return_type_t = return_type, typename = std::enable_if_t<std::is_same_v<void, return_type_t>>>
+    template <typename return_type_t, typename = std::enable_if_t<std::is_same_v<void, return_type_t>>>
     void await_resume() const
     {
         auto result = std::exchange(m_handle.promise().m_result, std::monostate());
@@ -146,7 +142,7 @@ public:
     }
 
 private:
-    explicit task(std::coroutine_handle<promise_type> coro)
+    explicit promise(std::coroutine_handle<promise_type> coro)
         : m_handle(coro)
     {}
 
@@ -154,7 +150,7 @@ private:
 };
 
 template <>
-struct task<void>::promise_type
+struct promise<void>::promise_type
 {
     // Keep a coroutine handle referring to the parent coroutine if any. That is, if we
     // co_await a coroutine within another coroutine, this handle will be used to continue
@@ -166,14 +162,14 @@ struct task<void>::promise_type
     promise_type(const promise_type&) = delete;
     void operator=(const promise_type&) = delete;
 
-    task get_return_object()
+    promise get_return_object()
     {
         // Invoked when we first enter a coroutine. We initialize the precursor handle
         // with a resume point from where the task is ultimately suspended
-        return task(std::coroutine_handle<promise_type>::from_promise(*this));
+        return promise(std::coroutine_handle<promise_type>::from_promise(*this));
     }
 
-    std::suspend_always initial_suspend() noexcept
+    std::suspend_never initial_suspend() noexcept
     {
         return {};
     }
@@ -193,106 +189,25 @@ struct task<void>::promise_type
     {}
 };
 
-} // namespace net
-
-template <typename return_type>
-requires(!std::is_void_v<return_type> && !std::is_reference_v<return_type>)
-struct std::coroutine_traits<std::future<return_type>, net::task<return_type>>
-{
-    // Transform a net::task into an eager coroutine that resolves a std::future once it completes
-    struct promise_type : std::promise<return_type>
-    {
-        std::future<return_type> get_return_object() noexcept
-        {
-            return this->get_future();
-        }
-
-        std::suspend_never initial_suspend() const noexcept
-        {
-            // Starts the execution of the coroutine body right away until it hits a suspension point
-            // This makes this an eager evaluated coroutine
-            return {};
-        }
-        std::suspend_never final_suspend() const noexcept
-        {
-            // Suspend never on final suspend to automatically clean up the coroutine frame when its finished
-            return {};
-        }
-
-        void return_value(return_type value) noexcept
-        {
-            // Once the coroutine evaluated to a value we move it into the corresponding future
-            this->set_value(std::move(value));
-        }
-
-        void unhandled_exception() noexcept
-        {
-            // Once the coroutine encouters an exception we move it into the corresponding future
-            this->set_exception(std::current_exception());
-        }
-    };
-};
-
-template <>
-struct std::coroutine_traits<std::future<void>, net::task<void>>
-{
-    // Transform a net::task into an eager coroutine that resolves a std::future once it completes
-    struct promise_type : std::promise<void>
-    {
-        std::future<void> get_return_object() noexcept
-        {
-            return this->get_future();
-        }
-
-        std::suspend_never initial_suspend() const noexcept
-        {
-            // Starts the execution of the coroutine body right away until it hits a suspension point
-            // This makes this an eager evaluated coroutine
-            return {};
-        }
-        std::suspend_never final_suspend() const noexcept
-        {
-            // Suspend never on final suspend to automatically clean up the coroutine frame when its finished
-            return {};
-        }
-
-        void return_void() noexcept
-        {
-            // Once the coroutine evaluated to a value we move it into the corresponding future
-            this->set_value();
-        }
-
-        void unhandled_exception() noexcept
-        {
-            this->set_exception(std::current_exception());
-        }
-    };
-};
-
-namespace net {
-
 void async_run();
 
-template <typename return_type>
-std::future<return_type> spawn(task<return_type> awaitable_task)
-{
-    auto task_result = co_await std::move(awaitable_task);
-    co_return task_result;
-}
-
-template <>
-std::future<void> spawn(task<void> awaitable_task)
-{
-    co_await std::move(awaitable_task);
-}
-
-template <typename return_type>
-return_type block_on(task<return_type>&& awaitable_task)
-{
-    auto task_future = spawn<return_type>(std::move(awaitable_task));
-    async_run();
-    return task_future.get();
-}
+// template <typename return_type>
+// promise<return_type> spawn(task<return_type> awaitable_task)
+// {
+//     auto task_result = co_await awaitable_task;
+//     co_return task_result;
+// }
+//
+// template <>
+// promise<void> spawn(task<void> awaitable_task)
+// {
+//     co_await awaitable_task;
+// }
+//
+// template <typename return_type>
+// return_type block_on(promise<return_type>&& awaitable_promise)
+// {
+// }
 
 } // namespace net
 

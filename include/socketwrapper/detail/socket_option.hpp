@@ -25,6 +25,18 @@ struct is_template_of<REF_TYPE<LEVEL, NAME, T>, REF_TYPE> : std::true_type
 
 } // namespace detail
 
+// TODO Better option handling
+// enum class socket_option : int
+// {
+//     reuse_addr = SO_REUSEADDR,
+// };
+// enum class ipv4_option : int
+// {};
+// enum class ipv6_option : int
+// {};
+// enum class tcp_option : int
+// {};
+
 enum class option_level : int
 {
     socket = SOL_SOCKET,

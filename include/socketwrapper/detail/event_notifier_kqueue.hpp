@@ -2,7 +2,7 @@
 #define SOCKETWRAPPER_NET_INTERNAL_MESSAGE_NOTIFIER_KQUEUE_HPP
 
 #include <array>
-#include <iostream>
+#include <chrono>
 #include <map>
 #include <optional>
 
@@ -131,35 +131,43 @@ public:
         return false;
     }
 
-    std::optional<std::pair<int, event_type>> next_event()
+    template <typename duration_unit_t>
+    std::vector<std::pair<int, event_type>> next_event(
+        std::optional<std::chrono::duration<int64_t, duration_unit_t>> timeout)
     {
         auto ready_set = std::array<event_t, 64>{};
 
-        while (true)
+        auto timeout_val = ::timespec{};
+        if (timeout.has_value())
         {
-            const int num_ready = ::kevent(m_kernel_queue, nullptr, 0, ready_set.data(), ready_set.size(), nullptr);
-            for (int i = 0; i < num_ready; i++)
+            const auto sec = std::chrono::duration_cast<std::chrono::seconds>(*timeout);
+            timeout_val.tv_sec = sec.count();
+            timeout_val.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(*timeout - sec).count();
+        }
+
+        auto ready_events = std::vector<std::pair<int, event_type>>();
+        const int num_ready = ::kevent(m_kernel_queue, nullptr, 0, ready_set.data(), ready_set.size(), &timeout_val);
+        for (int i = 0; i < num_ready; i++)
+        {
+            if (ready_set[i].ident == static_cast<decltype(ready_set[i].ident)>(m_control_pipes[0]))
             {
-                if (ready_set[i].ident == static_cast<decltype(ready_set[i].ident)>(m_control_pipes[0]))
+                // Internal stop for reloading event queue after add/remove
+                auto control_byte = control::NO_OP;
+                ::read(ready_set[i].ident, reinterpret_cast<void*>(&control_byte), 1);
+                if (control_byte == control::EXIT_LOOP)
                 {
-                    // Internal stop for reloading event queue after add/remove
-                    auto control_byte = control::NO_OP;
-                    ::read(ready_set[i].ident, reinterpret_cast<void*>(&control_byte), 1);
-                    if (control_byte == control::EXIT_LOOP)
-                    {
-                        return std::nullopt;
-                    }
+                    return ready_events;
                 }
-                else if (ready_set[i].filter == static_cast<int16_t>(event_type::READ) ||
-                    ready_set[i].filter == static_cast<int16_t>(event_type::WRITE))
-                {
-                    unwatch(ready_set[i].ident, static_cast<event_type>(ready_set[i].filter));
-                    return std::make_pair(ready_set[i].ident, static_cast<event_type>(ready_set[i].filter));
-                }
+            }
+            else if (ready_set[i].filter == static_cast<int16_t>(event_type::READ) ||
+                ready_set[i].filter == static_cast<int16_t>(event_type::WRITE))
+            {
+                unwatch(ready_set[i].ident, static_cast<event_type>(ready_set[i].filter));
+                ready_events.emplace_back(ready_set[i].ident, static_cast<event_type>(ready_set[i].filter));
             }
         }
 
-        return std::nullopt;
+        return ready_events;
     }
 
     void cancel_next_event() const

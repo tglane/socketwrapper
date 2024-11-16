@@ -162,37 +162,46 @@ public:
         return false;
     }
 
-    std::optional<std::pair<int, event_type>> next_event()
+    template <typename duration_unit_t>
+    std::vector<std::pair<int, event_type>> next_event(
+        std::optional<std::chrono::duration<int64_t, duration_unit_t>> timeout)
     {
         auto ready_set = std::array<epoll_event, 64>{};
 
-        while (true)
+        int timeout = -1;
+        if (timeout.has_value())
         {
-            int num_ready = ::epoll_wait(m_epoll_fd, ready_set.data(), 64, -1);
-            for (int i = 0; i < num_ready; ++i)
+            timeout = std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count();
+        }
+
+        auto ready_events = std::vector<std::pair<int, event_type>>();
+        int num_ready = ::epoll_wait(m_epoll_fd, ready_set.data(), 64, timeout);
+        for (int i = 0; i < num_ready; ++i)
+        {
+            if (ready_set[i].data.fd == m_control_pipes[0])
             {
-                if (ready_set[i].data.fd == m_control_pipes[0])
+                // Internal stop for reloading event queue after add/remove
+                auto control_byte = control::NO_OP;
+                ::read(ready_set[i].data.fd, reinterpret_cast<void*>(&control_byte), 1);
+                if (control_byte == control::EXIT_LOOP)
                 {
-                    // Internal stop for reloading event queue after add/remove
-                    auto control_byte = control::NO_OP;
-                    ::read(ready_set[i].data.fd, reinterpret_cast<void*>(&control_byte), 1);
-                    if (control_byte == control::EXIT_LOOP)
-                    {
-                        return std::nullopt;
-                    }
-                }
-                else if (ready_set[i].events & static_cast<uint32_t>(event_type::READ))
-                {
-                    unwatch(ready_set[i].data.fd, event_type::READ);
-                    return std::make_pair(ready_set[i].data.fd, event_type::READ);
-                }
-                else if (ready_set[i].events & static_cast<uint32_t>(event_type::WRITE))
-                {
-                    unwatch(ready_set[i].data.fd, event_type::WRITE);
-                    return std::make_pair(ready_set[i].data.fd, event_type::WRITE);
+                    // Early return incase we receive an exit command
+                    return ready_events;
                 }
             }
+            else if (ready_set[i].events & static_cast<uint32_t>(event_type::READ))
+            {
+                unwatch(ready_set[i].data.fd, event_type::READ);
+                ready_events.emplace_back(ready_set[i].data.fd, event_type::READ);
+            }
+            else if (ready_set[i].events & static_cast<uint32_t>(event_type::WRITE))
+            {
+                unwatch(ready_set[i].data.fd, event_type::WRITE);
+                ready_events.emplace_back(ready_set[i].data.fd, event_type::WRITE);
+            }
         }
+
+        return ready_events;
     }
 
     void cancel_next_event() const

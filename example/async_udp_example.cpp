@@ -18,7 +18,7 @@ int main(int argc, char** argv)
 
         // Test the read timeout
         std::cout << "Started receiving\n";
-        const auto result = sock.read(net::span{buffer}, std::chrono::milliseconds(10000));
+        const auto result = sock.read(net::span{buffer}, std::optional(std::chrono::milliseconds(10000)));
         if (result.has_value())
         {
             const auto& [br, from] = result.value();
@@ -77,20 +77,19 @@ int main(int argc, char** argv)
         auto sock = net::udp_socket<net::ip_version::v4>();
 
         auto str = std::string("Hello async UDP world!");
-        // sock.send(net::endpoint_v4("127.0.0.1", port), net::span{str});
-        auto first_send = sock.promised_send(net::endpoint_v4("127.0.0.1", port), net::span{str});
-        first_send.wait();
+        sock.write(net::endpoint_v4("127.0.0.1", port), net::span{str});
+        // auto first_send = sock.promised_write(net::endpoint_v4("127.0.0.1", port), net::span{str});
+        // first_send.wait();
         std::cout << "First message send\n";
 
-        sock.send(net::endpoint_v4("127.0.0.1", port), net::span{"KekW"});
+        sock.write(net::endpoint_v4("127.0.0.1", port), net::span{"KekW"});
         std::cout << "Second message send\n";
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-        sock.send(net::endpoint_v4("127.0.0.1", port), net::span{"Third message"});
+        sock.write(net::endpoint_v4("127.0.0.1", port), net::span{"Third message"});
         std::cout << "Last message sent!\n";
 
-        // net::async_run();
         io_loop.join();
     }
 }

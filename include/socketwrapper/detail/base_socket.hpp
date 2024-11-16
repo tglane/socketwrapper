@@ -3,6 +3,7 @@
 
 #include <type_traits>
 
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -12,6 +13,15 @@
 #include "utility.hpp"
 
 namespace net {
+
+enum class socket_error : int
+{
+    // TODO
+    again = EAGAIN,
+    would_block = EWOULDBLOCK,
+    in_progress = EINPROGRESS,
+    timeout = ETIMEDOUT,
+};
 
 namespace detail {
 
@@ -32,14 +42,18 @@ protected:
             throw std::runtime_error{"Failed to create socket."};
         }
 
-        const int reuse = 1;
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+        // Set socket to non-blocking mode
+        int fd_flags = fcntl(m_sockfd, F_GETFL, 0);
+        ::fcntl(m_sockfd, F_SETFL, fd_flags |= O_NONBLOCK);
+
+        const int opt_val = 1;
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val)) < 0)
         {
             throw std::runtime_error{"Failed to set address reusable."};
         }
 
 #ifdef SO_REUSEPORT
-        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0)
+        if (::setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEPORT, &opt_val, sizeof(opt_val)) < 0)
         {
             throw std::runtime_error{"Failed to set port reusable."};
         }
@@ -80,6 +94,10 @@ public:
             throw std::runtime_error{"Failed to create socket."};
         }
 
+        // Set socket to non-blocking mode
+        int fd_flags = fcntl(m_sockfd, F_GETFL, 0);
+        ::fcntl(m_sockfd, F_SETFL, fd_flags |= O_NONBLOCK);
+
         set_option(option<option_level::socket, SO_REUSEADDR, int>{1});
 #ifdef SO_REUSEPORT
         set_option(option<option_level::socket, SO_REUSEPORT, int>{1});
@@ -94,6 +112,23 @@ public:
             exec.deregister(m_sockfd);
             ::close(m_sockfd);
         }
+    }
+
+    std::optional<socket_error> check_error()
+    {
+        int opt_val = 0;
+        unsigned int opt_val_len = sizeof(opt_val);
+        if (::getsockopt(m_sockfd, SOL_SOCKET, SO_ERROR, &opt_val, &opt_val_len) == -1)
+        {
+            throw std::runtime_error("Failed to read socket error.");
+        }
+
+        std::optional<socket_error> result = std::nullopt;
+        if (opt_val != 0)
+        {
+            result.emplace(static_cast<socket_error>(opt_val));
+        }
+        return result;
     }
 
     template <typename OPTION_TYPE,
@@ -135,7 +170,10 @@ public:
     size_t bytes_available() const
     {
         size_t bytes = 0;
-        ::ioctl(m_sockfd, FIONREAD, &bytes);
+        if (::ioctl(m_sockfd, FIONREAD, &bytes) == -1)
+        {
+            throw std::runtime_error("Failed to determine number of readable bytes.");
+        }
         return bytes;
     }
 

@@ -15,8 +15,8 @@ int main(int argc, char** argv)
         std::cout << "--- Receiver ---\n";
 
         auto acceptor = net::tls_acceptor_v4("./cert.pem", "./key.pem", net::endpoint_v4("0.0.0.0", 4433));
-        std::cout << "Waiting for accept for 4 seconds...\n";
-        auto sock = acceptor.accept(4000ms);
+        std::cout << "Waiting for accept...\n";
+        auto sock = acceptor.accept();
         if (!sock)
         {
             std::cout << "No connection available\n";
@@ -25,7 +25,7 @@ int main(int argc, char** argv)
         std::cout << "Accepted\n";
 
         auto buffer = std::array<char, 1024>{};
-        const auto read_result = sock->read(net::span{buffer.begin(), buffer.end()}, 2000ms);
+        const auto read_result = sock->read(net::span{buffer.begin(), buffer.end()}, std::optional(2000ms));
         if (read_result.has_value())
         {
             std::cout << "Received: " << *read_result << '\n' << std::string_view{buffer.data(), *read_result} << '\n';
@@ -36,7 +36,7 @@ int main(int argc, char** argv)
         std::cout << "--- Sender ---\n";
         auto sock = net::tls_connection_v4("./cert.pem", "./key.pem", net::endpoint_v4("127.0.0.1", 4433));
         std::cout << "Connected\n";
-        sock.send(net::span{std::string{"Hello World"}});
+        sock.write(net::span{std::string{"Hello World"}});
         std::cout << "Sent" << '\n';
     }
 }

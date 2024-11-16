@@ -52,7 +52,8 @@ int main(int argc, char** argv)
                         conns.push_back(std::move(conn));
                         auto& sock = conns.back();
 
-                        const auto read_result = sock.read(net::span(buffer), std::chrono::milliseconds(2000));
+                        const auto read_result =
+                            sock.read(net::span(buffer), std::optional(std::chrono::milliseconds(2000)));
                         if (read_result.has_value())
                         {
                             std::cout << "Received from second accept-read: " << *read_result << "bytes -- "
@@ -95,31 +96,42 @@ int main(int argc, char** argv)
 
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
             std::string_view buffer{"Hello String_view-World"};
-            sock.send(net::span{buffer.begin(), buffer.end()});
+            sock.write(net::span{buffer.begin(), buffer.end()});
             std::cout << "Sent first connection first message\n";
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            sock.send(net::span{std::string_view{"Test, test, 123"}});
+            sock.write(net::span{std::string_view{"Test, test, 123"}});
             std::cout << "Sent first connection second message\n";
         }
         {
-            auto sock = net::tcp_connection<net::ip_version::v4>(net::endpoint_v4("127.0.0.1", 4433));
-            std::cout << "Connected again\n";
-            std::vector<char> vec{'H', 'e', 'l', 'l', 'o'};
+            // auto sock = net::tcp_connection<net::ip_version::v4>(net::endpoint_v4("127.0.0.1", 4433));
+            auto sock = net::tcp_connection_v4();
+            sock.async_connect(net::endpoint_v4("127.0.0.1", 4433),
+                [&sock](std::exception_ptr ex)
+                {
+                    if (ex != nullptr)
+                    {
+                        std::cout << "Failed to connect\n";
+                        return;
+                    }
+                    std::cout << "Connected again\n";
+                    std::vector<char> vec{'H', 'e', 'l', 'l', 'o'};
 
-            auto send_fut = sock.promised_send(net::span{"Promised to say hello"});
-            send_fut.wait();
-            std::cout << "Sent second connection first message\n";
+                    auto send_fut = sock.promised_write(net::span{"Promised to say hello"});
+                    send_fut.wait();
+                    std::cout << "Sent second connection first message\n";
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            // std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-            std::string_view buffer{"Hello world from the second accepted connection!"};
-            // sock.async_send(net::span{buffer}, [](size_t, std::exception_ptr) { std::cout << "Async message sent\n";
-            // });
-            sock.send(net::span{buffer});
-            // sock.promised_send(net::span{buffer}).get();
-            std::cout << "Sent second connection second message\n";
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                    std::string_view buffer{"Hello world from the second accepted connection!"};
+                    // sock.async_write(net::span{buffer}, [](size_t, std::exception_ptr) { std::cout << "Async message
+                    // sent\n";
+                    // });
+                    sock.write(net::span{buffer});
+                    // sock.promised_write(net::span{buffer}).get();
+                    std::cout << "Sent second connection second message\n";
+                });
 
             net::async_run();
         }

@@ -16,12 +16,12 @@ int main(int argc, char** argv)
         // auto sock = net::udp_socket<net::ip_version::v4>(net::endpoint_v4({0, 0, 0, 0}, 4433));
 
         auto buffer = std::array<char, 1024>{};
-        const auto [bytes_read, peer] = sock.read(net::span(buffer));
+        const auto [bytes_read, peer] = sock.read(net::span(buffer)).value();
         std::cout << "Peer addr: " << peer.get_addr_string() << "; Peer port: " << peer.get_port()
                   << "; Bytes read: " << bytes_read << '\n';
         std::cout << std::string_view(buffer.data(), bytes_read) << '\n';
 
-        const auto read_result = sock.read(net::span{buffer}, std::chrono::milliseconds(4000));
+        const auto read_result = sock.read(net::span{buffer}, std::optional(std::chrono::milliseconds(4000)));
         if (read_result.has_value())
         {
             const auto& [bytes_read, peer_opt] = read_result.value();
@@ -42,14 +42,14 @@ int main(int argc, char** argv)
 
         auto buffer = std::string{"Hello world"};
         const auto endpoint = net::endpoint_v4("127.0.0.1", 4433);
-        sock.send(endpoint, net::span(buffer));
+        sock.write(endpoint, net::span(buffer), std::optional(std::chrono::milliseconds(1000)));
         std::cout << "All messages sent." << std::endl;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
         auto vec = std::vector<char>{'A', 'B', 'C'};
-        sock.send(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span(vec));
-        sock.send(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span("KekWWW"));
+        sock.write(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span(vec));
+        sock.write(net::endpoint_v4(std::array<uint8_t, 4>{127, 0, 0, 1}, 4433), net::span("KekWWW"));
         std::cout << "All messages sent. Again." << std::endl;
     }
 }

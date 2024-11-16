@@ -31,7 +31,7 @@ int main(int argc, char** argv)
         auto tls_sock =
             net::tls_connection<net::ip_version::v4>("./cert.pem", "./key.pem", net::endpoint_v4("127.0.0.1", 4433));
 
-        tls_sock.promised_send(net::span{"Hello world"}).get();
+        tls_sock.promised_write(net::span{"Hello world"}).get();
         std::cout << "TLS encrypted message sent\n";
     }
 }

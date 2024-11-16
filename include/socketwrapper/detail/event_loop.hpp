@@ -81,17 +81,17 @@ class event_loop
     {
         while (!m_stop_token.load())
         {
-            const auto event = m_waker.next_event();
-            if (event.has_value())
+            const auto ready_events = m_waker.next_event<std::nano>(std::nullopt);
+            for (const auto& event : ready_events)
             {
                 // Handle event
                 auto lock = std::lock_guard<std::mutex>(m_waker_mutex);
-                if (auto comp_it = m_completion_handlers.find(event.value()); comp_it != m_completion_handlers.end())
+                if (auto comp_it = m_completion_handlers.find(event); comp_it != m_completion_handlers.end())
                 {
                     m_pool.add_job(
-                        [this, sock_fd = comp_it->first.first, completion_handler = std::move(comp_it->second)]()
+                        [this, completion_handler = std::move(comp_it->second)]()
                         {
-                            completion_handler->invoke(sock_fd);
+                            completion_handler->invoke();
                             m_stop_condition.notify_one();
                         });
 
@@ -130,12 +130,35 @@ public:
         m_pool.flush();
     }
 
-    template <typename callback_type>
-    bool add(const int sock_fd, const event_type type, callback_type&& callback)
+    template <typename continuation_type>
+    void block_on(const int sock_fd, const event_type type, continuation_type&& continuation)
+    {
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>(mut);
+
+        {
+            // Register event
+            auto lock = std::lock_guard<std::mutex>(m_waker_mutex);
+            m_completion_handlers.insert(std::make_pair(std::make_pair(sock_fd, type),
+                std::make_unique<no_return_completion_handler>(
+                    no_return_completion_handler([&cv]() { cv.notify_one(); }))));
+            m_waker.watch(sock_fd, type);
+        }
+
+        // Wait until the event happened
+        cv.wait(lock);
+
+        // TODO
+        continuation.invoke();
+    }
+
+    template <typename continuation_type>
+    bool spawn(const int sock_fd, const event_type type, continuation_type&& continuation)
     {
         auto lock = std::lock_guard<std::mutex>(m_waker_mutex);
-        m_completion_handlers.insert(std::make_pair(
-            std::make_pair(sock_fd, type), std::make_unique<callback_type>(std::forward<callback_type>(callback))));
+        m_completion_handlers.insert(std::make_pair(std::make_pair(sock_fd, type),
+            std::make_unique<continuation_type>(std::forward<continuation_type>(continuation))));
         const auto res = m_waker.watch(sock_fd, type);
         return res;
     }

@@ -19,12 +19,12 @@ public:
     virtual ~completion_handler()
     {}
 
-    virtual void invoke(const int) = 0;
+    virtual void invoke() = 0;
 };
 
 class no_return_completion_handler : public completion_handler
 {
-    std::function<void(const int)> m_operation;
+    std::function<void()> m_operation;
 
 public:
     template <typename invoke_type>
@@ -33,11 +33,11 @@ public:
         , m_operation(std::forward<invoke_type>(operation))
     {}
 
-    void invoke(const int fd) override
+    void invoke() override
     {
         try
         {
-            m_operation(fd);
+            m_operation();
         }
         catch (...)
         {
@@ -49,7 +49,7 @@ public:
 template <typename return_type>
 class promise_completion_handler : public completion_handler
 {
-    std::function<return_type(const int)> m_operation;
+    std::function<return_type()> m_operation;
     std::promise<return_type> m_fullfill;
 
 public:
@@ -60,11 +60,11 @@ public:
         , m_fullfill(std::move(fullfill))
     {}
 
-    void invoke(const int fd) override
+    void invoke() override
     {
         try
         {
-            auto result = m_operation(fd);
+            auto result = m_operation();
             m_fullfill.set_value(std::move(result));
         }
         catch (...)
@@ -77,7 +77,7 @@ public:
 template <typename return_type>
 class callback_completion_handler : public completion_handler
 {
-    std::function<return_type(const int)> m_operation;
+    std::function<return_type()> m_operation;
     std::function<void(return_type, std::exception_ptr)> m_fullfill;
 
 public:
@@ -88,16 +88,44 @@ public:
         , m_fullfill(std::forward<callback_type>(callback))
     {}
 
-    void invoke(const int fd) override
+    void invoke() override
     {
         try
         {
-            auto result = m_operation(fd);
+            auto result = m_operation();
             m_fullfill(std::move(result), nullptr);
         }
         catch (...)
         {
             m_fullfill({}, std::current_exception());
+        }
+    };
+};
+
+template <>
+class callback_completion_handler<void> : public completion_handler
+{
+    std::function<void()> m_operation;
+    std::function<void(std::exception_ptr)> m_fullfill;
+
+public:
+    template <typename invoke_type, typename callback_type>
+    callback_completion_handler(invoke_type&& operation, callback_type&& callback)
+        : completion_handler()
+        , m_operation(std::forward<invoke_type>(operation))
+        , m_fullfill(std::forward<callback_type>(callback))
+    {}
+
+    void invoke() override
+    {
+        try
+        {
+            m_operation();
+            m_fullfill(nullptr);
+        }
+        catch (...)
+        {
+            m_fullfill(std::current_exception());
         }
     };
 };
@@ -113,10 +141,12 @@ public:
         , m_waiting_coroutine(suspended)
     {}
 
-    void invoke(const int) override
+    void invoke() override
     {
         // For coroutines we only need the coroutine handle from the op_awaitable to be resumed
         // The operation is than executed by the op_awaitable that spawned the async task on executor
+        // Calling resume on a coroutine_handle results in continuing execution on the current thread
+        // until the next suspension point is reached
         m_waiting_coroutine.resume();
     };
 };

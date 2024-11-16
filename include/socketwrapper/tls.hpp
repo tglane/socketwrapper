@@ -2,6 +2,8 @@
 #define SOCKETWRAPPER_NET_TLS_HPP
 
 #include <condition_variable>
+#include <functional>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -26,22 +28,22 @@ inline void init_ssl_system()
     static bool initialized = false;
     if (!initialized)
     {
-        SSL_library_init();
-        SSL_load_error_strings();
-        OpenSSL_add_ssl_algorithms();
+        ::SSL_library_init();
+        ::SSL_load_error_strings();
+        ::OpenSSL_add_ssl_algorithms();
 
         initialized = true;
     }
 }
 
-inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view cert, std::string_view key, bool server)
+inline void configure_ssl_ctx(std::shared_ptr<::SSL_CTX>& ctx, std::string_view cert, std::string_view key, bool server)
 {
     ctx.reset(::SSL_CTX_new((server) ? TLS_server_method() : TLS_client_method()),
-        [](SSL_CTX* ctx_raw)
+        [](::SSL_CTX* ctx_raw)
         {
             if (ctx_raw != nullptr)
             {
-                SSL_CTX_free(ctx_raw);
+                ::SSL_CTX_free(ctx_raw);
             }
         });
     if (ctx == nullptr)
@@ -49,7 +51,7 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
         throw std::runtime_error{"Failed to create TLS context."};
     }
 
-    SSL_CTX_set_mode(ctx.get(), SSL_MODE_AUTO_RETRY);
+    ::SSL_CTX_set_mode(ctx.get(), SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_ecdh_auto(ctx.get(), 1);
 
     if (::SSL_CTX_use_certificate_file(ctx.get(), cert.data(), SSL_FILETYPE_PEM) <= 0)
@@ -64,7 +66,7 @@ inline void configure_ssl_ctx(std::shared_ptr<SSL_CTX>& ctx, std::string_view ce
 
 struct ssl_raw_deleter
 {
-    void operator()(SSL* ssl_raw)
+    void operator()(::SSL* ssl_raw)
     {
         if (ssl_raw != nullptr)
         {
@@ -79,11 +81,11 @@ struct ssl_raw_deleter
 template <ip_version ip_ver_v>
 class tls_connection : public tcp_connection<ip_ver_v>
 {
-    tls_connection(int socketfd, const endpoint<ip_ver_v>& peer_addr, std::shared_ptr<SSL_CTX> context)
+    tls_connection(int socketfd, const endpoint<ip_ver_v>& peer_addr, std::shared_ptr<::SSL_CTX> context)
         : tcp_connection<ip_ver_v>{socketfd, peer_addr}
         , m_context{std::move(context)}
     {
-        SSL* ssl_raw = SSL_new(m_context.get());
+        ::SSL* ssl_raw = ::SSL_new(m_context.get());
         if (ssl_raw == nullptr)
         {
             throw std::runtime_error{"Failed to instatiate SSL structure."};
@@ -91,26 +93,47 @@ class tls_connection : public tcp_connection<ip_ver_v>
         m_ssl.reset(ssl_raw);
         ::SSL_set_fd(m_ssl.get(), this->m_sockfd);
 
-        if (const auto ret = SSL_accept(m_ssl.get()); ret != 1)
+        // Before calling SSL_accept we have to make sure that the socket is readable and that there is actual data
+        // to read
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>{mut};
+        auto& exec = detail::event_loop::instance();
+
+        while (true)
         {
-            ::SSL_get_error(m_ssl.get(), ret);
-            ::ERR_print_errors_fp(stderr);
-            throw std::runtime_error{"Failed to accept TLS connection."};
+            exec.spawn(this->m_sockfd,
+                detail::event_type::READ,
+                detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
+            cv.wait(lock);
+
+            if (auto ret = ::SSL_accept(m_ssl.get()); ret != 1)
+            {
+                ret = ::SSL_get_error(m_ssl.get(), ret);
+                if (ret != SSL_ERROR_WANT_READ && ret != SSL_ERROR_WANT_WRITE)
+                {
+                    throw std::runtime_error{"Failed to accept TLS connection."};
+                }
+            }
+            else if (ret == 1)
+            {
+                return;
+            }
         }
     }
 
     template <typename data_type>
     struct stream_write_operation
     {
-        SSL& m_ssl;
+        ::SSL& m_ssl;
         span<data_type> m_buffer_to;
 
-        stream_write_operation(SSL& ssl, span<data_type> buffer)
+        stream_write_operation(::SSL& ssl, span<data_type> buffer)
             : m_ssl(ssl)
             , m_buffer_to(buffer)
         {}
 
-        size_t operator()(const int) const
+        size_t operator()() const
         {
             size_t total = 0;
             const size_t bytes_to_send = m_buffer_to.size() * sizeof(data_type);
@@ -137,15 +160,15 @@ class tls_connection : public tcp_connection<ip_ver_v>
     template <typename data_type>
     struct stream_read_operation
     {
-        SSL& m_ssl;
+        ::SSL& m_ssl;
         span<data_type> m_buffer_from;
 
-        stream_read_operation(SSL& ssl, span<data_type> buffer)
+        stream_read_operation(::SSL& ssl, span<data_type> buffer)
             : m_ssl(ssl)
             , m_buffer_from(buffer)
         {}
 
-        size_t operator()(const int)
+        size_t operator()()
         {
             switch (const auto bytes = ::SSL_read(
                         &m_ssl, reinterpret_cast<char*>(m_buffer_from.get()), m_buffer_from.size() * sizeof(data_type));
@@ -161,8 +184,8 @@ class tls_connection : public tcp_connection<ip_ver_v>
         }
     };
 
-    std::shared_ptr<SSL_CTX> m_context = nullptr;
-    std::unique_ptr<SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
+    std::shared_ptr<::SSL_CTX> m_context = nullptr;
+    std::unique_ptr<::SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
 
     std::string m_certificate;
     std::string m_private_key;
@@ -225,11 +248,11 @@ public:
 
     ~tls_connection() = default;
 
-    void connect(const endpoint<ip_ver_v>& conn_addr) override
+    void connect(endpoint<ip_ver_v> conn_addr)
     {
         tcp_connection<ip_ver_v>::connect(conn_addr);
 
-        SSL* ssl_raw = SSL_new(m_context.get());
+        ::SSL* ssl_raw = ::SSL_new(m_context.get());
         if (ssl_raw == nullptr)
         {
             this->m_connection = tcp_connection<ip_ver_v>::connection_status::closed;
@@ -238,29 +261,39 @@ public:
         m_ssl.reset(ssl_raw);
         ::SSL_set_fd(m_ssl.get(), this->m_sockfd);
 
-        if (auto ret = SSL_connect(m_ssl.get()); ret != 1)
+        auto mut = std::mutex();
+        auto cv = std::condition_variable();
+        auto lock = std::unique_lock<std::mutex>(mut);
+        auto& exec = detail::event_loop::instance();
+
+        while (true)
         {
-            this->m_connection = tcp_connection<ip_ver_v>::connection_status::closed;
-            ret = ::SSL_get_error(m_ssl.get(), ret);
-            ::ERR_print_errors_fp(stderr);
-            throw std::runtime_error{"Failed to connect TLS connection."};
+            // IO pending so we register an event and wait
+            exec.spawn(this->m_sockfd,
+                detail::event_type::WRITE,
+                detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
+            cv.wait(lock);
+
+            if (auto ret = ::SSL_connect(m_ssl.get()); ret != 1)
+            {
+                ret = ::SSL_get_error(m_ssl.get(), ret);
+                if (ret != SSL_ERROR_WANT_READ && ret != SSL_ERROR_WANT_WRITE)
+                {
+                    this->m_connection = tcp_connection<ip_ver_v>::connection_status::closed;
+                    throw std::runtime_error{"Failed to connect TLS connection."};
+                }
+            }
+            else if (ret == 1)
+            {
+                return;
+            }
         }
     }
 
     template <typename data_type>
-    size_t send(span<data_type> buffer) const
-    {
-        if (this->m_connection == tcp_connection<ip_ver_v>::connection_status::closed)
-        {
-            throw std::runtime_error{"Connection already closed."};
-        }
-
-        auto write_op = stream_write_operation<data_type>(*m_ssl, buffer);
-        return write_op(this->m_sockfd);
-    }
-
-    template <typename data_type>
-    std::optional<size_t> send(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<size_t> write(span<data_type> buffer,
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         if (this->m_connection == tcp_connection<ip_ver_v>::connection_status::closed)
         {
@@ -272,28 +305,31 @@ public:
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::WRITE,
-            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+            detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        auto result = std::optional<size_t>{};
+        if (timeout.has_value())
         {
-            return send(buffer);
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(this->m_sockfd, detail::event_type::WRITE);
+                return result;
+            }
         }
-        else
-        {
-            exec.remove(this->m_sockfd, detail::event_type::WRITE);
-            return std::nullopt;
-        }
+        auto write_op = stream_write_operation<data_type>(*m_ssl, buffer);
+        result.emplace(write_op());
+        return result;
     }
 
     template <typename data_type, typename callback_type>
-    void async_send(span<data_type> buffer, callback_type&& callback) const
+    void async_write(span<data_type> buffer, callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::WRITE,
             detail::callback_completion_handler<size_t>(
                 stream_write_operation<data_type>(*m_ssl, buffer), std::forward<callback_type>(callback)));
@@ -301,7 +337,7 @@ public:
 
 #if __cplusplus >= 202002L
     template <typename data_type>
-    op_awaitable<size_t, stream_write_operation<data_type>> async_send(span<data_type> buffer) const
+    op_awaitable<size_t, stream_write_operation<data_type>> co_write(span<data_type> buffer) const
     {
         return op_awaitable<size_t, stream_write_operation<data_type>>(
             this->m_sockfd, stream_write_operation<data_type>(buffer), detail::event_type::WRITE);
@@ -309,13 +345,13 @@ public:
 #endif
 
     template <typename data_type>
-    std::future<size_t> promised_send(span<data_type> buffer) const
+    std::future<size_t> promised_write(span<data_type> buffer) const
     {
         auto size_promise = std::promise<size_t>();
         auto size_future = size_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::WRITE,
             detail::promise_completion_handler<size_t>(
                 stream_write_operation<data_type>(*m_ssl, buffer), std::move(size_promise)));
@@ -324,19 +360,9 @@ public:
     }
 
     template <typename data_type>
-    size_t read(span<data_type> buffer) const
-    {
-        if (this->m_connection == tcp_connection<ip_ver_v>::connection_status::closed)
-        {
-            throw std::runtime_error{"Connection already closed."};
-        }
-
-        auto read_op = stream_read_operation<data_type>(*m_ssl, buffer);
-        return read_op(this->m_sockfd);
-    }
-
-    template <typename data_type>
-    std::optional<size_t> read(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<size_t> read(span<data_type> buffer,
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         if (this->m_connection == tcp_connection<ip_ver_v>::connection_status::closed)
         {
@@ -348,28 +374,31 @@ public:
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
-            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+            detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        auto result = std::optional<size_t>{};
+        if (timeout.has_value())
         {
-            return read(buffer);
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(this->m_sockfd, detail::event_type::READ);
+                return result;
+            }
         }
-        else
-        {
-            exec.remove(this->m_sockfd, detail::event_type::READ);
-            return std::nullopt;
-        }
+        auto read_op = stream_read_operation<data_type>(*m_ssl, buffer);
+        result.emplace(read_op());
+        return result;
     }
 
     template <typename data_type, typename callback_type>
     void async_read(span<data_type> buffer, callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
             detail::callback_completion_handler<size_t>(
                 stream_read_operation<data_type>(*m_ssl, buffer), std::forward<callback_type>(callback)));
@@ -377,7 +406,7 @@ public:
 
 #if __cplusplus >= 202002L
     template <typename data_type>
-    op_awaitable<size_t, stream_read_operation<data_type>> async_read(span<data_type> buffer) const
+    op_awaitable<size_t, stream_read_operation<data_type>> co_read(span<data_type> buffer) const
     {
         return op_awaitable<size_t, stream_read_operation<data_type>>(
             this->m_sockfd, stream_read_operation<data_type>(buffer), detail::event_type::READ);
@@ -391,7 +420,7 @@ public:
         auto size_future = size_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
             detail::promise_completion_handler<size_t>(
                 stream_read_operation<data_type>(*m_ssl, buffer), std::move(size_promise)));
@@ -410,17 +439,19 @@ class tls_acceptor : public tcp_acceptor<ip_ver_v>
 private:
     struct stream_accept_operation
     {
-        std::shared_ptr<SSL_CTX> m_context;
+        std::shared_ptr<::SSL_CTX> m_context;
+        int m_fd;
 
-        stream_accept_operation(std::shared_ptr<SSL_CTX> context)
+        stream_accept_operation(int fd, std::shared_ptr<::SSL_CTX> context)
             : m_context(std::move(context))
+            , m_fd(fd)
         {}
 
-        tls_connection<ip_ver_v> operator()(const int fd) const
+        tls_connection<ip_ver_v> operator()() const
         {
             auto client_addr = endpoint<ip_ver_v>();
             socklen_t addr_len = client_addr.addr_size;
-            if (const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
+            if (const int sock = ::accept(m_fd, &(client_addr.get_addr()), &addr_len);
                 sock > 0 && addr_len == client_addr.addr_size)
             {
                 return tls_connection<ip_ver_v>{sock, client_addr, m_context};
@@ -435,8 +466,8 @@ private:
     std::string m_certificate;
     std::string m_private_key;
 
-    std::shared_ptr<SSL_CTX> m_context;
-    std::unique_ptr<SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
+    std::shared_ptr<::SSL_CTX> m_context;
+    std::unique_ptr<::SSL, detail::ssl_raw_deleter> m_ssl = nullptr;
 
 public:
     tls_acceptor() = delete;
@@ -494,54 +525,56 @@ public:
 
     ~tls_acceptor() = default;
 
-    tls_connection<ip_ver_v> accept() const
-    {
-        if (this->m_state == tcp_acceptor<ip_ver_v>::acceptor_state::non_bound)
-            throw std::runtime_error{"Socket not in listening state."};
-
-        auto accept_op = stream_accept_operation(m_context);
-        return accept_op(this->m_sockfd);
-    }
-
-    std::optional<tls_connection<ip_ver_v>> accept(const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<tls_connection<ip_ver_v>> accept(
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         auto cv = std::condition_variable();
         auto mut = std::mutex();
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
-            detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+            detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
+
+        auto result = std::optional<tls_connection<ip_ver_v>>{};
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        if (timeout.has_value())
         {
-            return std::optional<tls_connection<ip_ver_v>>{accept()};
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(this->m_sockfd, detail::event_type::READ);
+                return result;
+            }
         }
         else
         {
-            exec.remove(this->m_sockfd, detail::event_type::READ);
-            return std::nullopt;
+            cv.wait(lock);
         }
+
+        auto accept_op = stream_accept_operation(this->m_sockfd, m_context);
+        result.emplace(accept_op());
+        return result;
     }
 
     template <typename callback_type>
     void async_accept(callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
             detail::callback_completion_handler<tls_connection<ip_ver_v>>(
-                stream_accept_operation(m_context), std::forward<callback_type>(callback)));
+                stream_accept_operation(this->m_sockfd, m_context), std::forward<callback_type>(callback)));
     }
 
 #if __cplusplus >= 202002L
-    op_awaitable<tls_connection<ip_ver_v>, stream_accept_operation> async_accept() const
+    op_awaitable<tls_connection<ip_ver_v>, stream_accept_operation> co_accept() const
     {
         return op_awaitable<tls_connection<ip_ver_v>, stream_accept_operation>(
-            this->m_sockfd, stream_accept_operation(), detail::event_type::READ);
+            this->m_sockfd, stream_accept_operation(this->m_sockfd, m_context), detail::event_type::READ);
     }
 #endif
 
@@ -551,10 +584,10 @@ public:
         auto acc_future = acc_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(this->m_sockfd,
+        exec.spawn(this->m_sockfd,
             detail::event_type::READ,
             detail::promise_completion_handler<tls_connection<ip_ver_v>>(
-                stream_accept_operation(m_context), std::move(acc_promise)));
+                stream_accept_operation(this->m_sockfd, m_context), std::move(acc_promise)));
 
         return acc_future;
     }

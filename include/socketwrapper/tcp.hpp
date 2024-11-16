@@ -2,12 +2,14 @@
 #define SOCKETWRAPPER_NET_TCP_HPP
 
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 
 #include <netinet/in.h>
+#include <sys/errno.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -36,18 +38,20 @@ protected:
     struct stream_write_operation
     {
         span<data_type> m_buffer_to;
+        int m_fd;
 
-        stream_write_operation(span<data_type> buffer)
+        stream_write_operation(int fd, span<data_type> buffer)
             : m_buffer_to(buffer)
+            , m_fd(fd)
         {}
 
-        size_t operator()(const int fd) const
+        size_t operator()() const
         {
             size_t total = 0;
             const size_t bytes_to_send = m_buffer_to.size() * sizeof(data_type);
             while (total < bytes_to_send)
             {
-                switch (const auto bytes = ::send(fd,
+                switch (const auto bytes = ::send(m_fd,
                             reinterpret_cast<const char*>(m_buffer_to.get()) + total,
                             m_buffer_to.size() * sizeof(data_type),
                             0);
@@ -70,16 +74,17 @@ protected:
     struct stream_read_operation
     {
         span<data_type> m_buffer_from;
+        int m_fd;
 
-        stream_read_operation(span<data_type> buffer)
+        stream_read_operation(int fd, span<data_type> buffer)
             : m_buffer_from(buffer)
+            , m_fd(fd)
         {}
 
-        size_t operator()(const int fd)
+        size_t operator()()
         {
-            switch (const auto bytes = ::recv(
-                        fd, reinterpret_cast<char*>(m_buffer_from.get()), m_buffer_from.size() * sizeof(data_type), 0);
-                    bytes)
+            auto* buffer_start = reinterpret_cast<char*>(m_buffer_from.get());
+            switch (const auto bytes = ::recv(m_fd, buffer_start, m_buffer_from.size() * sizeof(data_type), 0); bytes)
             {
                 case -1:
                     throw std::runtime_error{"Failed to read."};
@@ -91,13 +96,19 @@ protected:
         }
     };
 
+    struct no_op_operation
+    {
+        void operator()() const
+        {}
+    };
+
     std::optional<endpoint<ip_ver_v>> m_peer;
 
     mutable connection_status m_connection;
 
-    tcp_connection(const int socket_fd, const endpoint<ip_ver_v>& peer_addr)
+    tcp_connection(const int socket_fd, endpoint<ip_ver_v> peer_addr)
         : detail::base_socket{socket_fd, ip_ver_v}
-        , m_peer{peer_addr}
+        , m_peer{std::move(peer_addr)}
         , m_connection{connection_status::connected}
     {}
 
@@ -139,43 +150,161 @@ public:
         return *this;
     }
 
-    tcp_connection(const endpoint<ip_ver_v>& conn_addr)
+    tcp_connection(endpoint<ip_ver_v> conn_addr)
         : detail::base_socket{socket_type::stream, ip_ver_v}
         , m_connection{connection_status::closed}
     {
-        connect(conn_addr);
+        connect(std::move(conn_addr));
     }
 
-    virtual void connect(const endpoint<ip_ver_v>& conn_addr)
+    virtual void connect(endpoint<ip_ver_v> conn_addr)
     {
         if (m_connection != connection_status::closed)
         {
-            return;
+            throw std::runtime_error("Already connected.");
         }
 
-        m_peer = conn_addr;
-        if (const auto res = ::connect(m_sockfd, &(m_peer->get_addr()), m_peer->addr_size); res != 0)
+        if (const auto res = ::connect(m_sockfd, &(conn_addr.get_addr()), conn_addr.addr_size); res == -1)
         {
-            throw std::runtime_error{"Failed to connect."};
+            // Check socket error to make sure that we want to wait for a connection to be established
+            if (auto error = check_error(); error.has_value() && error.value() != socket_error::in_progress)
+            {
+                throw std::runtime_error{"Failed to complete connect."};
+            }
+
+            // IO pending so we register an event and wait
+            auto mut = std::mutex();
+            auto cv = std::condition_variable();
+            auto lock = std::unique_lock<std::mutex>(mut);
+
+            auto& exec = detail::event_loop::instance();
+            exec.spawn(m_sockfd,
+                detail::event_type::WRITE,
+                detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
+
+            // Wait for given timeout or data is ready to read
+            cv.wait(lock);
         }
 
+        // Successfully connected
+        m_peer = std::move(conn_addr);
         m_connection = connection_status::connected;
     }
 
-    template <typename data_type>
-    size_t send(span<data_type> buffer) const
+    template <typename callback_type>
+    void async_connect(endpoint<ip_ver_v> conn_addr, callback_type&& callback)
     {
-        if (m_connection == connection_status::closed)
+        if (m_connection != connection_status::closed)
         {
-            throw std::runtime_error{"Connection already closed."};
+            throw std::runtime_error("Already connected.");
         }
 
-        auto write_op = stream_write_operation<data_type>(buffer);
-        return write_op(m_sockfd);
+        if (const auto res = ::connect(m_sockfd, &(conn_addr.get_addr()), conn_addr.addr_size); res == -1)
+        {
+            // Check socket error to make sure that we want to wait for a connection to be established
+            if (auto error = check_error(); error.has_value() && error.value() != socket_error::in_progress)
+            {
+                throw std::runtime_error{"Failed to complete connect."};
+            }
+
+            // IO pending so we register an event and wait
+            auto& exec = detail::event_loop::instance();
+            exec.spawn(m_sockfd,
+                detail::event_type::WRITE,
+                detail::callback_completion_handler<void>(
+                    [fd = m_sockfd]()
+                    {
+                        // Check error
+                        int opt_val = 0;
+                        unsigned int opt_val_len = sizeof(opt_val);
+                        if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &opt_val, &opt_val_len) == -1)
+                        {
+                            throw std::runtime_error("Failed to read socket error.");
+                        }
+                    },
+                    std::forward<callback_type>(callback)));
+        }
+        else
+        {
+            // TODO Enqueue the callback into the threadpool with an exception(?) set
+        }
+
+        // Successfully connected
+        m_peer = std::move(conn_addr);
+        m_connection = connection_status::connected;
+    }
+
+#if __cplusplus >= 202002L
+    op_awaitable<void, no_op_operation> co_connect(endpoint<ip_ver_v> conn_addr)
+    {
+        if (m_connection != connection_status::closed)
+        {
+            throw std::runtime_error("Already connected.");
+        }
+
+        auto awaitable = op_awaitable<void, no_op_operation>(m_sockfd, no_op_operation(), detail::event_type::WRITE);
+
+        if (const auto res = ::connect(m_sockfd, &(conn_addr.get_addr()), conn_addr.addr_size); res == -1)
+        {
+            // Check socket error to make sure that we want to wait for a connection to be established
+            if (auto error = check_error(); error.has_value() && error.value() != socket_error::in_progress)
+            {
+                throw std::runtime_error{"Failed to complete connect."};
+            }
+        }
+        else
+        {
+            // TODO: What to do here?
+        }
+
+        // Successfully connected
+        m_peer = std::move(conn_addr);
+        m_connection = connection_status::connected;
+
+        return awaitable;
+    }
+#endif
+
+    std::future<void> promised_connect(endpoint_v4 conn_addr)
+    {
+        if (m_connection != connection_status::closed)
+        {
+            throw std::runtime_error("Already connected.");
+        }
+
+        auto conn_promise = std::promise<void>();
+        auto conn_fut = conn_promise.get_future();
+
+        if (const auto res = ::connect(m_sockfd, &(conn_addr.get_addr()), conn_addr.addr_size); res == -1)
+        {
+            // Check socket error to make sure that we want to wait for a connection to be established
+            if (auto error = check_error(); error.has_value() && error.value() != socket_error::in_progress)
+            {
+                conn_promise.set_exception(std::exception_ptr());
+            }
+
+            // IO pending so we register an event and wait
+            auto& exec = detail::event_loop::instance();
+            exec.spawn(m_sockfd,
+                detail::event_type::WRITE,
+                detail::promise_completion_handler<size_t>([]() {}, std::move(conn_promise)));
+        }
+        else
+        {
+            conn_promise.set_value();
+        }
+
+        // Successfully connected
+        m_peer = std::move(conn_addr);
+        m_connection = connection_status::connected;
+
+        return conn_fut;
     }
 
     template <typename data_type>
-    std::optional<size_t> send(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<size_t> write(span<data_type> buffer,
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         if (m_connection == connection_status::closed)
         {
@@ -187,70 +316,69 @@ public:
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(
-            m_sockfd, detail::event_type::WRITE, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+        exec.spawn(
+            m_sockfd, detail::event_type::WRITE, detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        auto result = std::optional<size_t>{};
+
+        if (timeout.has_value())
         {
-            return send(buffer);
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(m_sockfd, detail::event_type::WRITE);
+                return result;
+            }
         }
         else
         {
-            exec.remove(m_sockfd, detail::event_type::WRITE);
-            return std::nullopt;
+            cv.wait(lock);
         }
+
+        auto write_op = stream_write_operation<data_type>(m_sockfd, buffer);
+        result.emplace(write_op());
+        return result;
     }
 
     template <typename data_type, typename callback_type>
-    void async_send(span<data_type> buffer, callback_type&& callback) const
+    void async_write(span<data_type> buffer, callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::WRITE,
             detail::callback_completion_handler<size_t>(
-                stream_write_operation<data_type>(buffer), std::forward<callback_type>(callback)));
+                stream_write_operation<data_type>(m_sockfd, buffer), std::forward<callback_type>(callback)));
     }
 
 #if __cplusplus >= 202002L
     template <typename data_type>
-    op_awaitable<size_t, stream_write_operation<data_type>> async_send(span<data_type> buffer) const
+    op_awaitable<size_t, stream_write_operation<data_type>> co_write(span<data_type> buffer) const
     {
         return op_awaitable<size_t, stream_write_operation<data_type>>(
-            m_sockfd, stream_write_operation<data_type>(buffer), detail::event_type::WRITE);
+            m_sockfd, stream_write_operation<data_type>(m_sockfd, buffer), detail::event_type::WRITE);
     }
 #endif
 
     template <typename data_type>
-    std::future<size_t> promised_send(span<data_type> buffer) const
+    std::future<size_t> promised_write(span<data_type> buffer) const
     {
         auto size_promise = std::promise<size_t>();
         auto size_future = size_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::WRITE,
             detail::promise_completion_handler<size_t>(
-                stream_write_operation<data_type>(buffer), std::move(size_promise)));
+                stream_write_operation<data_type>(m_sockfd, buffer), std::move(size_promise)));
 
         return size_future;
     }
 
     template <typename data_type>
-    size_t read(span<data_type> buffer) const
-    {
-        if (m_connection == connection_status::closed)
-        {
-            throw std::runtime_error{"Connection already closed."};
-        }
-
-        auto read_op = stream_read_operation<data_type>(buffer);
-        return read_op(m_sockfd);
-    }
-
-    template <typename data_type>
-    std::optional<size_t> read(span<data_type> buffer, const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<size_t> read(span<data_type> buffer,
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         if (m_connection == connection_status::closed)
         {
@@ -262,38 +390,46 @@ public:
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(
-            m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+        exec.spawn(
+            m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        auto result = std::optional<size_t>{};
+        if (timeout.has_value())
         {
-            return read(buffer);
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(m_sockfd, detail::event_type::READ);
+                return result;
+            }
         }
         else
         {
-            exec.remove(m_sockfd, detail::event_type::READ);
-            return std::nullopt;
+            cv.wait(lock);
         }
+
+        auto read_op = stream_read_operation<data_type>(m_sockfd, buffer);
+        result.emplace(read_op());
+        return result;
     }
 
     template <typename data_type, typename callback_type>
     void async_read(span<data_type> buffer, callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::READ,
             detail::callback_completion_handler<size_t>(
-                stream_read_operation<data_type>(buffer), std::forward<callback_type>(callback)));
+                stream_read_operation<data_type>(m_sockfd, buffer), std::forward<callback_type>(callback)));
     }
 
 #if __cplusplus >= 202002L
     template <typename data_type>
-    op_awaitable<size_t, stream_read_operation<data_type>> async_read(span<data_type> buffer) const
+    op_awaitable<size_t, stream_read_operation<data_type>> co_read(span<data_type> buffer) const
     {
         return op_awaitable<size_t, stream_read_operation<data_type>>(
-            m_sockfd, stream_read_operation<data_type>(buffer), detail::event_type::READ);
+            m_sockfd, stream_read_operation<data_type>(m_sockfd, buffer), detail::event_type::READ);
     }
 #endif
 
@@ -304,10 +440,10 @@ public:
         auto size_future = size_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::READ,
             detail::promise_completion_handler<size_t>(
-                stream_read_operation<data_type>(buffer), std::move(size_promise)));
+                stream_read_operation<data_type>(m_sockfd, buffer), std::move(size_promise)));
 
         return size_future;
     }
@@ -329,11 +465,17 @@ protected:
 
     struct stream_accept_operation
     {
-        tcp_connection<ip_ver_v> operator()(const int fd) const
+        int m_fd;
+
+        stream_accept_operation(int fd)
+            : m_fd(fd)
+        {}
+
+        tcp_connection<ip_ver_v> operator()() const
         {
             auto client_addr = endpoint<ip_ver_v>();
             socklen_t addr_len = client_addr.addr_size;
-            if (const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
+            if (const int sock = ::accept(m_fd, &(client_addr.get_addr()), &addr_len);
                 sock > 0 && addr_len == client_addr.addr_size)
             {
                 return std::move(tcp_connection<ip_ver_v>{sock, client_addr});
@@ -382,18 +524,17 @@ public:
     tcp_acceptor(const endpoint<ip_ver_v>& bind_addr, const size_t backlog = 5)
         : detail::base_socket{socket_type::stream, ip_ver_v}
     {
-        activate(bind_addr, backlog);
+        listen(bind_addr, backlog);
     }
 
-    void activate(const endpoint<ip_ver_v>& bind_addr, const size_t backlog = 5)
+    void listen(const endpoint<ip_ver_v>& bind_addr, const size_t backlog = 5)
     {
         if (m_state == acceptor_state::bound)
         {
             return;
         }
 
-        m_sockaddr = bind_addr;
-        if (const auto res = ::bind(m_sockfd, &(m_sockaddr->get_addr()), m_sockaddr->addr_size); res != 0)
+        if (const auto res = ::bind(m_sockfd, &(bind_addr.get_addr()), bind_addr.addr_size); res != 0)
         {
             throw std::runtime_error{"Failed to bind."};
         }
@@ -403,58 +544,59 @@ public:
             throw std::runtime_error{"Failed to initiate listen."};
         }
 
+        m_sockaddr = std::move(bind_addr);
         m_state = acceptor_state::bound;
     }
 
-    tcp_connection<ip_ver_v> accept() const
-    {
-        if (m_state == acceptor_state::non_bound)
-        {
-            throw std::runtime_error{"Socket not in listening state."};
-        }
-
-        auto accept_op = stream_accept_operation();
-        return accept_op(m_sockfd);
-    }
-
-    std::optional<tcp_connection<ip_ver_v>> accept(const std::chrono::duration<int64_t, std::milli>& timeout) const
+    std::optional<tcp_connection<ip_ver_v>> accept(
+        const std::optional<std::reference_wrapper<const std::chrono::duration<int64_t, std::milli>>> timeout =
+            std::nullopt) const
     {
         auto cv = std::condition_variable();
         auto mut = std::mutex();
         auto lock = std::unique_lock<std::mutex>{mut};
 
         auto& exec = detail::event_loop::instance();
-        exec.add(
-            m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv](int) { cv.notify_one(); }));
+        exec.spawn(
+            m_sockfd, detail::event_type::READ, detail::no_return_completion_handler([&cv]() { cv.notify_one(); }));
+
+        auto result = std::optional<tcp_connection<ip_ver_v>>{};
 
         // Wait for given timeout
-        const auto condition_status = cv.wait_for(lock, timeout);
-        if (condition_status == std::cv_status::no_timeout)
+        if (timeout.has_value())
         {
-            return std::optional<tcp_connection<ip_ver_v>>{accept()};
+            const auto condition_status = cv.wait_for(lock, timeout->get());
+            if (condition_status != std::cv_status::no_timeout)
+            {
+                exec.remove(m_sockfd, detail::event_type::READ);
+                return result;
+            }
         }
         else
         {
-            exec.remove(m_sockfd, detail::event_type::READ);
-            return std::nullopt;
+            cv.wait(lock);
         }
+
+        auto accept_op = stream_accept_operation(m_sockfd);
+        result.emplace(accept_op());
+        return result;
     }
 
     template <typename callback_type>
     void async_accept(callback_type&& callback) const
     {
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::READ,
             detail::callback_completion_handler<tcp_connection<ip_ver_v>>(
-                stream_accept_operation(), std::forward<callback_type>(callback)));
+                stream_accept_operation(m_sockfd), std::forward<callback_type>(callback)));
     }
 
 #if __cplusplus >= 202002L
-    op_awaitable<tcp_connection<ip_ver_v>, stream_accept_operation> async_accept() const
+    op_awaitable<tcp_connection<ip_ver_v>, stream_accept_operation> co_accept() const
     {
         return op_awaitable<tcp_connection<ip_ver_v>, stream_accept_operation>(
-            m_sockfd, stream_accept_operation(), detail::event_type::READ);
+            m_sockfd, stream_accept_operation(m_sockfd), detail::event_type::READ);
     }
 #endif
 
@@ -464,10 +606,10 @@ public:
         auto acc_future = acc_promise.get_future();
 
         auto& exec = detail::event_loop::instance();
-        exec.add(m_sockfd,
+        exec.spawn(m_sockfd,
             detail::event_type::READ,
             detail::promise_completion_handler<tcp_connection<ip_ver_v>>(
-                stream_accept_operation(), std::move(acc_promise)));
+                stream_accept_operation(m_sockfd), std::move(acc_promise)));
 
         return acc_future;
     }

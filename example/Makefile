@@ -6,11 +6,8 @@ CFLAGS = -std=c++20 -fpic -Wall -Werror -Wextra -pedantic -g -fsanitize=undefine
 
 LDFLAGS = -lpthread
 
-%.o: %.cpp
-	$(cc) -c $< -o $@ $(CFLAGS)
-
 .PHONY: all
-all: tls async_tls tcp async_tcp udp async_udp coroutine_udp span options
+all: tls async_tls tcp async_tcp coroutine_tcp udp async_udp coroutine_udp span options
 
 .PHONY: tls
 tls: tls_example.cpp
@@ -52,13 +49,18 @@ span: span_example.cpp
 options: options_example.cpp
 	$(cc) -o options_example $^ $(CFLAGS) $(LDFLAGS)
 
+%.o: %.cpp
+	$(cc) -c $< -o $@ $(CFLAGS)
+
 .PHONY: clean
 clean:
-	rm tls_example
-	rm async_tls_example
-	rm tcp_example
-	rm async_tcp_example
-	rm udp_example
-	rm async_udp_example
-	rm span_example
-	rm options_example
+	rm tls_example \
+	async_tls_example \
+	tcp_example \
+	async_tcp_example \
+	coroutine_tcp_example \
+	udp_example \
+	async_udp_example \
+	coroutine_udp_example \
+	span_example \
+	options_example
