@@ -20,7 +20,8 @@ namespace net {
 enum class ip_version : uint8_t
 {
     v4 = AF_INET,
-    v6 = AF_INET6
+    v6 = AF_INET6,
+    unixsock = AF_UNIX
 };
 
 enum class socket_type : uint8_t

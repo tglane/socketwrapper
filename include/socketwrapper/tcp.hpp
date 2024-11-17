@@ -333,8 +333,8 @@ protected:
         {
             auto client_addr = endpoint<ip_ver_v>();
             socklen_t addr_len = client_addr.addr_size;
-            if (const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
-                sock > 0 && addr_len == client_addr.addr_size)
+            const int sock = ::accept(fd, &(client_addr.get_addr()), &addr_len);
+            if (sock > 0 && client_addr.is_valid_addr_size(addr_len))
             {
                 return std::move(tcp_connection<ip_ver_v>{sock, client_addr});
             }

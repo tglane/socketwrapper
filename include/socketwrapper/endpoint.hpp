@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <cstring>
 #include <string_view>
+#include <sys/un.h>
 
 namespace net {
 
@@ -114,6 +116,11 @@ public:
         m_up_to_date = false;
         return reinterpret_cast<sockaddr&>(m_addr);
     }
+
+    inline bool is_valid_addr_size(size_t s)
+    {
+        return s == addr_size;
+    }
 };
 
 /// Template specialization for ip v6 connections
@@ -216,11 +223,76 @@ public:
         m_up_to_date = false;
         return reinterpret_cast<sockaddr&>(m_addr);
     }
+
+    inline bool is_valid_addr_size(size_t s)
+    {
+        return s == addr_size;
+    }
+};
+
+
+/// Template specialization for unix connections
+template <>
+class endpoint<ip_version::unixsock>
+{
+    sockaddr_un m_addr;
+
+public:
+    using addr_type = sockaddr_un;
+    static constexpr const size_t addr_size = sizeof(sockaddr_un);
+    static constexpr const size_t addr_str_len = sizeof(sockaddr_un::sun_path);
+    static constexpr const int addr_family = AF_UNIX;
+
+    endpoint() = default;
+
+    explicit endpoint(const sockaddr_un& addr)
+     : m_addr(addr)
+    {
+
+    }
+
+    explicit endpoint(const char* path)
+    {
+        int n = strlen(path);
+        if(n >= (int)addr_str_len - 1)
+            throw std::invalid_argument("path is too long");
+        m_addr.sun_family = AF_UNIX;
+        std::memcpy(m_addr.sun_path, path, n);
+    }
+
+    std::string get_addr_string() const
+    {
+        return std::string(m_addr.sun_path);
+    }
+
+    std::array<uint8_t, addr_str_len> get_addr_bytes() const
+    {
+        auto bytes = std::array<uint8_t, addr_str_len>{};
+        std::copy_n(m_addr.sun_path, addr_str_len, bytes.data());
+        return bytes;
+    }
+
+
+    const sockaddr& get_addr() const
+    {
+        return reinterpret_cast<const sockaddr&>(m_addr);
+    }
+
+    sockaddr& get_addr()
+    {
+        return reinterpret_cast<sockaddr&>(m_addr);
+    }
+
+    inline bool is_valid_addr_size(size_t s)
+    {
+        return s <= addr_size;
+    }
 };
 
 /// Shorthand using-declarations for endpoint class template specializations
 using endpoint_v4 = endpoint<ip_version::v4>;
 using endpoint_v6 = endpoint<ip_version::v6>;
+using endpoint_unix = endpoint<ip_version::unixsock>;
 
 } // namespace net
 
