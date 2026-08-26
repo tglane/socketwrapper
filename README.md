@@ -13,7 +13,27 @@ this version!), and `pthreads` (you need to link with `lpthread`) and OpenSSL
 There are some examples for all socket/connection types in the `examples` directory.
 
 ## Asyncronous functionality:
-*TODO Describe the design of the asynchronous system*
+
+Socketwrapper provides three interfaces for asynchronous network operations:
+
+### Callback-based operations
+
+The `async_*` methods return immediately and invoke a callback when the
+operation completes. These methods are available for TCP, UDP, and TCP
+acceptors.
+
+Examples include:
+
+- `tcp_connection::async_read()`
+- `tcp_connection::async_send()`
+- `tcp_acceptor::async_accept()`
+- `udp_socket::async_read()`
+- `udp_socket::async_send()`
+
+The asynchronous context can be processed with:
+
+```cpp
+net::async_run();
 
 ## Class Documentation:
 All of the following classes and enum classes live in the namespace `net`.
